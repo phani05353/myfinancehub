@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1d27">
+  <title>Accept Invite — Home Finance</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0f1117; color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .card {
+      background: #1a1d27; border: 1px solid #2e3350;
+      border-radius: 14px; padding: 36px 32px; width: 100%; max-width: 400px;
+    }
+    .logo { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; }
+    .logo-icon {
+      background: #6c8ef5; color: #fff; width: 38px; height: 38px;
+      border-radius: 10px; display: flex; align-items: center;
+      justify-content: center; font-size: 18px; font-weight: 900;
+    }
+    .logo-text { font-size: 18px; font-weight: 700; color: #6c8ef5; }
+    h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #8892a4; margin-bottom: 28px; }
+    label {
+      display: block; font-size: 12px; font-weight: 600; color: #8892a4;
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+    }
+    input {
+      width: 100%; background: #22263a; border: 1px solid #2e3350;
+      border-radius: 8px; padding: 11px 14px; color: #e2e8f0; font-size: 15px;
+      outline: none; transition: border-color 0.15s; -webkit-appearance: none;
+    }
+    input:focus { border-color: #6c8ef5; }
+    .field { margin-bottom: 14px; }
+    .hint { font-size: 11px; color: #8892a4; margin-top: 4px; }
+    .btn {
+      width: 100%; background: #6c8ef5; color: #fff; border: none;
+      border-radius: 8px; padding: 13px; font-size: 15px; font-weight: 600;
+      cursor: pointer; margin-top: 8px; transition: filter 0.15s;
+    }
+    .btn:hover { filter: brightness(1.1); }
+    .btn:active { transform: scale(0.98); }
+    .error {
+      background: rgba(248,113,113,0.12); border: 1px solid #f87171;
+      color: #f87171; border-radius: 8px; padding: 10px 14px;
+      font-size: 13px; margin-bottom: 20px;
+    }
+    .notice {
+      background: rgba(108,142,245,0.1); border: 1px solid #6c8ef5;
+      color: #6c8ef5; border-radius: 8px; padding: 10px 14px;
+      font-size: 12px; margin-bottom: 20px; line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <div class="logo-icon">$</div>
+      <div class="logo-text">Home Finance</div>
+    </div>
+
+    <h1>You're invited</h1>
+    <p class="subtitle">Create your account to access the shared dashboard</p>
+
+    <div class="notice">
+      You'll have full access to view and manage all shared financial data.
+    </div>
+
+    <div id="error-box" class="error" style="display:none"></div>
+
+    <form id="invite-form" action="/auth/invite" method="POST">
+      <input type="hidden" id="invite-token" name="token" value="">
+      <div class="field">
+        <label for="username">Choose a Username</label>
+        <input type="text" id="username" name="username"
+          autocomplete="username"
+          autocorrect="off"
+          autocapitalize="none"
+          spellcheck="false"
+          enterkeyhint="next"
+          minlength="2" maxlength="32" placeholder="e.g. jane" required>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password"
+          autocomplete="new-password"
+          enterkeyhint="next"
+          minlength="8" required>
+        <p class="hint">At least 8 characters</p>
+      </div>
+      <div class="field">
+        <label for="confirm">Confirm Password</label>
+        <input type="password" id="confirm" name="confirm"
+          autocomplete="new-password"
+          enterkeyhint="go"
+          required>
+      </div>
+      <button type="submit" class="btn">Create Account & Sign In</button>
+    </form>
+  </div>
+
+  <script>
+    const errors = {
+      missing:  'Username and password are required.',
+      mismatch: 'Passwords do not match.',
+      short:    'Password must be at least 8 characters.',
+      exists:   'That username is already taken. Please choose another.',
+      expired:  'This invite link has expired. Ask the admin to generate a new one.'
+    };
+
+    // Read token from URL path: /invite/<token>
+    const token = location.pathname.split('/invite/')[1] || '';
+    document.getElementById('invite-token').value = token;
+
+    const params = new URLSearchParams(location.search);
+    const err = params.get('error');
+    if (err) {
+      const box = document.getElementById('error-box');
+      box.textContent = errors[err] || 'Something went wrong. Please try again.';
+      box.style.display = 'block';
+    }
+  </script>
+</body>
+</html>

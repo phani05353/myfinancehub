@@ -8,6 +8,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#1a1d27">
   <title>Home Finance</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="stylesheet" href="/css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 </head>
@@ -50,11 +52,13 @@
       <li><a href="#/reminders"     class="nav-link">🔔 Bill Reminders</a></li>
       <li><a href="#/charts"        class="nav-link">📈 Charts</a></li>
       <li><a href="#/import"        class="nav-link">📥 Import</a></li>
+      <li><a href="#/year-review"  class="nav-link">📅 Year in Review</a></li>
     </ul>
     <div id="overdue-badge" class="overdue-alert hidden"></div>
     <div class="sidebar-user">
       <div class="sidebar-username" id="sidebar-username">—</div>
       <div class="sidebar-user-actions">
+        <button class="btn btn-ghost btn-sm" id="manage-users-btn" style="display:none" onclick="manageUsersModal()">👥 Manage Users</button>
         <button class="btn btn-ghost btn-sm" onclick="changePasswordModal()">🔑 Change Password</button>
         <a href="/auth/logout" class="btn btn-ghost btn-sm">↩ Sign Out</a>
       </div>
@@ -74,6 +78,13 @@
     </div>
   </div>
 
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      });
+    }
+  </script>
   <script src="/js/app.js"></script>
   <script src="/js/transactions.js"></script>
   <script src="/js/budget.js"></script>
@@ -81,5 +92,6 @@
   <script src="/js/reminders.js"></script>
   <script src="/js/charts.js"></script>
   <script src="/js/import.js"></script>
+  <script src="/js/yearreview.js"></script>
 </body>
 </html>

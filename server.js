@@ -24,6 +24,8 @@ db.exec(schema);
 
 // Migrate: add receipt_path column if it doesn't exist yet
 try { db.prepare('ALTER TABLE transactions ADD COLUMN receipt_path TEXT').run(); } catch (_) {}
+// Migrate: add role column to users (existing single user becomes admin)
+try { db.prepare("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'").run(); } catch (_) {}
 
 // Persist session secret in DB so it survives container restarts
 let sessionSecret = db.prepare("SELECT value FROM app_settings WHERE key = 'session_secret'").get()?.value;
@@ -120,8 +122,8 @@ app.post('/auth/setup', async (req, res) => {
   if (password.length < 8)            return res.redirect('/setup?error=short');
 
   const hash = await bcrypt.hash(password, 12);
-  const result = db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run(username.trim(), hash);
-  req.session.user = { id: result.lastInsertRowid, username: username.trim() };
+  const result = db.prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'admin')").run(username.trim(), hash);
+  req.session.user = { id: result.lastInsertRowid, username: username.trim(), role: 'admin' };
   res.redirect('/');
 });
 
@@ -139,7 +141,7 @@ app.post('/auth/login', async (req, res) => {
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
     return res.redirect('/login?error=1');
   }
-  req.session.user = { id: user.id, username: user.username };
+  req.session.user = { id: user.id, username: user.username, role: user.role };
   res.redirect('/');
 });
 
@@ -163,7 +165,43 @@ app.post('/auth/change-password', async (req, res) => {
 });
 
 app.get('/api/auth/me', (req, res) => {
-  res.json({ username: req.session?.user?.username || null });
+  if (!req.session?.user) return res.json({ username: null, role: null });
+  const user = db.prepare('SELECT username, role FROM users WHERE id = ?').get(req.session.user.id);
+  res.json({ username: user?.username || null, role: user?.role || null });
+});
+
+// ─── INVITE (public — before requireAuth) ─────────────────────────────────────
+
+app.get('/invite/:token', (req, res) => {
+  const invite = db.prepare('SELECT * FROM invites WHERE token = ?').get(req.params.token);
+  if (!invite || new Date(invite.expires_at) < new Date()) {
+    return res.status(410).send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invalid Invite</title>
+      <style>body{background:#0f1117;color:#e2e8f0;font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}
+      .card{background:#1a1d27;border:1px solid #2e3350;border-radius:14px;padding:40px;max-width:360px}
+      h2{color:#f87171;margin-bottom:12px}p{color:#8892a4;margin-bottom:20px}
+      a{color:#6c8ef5}</style></head>
+      <body><div class="card"><h2>Invite Expired</h2><p>This invite link is no longer valid. Ask the account admin to generate a new one.</p><a href="/login">Sign in</a></div></body></html>`);
+  }
+  res.sendFile(path.join(__dirname, 'public', 'invite.html'));
+});
+
+app.post('/auth/invite', async (req, res) => {
+  const { token, username, password, confirm } = req.body;
+  const invite = db.prepare('SELECT * FROM invites WHERE token = ?').get(token);
+  if (!invite || new Date(invite.expires_at) < new Date()) {
+    return res.redirect(`/invite/${token}?error=expired`);
+  }
+  if (!username?.trim() || !password) return res.redirect(`/invite/${encodeURIComponent(token)}?error=missing`);
+  if (password !== confirm)            return res.redirect(`/invite/${encodeURIComponent(token)}?error=mismatch`);
+  if (password.length < 8)            return res.redirect(`/invite/${encodeURIComponent(token)}?error=short`);
+  const existing = db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(username.trim());
+  if (existing) return res.redirect(`/invite/${encodeURIComponent(token)}?error=exists`);
+
+  const hash = await bcrypt.hash(password, 12);
+  const result = db.prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'member')").run(username.trim(), hash);
+  db.prepare('DELETE FROM invites WHERE token = ?').run(token);
+  req.session.user = { id: result.lastInsertRowid, username: username.trim(), role: 'member' };
+  res.redirect('/');
 });
 
 // Protect everything below this line
@@ -174,6 +212,37 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Serve receipt images (auth-gated)
 app.use('/receipts', express.static(path.join(__dirname, 'uploads', 'receipts')));
+
+// ─── USER MANAGEMENT (admin only) ────────────────────────────────────────────
+
+function requireAdmin(req, res, next) {
+  const user = db.prepare('SELECT role FROM users WHERE id = ?').get(req.session?.user?.id);
+  if (user?.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  next();
+}
+
+app.get('/api/users', requireAdmin, (req, res) => {
+  const users = db.prepare('SELECT id, username, role, created_at FROM users ORDER BY created_at ASC').all();
+  res.json(users);
+});
+
+app.delete('/api/users/:id', requireAdmin, (req, res) => {
+  const targetId = parseInt(req.params.id, 10);
+  if (targetId === req.session.user.id) return res.status(400).json({ error: "You can't remove your own account" });
+  if (!db.prepare('SELECT id FROM users WHERE id = ?').get(targetId)) return res.status(404).json({ error: 'User not found' });
+  db.prepare('DELETE FROM users WHERE id = ?').run(targetId);
+  res.json({ ok: true });
+});
+
+app.post('/api/invites', requireAdmin, (req, res) => {
+  // Clean up expired tokens first
+  db.prepare("DELETE FROM invites WHERE expires_at < datetime('now')").run();
+  const token     = crypto.randomBytes(24).toString('hex');
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  db.prepare('INSERT INTO invites (token, created_by, expires_at) VALUES (?, ?, ?)').run(token, req.session.user.id, expiresAt);
+  const url = `${req.protocol}://${req.get('host')}/invite/${token}`;
+  res.json({ url, expires_at: expiresAt });
+});
 
 // ─── TRANSACTIONS ─────────────────────────────────────────────────────────────
 
@@ -648,6 +717,74 @@ app.get('/api/charts/available-months', (req, res) => {
     'SELECT DISTINCT strftime(\'%Y-%m\', date) as month FROM transactions ORDER BY month DESC'
   ).all();
   res.json(rows.map(r => r.month));
+});
+
+// ─── YEAR IN REVIEW ───────────────────────────────────────────────────────────
+
+app.get('/api/year-review/:year', (req, res) => {
+  const year = req.params.year;
+  if (!/^\d{4}$/.test(year)) return res.status(400).json({ error: 'Invalid year' });
+
+  const summary = db.prepare(`
+    SELECT
+      SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END)        AS total_income,
+      ABS(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END))   AS total_expenses,
+      SUM(amount)                                              AS net,
+      COUNT(*)                                                 AS tx_count
+    FROM transactions
+    WHERE strftime('%Y', date) = ?
+  `).get(year);
+
+  const monthly = db.prepare(`
+    SELECT
+      strftime('%m', date)                                        AS month,
+      SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END)           AS income,
+      ABS(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END))      AS expenses
+    FROM transactions
+    WHERE strftime('%Y', date) = ?
+    GROUP BY month
+    ORDER BY month
+  `).all(year);
+
+  const categories = db.prepare(`
+    SELECT
+      COALESCE(category, 'Uncategorized') AS category,
+      SUM(ABS(amount))                    AS total,
+      COUNT(*)                            AS count
+    FROM transactions
+    WHERE strftime('%Y', date) = ? AND amount < 0
+    GROUP BY category
+    ORDER BY total DESC
+    LIMIT 10
+  `).all(year);
+
+  const top_expenses = db.prepare(`
+    SELECT id, date, payee, category, amount, notes
+    FROM transactions
+    WHERE strftime('%Y', date) = ? AND amount < 0
+    ORDER BY amount ASC
+    LIMIT 5
+  `).all(year);
+
+  const available_years = db.prepare(`
+    SELECT DISTINCT strftime('%Y', date) AS year
+    FROM transactions
+    ORDER BY year DESC
+  `).all().map(r => r.year);
+
+  res.json({
+    year,
+    summary: {
+      total_income:   summary.total_income   || 0,
+      total_expenses: summary.total_expenses || 0,
+      net:            summary.net            || 0,
+      tx_count:       summary.tx_count       || 0
+    },
+    monthly,
+    categories,
+    top_expenses,
+    available_years
+  });
 });
 
 // ─── IMPORT ───────────────────────────────────────────────────────────────────

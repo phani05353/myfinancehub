@@ -65,6 +65,13 @@ CREATE TABLE IF NOT EXISTS categories (
     name TEXT UNIQUE NOT NULL COLLATE NOCASE
 );
 
+CREATE TABLE IF NOT EXISTS invites (
+    token      TEXT PRIMARY KEY,
+    created_by INTEGER NOT NULL,
+    created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT    NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_transactions_date     ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_payee    ON transactions(payee);
 CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);

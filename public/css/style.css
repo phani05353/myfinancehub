@@ -774,3 +774,56 @@ tr.due-soon td:first-child { color: var(--warning); }
   .stats-grid { grid-template-columns: 1fr; }
   .btn-sm { min-height: 34px; padding: 6px 10px; }
 }
+
+
+/* ── YEAR IN REVIEW ── */
+.yr-charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.yr-bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.yr-insight-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.yr-insight-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  width: 28px;
+  text-align: center;
+}
+
+.yr-insight-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+
+.yr-insight-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+@media (max-width: 768px) {
+  .yr-charts-grid,
+  .yr-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+}

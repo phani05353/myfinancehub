@@ -108,6 +108,7 @@ const routes = {
   '#/reminders':     () => remindersModule.init(),
   '#/charts':        () => chartsModule.init(),
   '#/import':        () => importModule.init(),
+  '#/year-review':   () => yearReviewModule.init(),
 };
 
 function route() {
@@ -126,13 +127,83 @@ function route() {
 window.addEventListener('hashchange', route);
 window.addEventListener('load', async () => {
   route();
-  // Load logged-in username into sidebar
   try {
     const me = await api('/api/auth/me');
     const el = document.getElementById('sidebar-username');
     if (el && me.username) el.textContent = me.username;
+    if (me.role === 'admin') {
+      const btn = document.getElementById('manage-users-btn');
+      if (btn) btn.style.display = '';
+    }
   } catch (_) {}
 });
+
+async function manageUsersModal() {
+  openModal('<h2>👥 Manage Users</h2><p style="color:var(--text-muted);margin-top:8px">Loading…</p>');
+  const users = await api('/api/users').catch(() => []);
+
+  const rows = users.map(u => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <span style="font-weight:600">${escHtml(u.username)}</span>
+        <span style="margin-left:8px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:20px;
+          background:${u.role === 'admin' ? 'rgba(108,142,245,0.15)' : 'rgba(136,146,164,0.15)'};
+          color:${u.role === 'admin' ? 'var(--accent)' : 'var(--text-muted)'}">${u.role}</span>
+      </div>
+      ${u.role !== 'admin' ? `<button class="btn btn-danger btn-sm" onclick="removeUser(${u.id},'${escHtml(u.username)}')">Remove</button>` : ''}
+    </div>
+  `).join('');
+
+  document.getElementById('modal-content').innerHTML = `
+    <h2 style="margin-bottom:16px">👥 Manage Users</h2>
+    <div style="margin-bottom:20px">${rows}</div>
+    <div style="background:var(--surface2);border-radius:10px;padding:16px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px">Invite someone</div>
+      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
+        Generate a one-time link (expires in 7 days). Share it with whoever you'd like to invite.
+      </p>
+      <div id="invite-result" style="display:none;margin-bottom:12px">
+        <input id="invite-url" type="text" readonly
+          style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;
+                 padding:8px 10px;color:var(--text);font-size:12px;font-family:monospace"
+          onclick="this.select()">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Click to select, then copy. Link expires in 7 days.</div>
+      </div>
+      <button class="btn btn-primary" id="gen-invite-btn" onclick="generateInvite()" style="width:auto;padding:10px 20px">
+        Generate Invite Link
+      </button>
+    </div>
+  `;
+}
+
+async function removeUser(id, username) {
+  if (!confirm(`Remove "${username}"? They will lose access immediately.`)) return;
+  try {
+    await api(`/api/users/${id}`, { method: 'DELETE' });
+    toast(`${username} removed`);
+    manageUsersModal();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function generateInvite() {
+  const btn = document.getElementById('gen-invite-btn');
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+  try {
+    const { url } = await api('/api/invites', { method: 'POST' });
+    const result = document.getElementById('invite-result');
+    document.getElementById('invite-url').value = url;
+    result.style.display = 'block';
+    btn.textContent = 'Generate New Link';
+    btn.disabled = false;
+    // Auto-select the URL
+    document.getElementById('invite-url').select();
+  } catch (e) {
+    toast(e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Generate Invite Link';
+  }
+}
 
 function changePasswordModal() {
   openModal(`
