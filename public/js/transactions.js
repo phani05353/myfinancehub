@@ -52,7 +52,7 @@ const transactionsModule = {
 
       <div class="card">
         <div class="table-wrap">
-          <table>
+          <table class="tx-table">
             <thead>
               <tr>
                 <th>Date</th><th>Payee</th><th>Category</th>
@@ -137,12 +137,12 @@ const transactionsModule = {
     } else {
       tbody.innerHTML = rows.map(r => `
         <tr>
-          <td style="white-space:nowrap">${fmtDate(r.date)}</td>
-          <td>${escHtml(r.payee)}</td>
-          <td>${r.category ? `<span class="badge badge-blue">${escHtml(r.category)}</span>` : '<span class="badge badge-gray">—</span>'}</td>
-          <td style="text-align:right">${fmt(r.amount)}</td>
-          <td style="color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.notes || '')}</td>
-          <td style="white-space:nowrap">
+          <td data-label="Date" style="white-space:nowrap">${fmtDate(r.date)}</td>
+          <td data-label="Payee">${escHtml(r.payee)}</td>
+          <td data-label="Category">${r.category ? `<span class="badge badge-blue">${escHtml(r.category)}</span>` : '<span class="badge badge-gray">—</span>'}</td>
+          <td data-label="Amount" style="text-align:right">${fmt(r.amount)}</td>
+          <td data-label="Notes" style="color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.notes || '')}</td>
+          <td data-label="Actions" style="white-space:nowrap">
             <button class="btn btn-ghost btn-sm" onclick="transactionsModule.openEditModal(${r.id})">Edit</button>
             <button class="btn btn-danger btn-sm" onclick="transactionsModule.deleteRow(${r.id})">Del</button>
           </td>
@@ -169,6 +169,13 @@ const transactionsModule = {
     openModal(`
       <h2>Add Transaction</h2>
       <form id="tx-form" style="margin-top:16px">
+        <div class="form-group" style="margin-bottom:16px">
+          <label>Type *</label>
+          <div class="tx-type-toggle">
+            <button type="button" class="toggle-opt toggle-expense active" id="type-expense" onclick="setTxType('expense')">− Expense</button>
+            <button type="button" class="toggle-opt toggle-income" id="type-income" onclick="setTxType('income')">+ Income</button>
+          </div>
+        </div>
         <div class="form-row">
           <div class="form-group">
             <label>Date *</label>
@@ -181,8 +188,8 @@ const transactionsModule = {
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Amount * (negative = expense)</label>
-            <input type="number" id="tx-amount" step="0.01" placeholder="-42.50" required>
+            <label>Amount *</label>
+            <input type="number" id="tx-amount" step="0.01" min="0.01" placeholder="42.50" required>
           </div>
           <div class="form-group">
             <label>Category</label>
@@ -203,10 +210,12 @@ const transactionsModule = {
   },
 
   async submitAdd() {
+    const isExpense = document.getElementById('type-expense').classList.contains('active');
+    const rawAmount = parseFloat(document.getElementById('tx-amount').value);
     const body = {
       date: document.getElementById('tx-date').value,
       payee: document.getElementById('tx-payee').value,
-      amount: document.getElementById('tx-amount').value,
+      amount: isExpense ? -Math.abs(rawAmount) : Math.abs(rawAmount),
       category: document.getElementById('tx-category').value || null,
       notes: document.getElementById('tx-notes').value || null
     };
@@ -222,9 +231,17 @@ const transactionsModule = {
     const row = await api(`/api/transactions/${id}`).catch(() => null);
     if (!row) return;
 
+    const isIncome = row.amount >= 0;
     openModal(`
       <h2>Edit Transaction</h2>
       <form id="tx-edit-form" style="margin-top:16px">
+        <div class="form-group" style="margin-bottom:16px">
+          <label>Type *</label>
+          <div class="tx-type-toggle">
+            <button type="button" class="toggle-opt toggle-expense${isIncome ? '' : ' active'}" id="type-expense" onclick="setTxType('expense')">− Expense</button>
+            <button type="button" class="toggle-opt toggle-income${isIncome ? ' active' : ''}" id="type-income" onclick="setTxType('income')">+ Income</button>
+          </div>
+        </div>
         <div class="form-row">
           <div class="form-group">
             <label>Date *</label>
@@ -238,7 +255,7 @@ const transactionsModule = {
         <div class="form-row">
           <div class="form-group">
             <label>Amount *</label>
-            <input type="number" id="tx-amount" step="0.01" value="${row.amount}" required>
+            <input type="number" id="tx-amount" step="0.01" min="0.01" value="${Math.abs(row.amount)}" required>
           </div>
           <div class="form-group">
             <label>Category</label>
@@ -259,10 +276,12 @@ const transactionsModule = {
   },
 
   async submitEdit(id) {
+    const isExpense = document.getElementById('type-expense').classList.contains('active');
+    const rawAmount = parseFloat(document.getElementById('tx-amount').value);
     const body = {
       date: document.getElementById('tx-date').value,
       payee: document.getElementById('tx-payee').value,
-      amount: document.getElementById('tx-amount').value,
+      amount: isExpense ? -Math.abs(rawAmount) : Math.abs(rawAmount),
       category: document.getElementById('tx-category').value || null,
       notes: document.getElementById('tx-notes').value || null
     };
@@ -287,4 +306,9 @@ const transactionsModule = {
 function escHtml(s) {
   if (!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function setTxType(type) {
+  document.getElementById('type-expense').classList.toggle('active', type === 'expense');
+  document.getElementById('type-income').classList.toggle('active', type === 'income');
 }

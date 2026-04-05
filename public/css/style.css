@@ -192,8 +192,14 @@ h3 { font-size: 14px; color: var(--text-muted); margin-bottom: 8px; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
+  border-left: 3px solid var(--border);
+  transition: border-color 0.15s;
 }
+.stat-card:has(.value.income)  { border-left-color: var(--success); }
+.stat-card:has(.value.expense) { border-left-color: var(--danger); }
+.stat-card:has(.value.neutral) { border-left-color: var(--accent); }
 .stat-card .label { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+.stat-card .sublabel { color: var(--text-muted); font-size: 11px; margin-top: 4px; }
 .stat-card .value { font-size: 24px; font-weight: 700; margin-top: 6px; }
 .stat-card .value.income { color: var(--success); }
 .stat-card .value.expense { color: var(--danger); }
@@ -320,6 +326,30 @@ input[type="checkbox"] {
   cursor: pointer;
   accent-color: var(--accent);
 }
+
+/* ── TRANSACTION TYPE TOGGLE ── */
+.tx-type-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.toggle-opt {
+  padding: 11px;
+  background: var(--surface2);
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.toggle-opt:first-child { border-right: 1px solid var(--border); }
+.toggle-opt:active { opacity: 0.8; }
+.toggle-expense.active { background: rgba(248,113,113,0.2); color: var(--danger); border-color: var(--danger); }
+.toggle-income.active  { background: rgba(52,211,153,0.2);  color: var(--success); }
 
 /* ── MODAL ── */
 #modal-overlay {
@@ -499,6 +529,52 @@ tr.due-soon td:first-child { color: var(--warning); }
 
   /* Drop zone less padding */
   .drop-zone { padding: 28px 16px; }
+
+  /* ── Transactions table → card list on mobile ── */
+  .tx-table { min-width: unset; }
+  .tx-table thead { display: none; }
+  .tx-table tbody tr {
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    padding: 12px 14px;
+    background: var(--surface2);
+  }
+  .tx-table tbody tr:hover { background: var(--surface2); }
+  .tx-table tbody tr:last-child { border-bottom: 1px solid var(--border); }
+  .tx-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: none;
+    font-size: 13px;
+  }
+  .tx-table tbody td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+    margin-right: 8px;
+  }
+  /* Payee row — larger, no label */
+  .tx-table tbody td[data-label="Payee"] {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+  }
+  .tx-table tbody td[data-label="Payee"]::before { display: none; }
+  /* Amount right-aligned */
+  .tx-table tbody td[data-label="Amount"] { justify-content: space-between; }
+  /* Hide notes on mobile to save space */
+  .tx-table tbody td[data-label="Notes"] { display: none; }
 }
 
 @media (max-width: 400px) {
