@@ -164,8 +164,9 @@ const transactionsModule = {
   async prevPage() { if (this.page > 0) { this.page--; await this.loadRows(); } },
   async nextPage() { if ((this.page + 1) * this.pageSize < this.total) { this.page++; await this.loadRows(); } },
 
-  openAddModal() {
+  async openAddModal() {
     const today = new Date().toISOString().slice(0, 10);
+    const categories = await api('/api/categories').catch(() => []);
     openModal(`
       <h2>Add Transaction</h2>
       <form id="tx-form" style="margin-top:16px">
@@ -192,8 +193,11 @@ const transactionsModule = {
             <input type="number" id="tx-amount" step="0.01" min="0.01" placeholder="42.50" required>
           </div>
           <div class="form-group">
-            <label>Category</label>
-            <input type="text" id="tx-category" placeholder="e.g. Groceries">
+            <label style="display:flex;justify-content:space-between;align-items:center">
+              Category
+              <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="manageCategoriesModal()">Manage ✏</button>
+            </label>
+            ${buildCategorySelect(categories, '')}
           </div>
         </div>
         <div class="form-group" style="margin-bottom:16px">
@@ -216,7 +220,7 @@ const transactionsModule = {
       date: document.getElementById('tx-date').value,
       payee: document.getElementById('tx-payee').value,
       amount: isExpense ? -Math.abs(rawAmount) : Math.abs(rawAmount),
-      category: document.getElementById('tx-category').value || null,
+      category: getTxCategory(),
       notes: document.getElementById('tx-notes').value || null
     };
     try {
@@ -228,7 +232,10 @@ const transactionsModule = {
   },
 
   async openEditModal(id) {
-    const row = await api(`/api/transactions/${id}`).catch(() => null);
+    const [row, categories] = await Promise.all([
+      api(`/api/transactions/${id}`).catch(() => null),
+      api('/api/categories').catch(() => [])
+    ]);
     if (!row) return;
 
     const isIncome = row.amount >= 0;
@@ -258,8 +265,11 @@ const transactionsModule = {
             <input type="number" id="tx-amount" step="0.01" min="0.01" value="${Math.abs(row.amount)}" required>
           </div>
           <div class="form-group">
-            <label>Category</label>
-            <input type="text" id="tx-category" value="${escHtml(row.category || '')}">
+            <label style="display:flex;justify-content:space-between;align-items:center">
+              Category
+              <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px" onclick="manageCategoriesModal()">Manage ✏</button>
+            </label>
+            ${buildCategorySelect(categories, row.category || '')}
           </div>
         </div>
         <div class="form-group" style="margin-bottom:16px">
@@ -282,7 +292,7 @@ const transactionsModule = {
       date: document.getElementById('tx-date').value,
       payee: document.getElementById('tx-payee').value,
       amount: isExpense ? -Math.abs(rawAmount) : Math.abs(rawAmount),
-      category: document.getElementById('tx-category').value || null,
+      category: getTxCategory(),
       notes: document.getElementById('tx-notes').value || null
     };
     try {
@@ -311,4 +321,95 @@ function escHtml(s) {
 function setTxType(type) {
   document.getElementById('type-expense').classList.toggle('active', type === 'expense');
   document.getElementById('type-income').classList.toggle('active', type === 'income');
+}
+
+function buildCategorySelect(categories, selected) {
+  const opts = categories.map(c =>
+    `<option value="${escHtml(c)}" ${c === selected ? 'selected' : ''}>${escHtml(c)}</option>`
+  ).join('');
+  return `
+    <select id="tx-category" onchange="onCategoryChange()">
+      <option value="">— No category —</option>
+      ${opts}
+      <option value="__new__">＋ New category…</option>
+    </select>
+    <input type="text" id="tx-category-new" placeholder="Type new category name…"
+      style="display:none;margin-top:8px" oninput="this.value=this.value">
+  `;
+}
+
+function onCategoryChange() {
+  const sel = document.getElementById('tx-category');
+  const inp = document.getElementById('tx-category-new');
+  if (!inp) return;
+  inp.style.display = sel.value === '__new__' ? 'block' : 'none';
+  if (sel.value === '__new__') inp.focus();
+}
+
+function getTxCategory() {
+  const sel = document.getElementById('tx-category');
+  if (!sel) return null;
+  if (sel.value === '__new__') {
+    return document.getElementById('tx-category-new')?.value?.trim() || null;
+  }
+  return sel.value || null;
+}
+
+async function manageCategoriesModal() {
+  const categories = await api('/api/categories').catch(() => []);
+
+  const renderList = (cats) => cats.length === 0
+    ? '<p style="color:var(--text-muted);font-size:13px;padding:8px 0">No categories yet.</p>'
+    : cats.map(c => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:14px">${escHtml(c)}</span>
+          <button class="btn btn-danger btn-sm" onclick="deleteCategory('${escHtml(c)}')">Remove</button>
+        </div>`).join('');
+
+  openModal(`
+    <h2>Manage Categories</h2>
+    <div style="margin:16px 0 20px">
+      <div style="display:flex;gap:8px">
+        <input type="text" id="new-cat-input" placeholder="New category name…" style="flex:1"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();addCategory()}">
+        <button class="btn btn-primary" onclick="addCategory()">Add</button>
+      </div>
+    </div>
+    <div id="cat-list">${renderList(categories)}</div>
+  `);
+}
+
+async function addCategory() {
+  const inp = document.getElementById('new-cat-input');
+  const name = inp?.value?.trim();
+  if (!name) return;
+  try {
+    await api('/api/categories', { method: 'POST', body: { name } });
+    inp.value = '';
+    const cats = await api('/api/categories');
+    document.getElementById('cat-list').innerHTML = cats.length === 0
+      ? '<p style="color:var(--text-muted);font-size:13px;padding:8px 0">No categories yet.</p>'
+      : cats.map(c => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:14px">${escHtml(c)}</span>
+            <button class="btn btn-danger btn-sm" onclick="deleteCategory('${escHtml(c)}')">Remove</button>
+          </div>`).join('');
+    toast(`"${name}" added`);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteCategory(name) {
+  if (!confirm(`Remove category "${name}"? This won't change existing transactions.`)) return;
+  try {
+    await api(`/api/categories/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const cats = await api('/api/categories');
+    document.getElementById('cat-list').innerHTML = cats.length === 0
+      ? '<p style="color:var(--text-muted);font-size:13px;padding:8px 0">No categories yet.</p>'
+      : cats.map(c => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:14px">${escHtml(c)}</span>
+            <button class="btn btn-danger btn-sm" onclick="deleteCategory('${escHtml(c)}')">Remove</button>
+          </div>`).join('');
+    toast(`"${name}" removed`);
+  } catch (e) { toast(e.message, 'error'); }
 }

@@ -16,6 +16,12 @@ const db = new Database(DB_PATH);
 const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
 db.exec(schema);
 
+// Seed categories table from existing transaction data (runs once for existing DBs)
+db.prepare(`
+  INSERT OR IGNORE INTO categories (name)
+  SELECT DISTINCT category FROM transactions WHERE category IS NOT NULL AND category != ''
+`).run();
+
 // Fix income transactions stored as 'Unknown' payee — use category instead
 db.prepare(`
   UPDATE transactions
@@ -135,10 +141,25 @@ app.get('/api/transactions/:id', (req, res) => {
 });
 
 app.get('/api/categories', (req, res) => {
-  const rows = db.prepare(
-    'SELECT DISTINCT category FROM transactions WHERE category IS NOT NULL ORDER BY category'
-  ).all();
-  res.json(rows.map(r => r.category));
+  const rows = db.prepare('SELECT name FROM categories ORDER BY name COLLATE NOCASE').all();
+  res.json(rows.map(r => r.name));
+});
+
+app.post('/api/categories', (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Category name is required' });
+  try {
+    db.prepare('INSERT INTO categories (name) VALUES (?)').run(name.trim());
+    res.json({ ok: true });
+  } catch (e) {
+    if (e.message.includes('UNIQUE')) return res.status(409).json({ error: 'Category already exists' });
+    throw e;
+  }
+});
+
+app.delete('/api/categories/:name', (req, res) => {
+  db.prepare('DELETE FROM categories WHERE name = ? COLLATE NOCASE').run(req.params.name);
+  res.json({ ok: true });
 });
 
 app.get('/api/payees', (req, res) => {

@@ -40,6 +40,11 @@ CREATE TABLE IF NOT EXISTS reminders (
     created_at  TEXT    DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS categories (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL COLLATE NOCASE
+);
+
 CREATE INDEX IF NOT EXISTS idx_transactions_date     ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_payee    ON transactions(payee);
 CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
