@@ -98,11 +98,12 @@ body {
   display: none;
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: var(--mobile-header-h);
+  height: calc(var(--mobile-header-h) + env(safe-area-inset-top));
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  align-items: center;
-  padding: 0 16px;
+  align-items: flex-end;
+  padding: 0 16px env(safe-area-inset-bottom, 0);
+  padding-top: env(safe-area-inset-top);
   gap: 12px;
   z-index: 300;
 }
@@ -162,6 +163,7 @@ body {
   display: flex;
   flex-direction: column;
   padding: 20px 0;
+  padding-top: calc(20px + env(safe-area-inset-top));
   position: fixed;
   top: 0; left: 0; bottom: 0;
   z-index: 200;
@@ -657,11 +659,12 @@ tr.due-soon td:first-child { color: var(--warning); }
   }
   .sidebar.open { transform: translateX(0); }
 
-  /* Content takes full width, shifted down for mobile header */
+  /* Content takes full width, shifted down for mobile header + safe area */
   .content {
     margin-left: 0;
     padding: 16px;
-    padding-top: calc(var(--mobile-header-h) + 16px);
+    padding-top: calc(var(--mobile-header-h) + env(safe-area-inset-top) + 16px);
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
   /* Charts single column */
@@ -826,4 +829,42 @@ tr.due-soon td:first-child { color: var(--warning); }
   .yr-bottom-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── PAYEE LOGOS ── */
+.payee-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.payee-logo-wrap {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.payee-logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  object-fit: contain;
+  background: var(--surface2);
+}
+
+.payee-initial {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }

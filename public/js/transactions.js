@@ -138,7 +138,7 @@ const transactionsModule = {
       tbody.innerHTML = rows.map(r => `
         <tr>
           <td data-label="Date" style="white-space:nowrap">${fmtDate(r.date)}</td>
-          <td data-label="Payee">${escHtml(r.payee)}</td>
+          <td data-label="Payee"><span class="payee-cell">${payeeLogoHtml(r.payee)}${escHtml(r.payee)}</span></td>
           <td data-label="Category">${r.category ? `<span class="badge badge-blue">${escHtml(r.category)}</span>` : '<span class="badge badge-gray">—</span>'}</td>
           <td data-label="Amount" style="text-align:right">${fmt(r.amount)}</td>
           <td data-label="Notes" style="color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.notes || '')}</td>
@@ -335,6 +335,30 @@ const transactionsModule = {
 function escHtml(s) {
   if (!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Payee logo helpers
+const LOGO_COLORS = ['#6c8ef5','#a78bfa','#34d399','#fbbf24','#f87171','#60a5fa','#f472b6','#fb923c','#4ade80','#c084fc'];
+function payeeColor(name) {
+  let h = 0;
+  for (const c of String(name)) h = (Math.imul(h, 31) + c.charCodeAt(0)) | 0;
+  return LOGO_COLORS[Math.abs(h) % LOGO_COLORS.length];
+}
+function payeeDomain(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com';
+}
+function payeeLogoHtml(payee) {
+  if (!payee) return '';
+  const domain  = payeeDomain(payee);
+  const initial = payee.trim()[0].toUpperCase();
+  const color   = payeeColor(payee);
+  const uid     = Math.random().toString(36).slice(2);
+  return `<span class="payee-logo-wrap">
+    <img class="payee-logo" src="https://icons.duckduckgo.com/ip3/${domain}.ico" alt=""
+      loading="lazy"
+      onerror="this.style.display='none';document.getElementById('pi-${uid}').style.display='flex'">
+    <span class="payee-initial" id="pi-${uid}" style="background:${color}">${initial}</span>
+  </span>`;
 }
 
 function setTxType(type) {
