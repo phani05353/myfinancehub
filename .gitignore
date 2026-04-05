@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# SQLite database files (runtime data — not committed)
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Uploaded files
+uploads/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker volumes / build artifacts
+.dockerignore
