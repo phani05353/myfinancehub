@@ -282,6 +282,36 @@ tbody tr:last-child { border-bottom: none; }
   margin-bottom: 20px;
 }
 
+/* ── FILTER BAR (transaction filters) ── */
+.filter-bar {
+  display: grid;
+  /* Mobile: Month + Category side-by-side, Search + buttons full width */
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas:
+    "month   category"
+    "search  search"
+    "actions actions";
+  gap: 12px;
+  align-items: flex-end;
+}
+.filter-month    { grid-area: month; }
+.filter-search   { grid-area: search; }
+.filter-category { grid-area: category; }
+.filter-actions  {
+  grid-area: actions;
+  display: flex;
+  gap: 8px;
+}
+.filter-actions .btn { flex: 1; }
+
+@media (min-width: 769px) {
+  .filter-bar {
+    grid-template-columns: 160px 1fr 180px auto;
+    grid-template-areas: "month search category actions";
+  }
+  .filter-actions .btn { flex: none; }
+}
+
 /* ── BUTTONS ── */
 .btn {
   padding: 9px 16px;
@@ -529,9 +559,11 @@ tr.due-soon td:first-child { color: var(--warning); }
   }
   .page-title-row > div { width: 100%; justify-content: flex-start; }
 
-  /* Toolbar stacks */
+  /* Generic toolbar stacks on mobile */
   .toolbar { flex-direction: column; align-items: stretch; }
   .toolbar .form-group { flex: 1 1 100%; }
+  /* filter-bar handles its own mobile layout via grid-template-areas */
+  .filter-bar { gap: 10px; }
 
   /* Card padding reduced */
   .card { padding: 14px; }

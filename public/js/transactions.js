@@ -25,23 +25,23 @@ const transactionsModule = {
       </div>
 
       <div class="card" style="margin-bottom:20px">
-        <div class="toolbar">
-          <div class="form-group" style="flex:0 0 160px">
+        <div class="filter-bar">
+          <div class="form-group filter-month">
             <label>Month</label>
             <input type="month" id="filter-month" value="${today}">
           </div>
-          <div class="form-group" style="flex:1;min-width:140px">
+          <div class="form-group filter-search">
             <label>Search</label>
             <input type="text" id="filter-search" placeholder="Payee, notes, category…">
           </div>
-          <div class="form-group" style="flex:0 0 160px">
+          <div class="form-group filter-category">
             <label>Category</label>
             <select id="filter-category">
               <option value="">All Categories</option>
               ${categories.map(c => `<option>${c}</option>`).join('')}
             </select>
           </div>
-          <div style="display:flex;gap:8px;align-self:flex-end">
+          <div class="filter-actions">
             <button class="btn btn-primary" onclick="transactionsModule.applyFilters()">Filter</button>
             <button class="btn btn-ghost" onclick="transactionsModule.clearFilters()">Clear</button>
           </div>
@@ -205,6 +205,11 @@ const transactionsModule = {
           <label>Notes</label>
           <textarea id="tx-notes" placeholder="Optional notes…"></textarea>
         </div>
+        <div class="form-group" style="margin-bottom:20px">
+          <label>Receipt (optional)</label>
+          <input type="file" id="tx-receipt" accept="image/*,.pdf">
+          <p style="font-size:11px;color:var(--text-muted);margin-top:6px">JPG, PNG, WebP or PDF · max 10 MB</p>
+        </div>
         <div style="display:flex;gap:10px;justify-content:flex-end">
           <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
           <button type="submit" class="btn btn-primary">Add Transaction</button>
@@ -225,7 +230,16 @@ const transactionsModule = {
       notes: document.getElementById('tx-notes').value || null
     };
     try {
-      await api('/api/transactions', { method: 'POST', body });
+      const newTx = await api('/api/transactions', { method: 'POST', body });
+
+      // Upload receipt if one was selected
+      const receiptFile = document.getElementById('tx-receipt')?.files[0];
+      if (receiptFile && newTx?.id) {
+        const formData = new FormData();
+        formData.append('receipt', receiptFile);
+        await fetch(`/api/transactions/${newTx.id}/receipt`, { method: 'POST', body: formData });
+      }
+
       closeModal();
       toast('Transaction added');
       await this.loadRows();
