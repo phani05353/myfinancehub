@@ -125,8 +125,8 @@ myfinancehub/
 | `NODE_ENV` | — | Set to `production` in Docker |
 
 ## Screenshots
-<img width="1585" height="880" alt="Screenshot 2026-04-05 at 11 02 09 AM" src="https://github.com/use![Uploading Screenshot 2026-04-05 at 11.02.45 AM.png…]()
-r-attachments/assets/6362500c-fc21-4eb7-96c3-7b647be987f4" />
+<img width="1581" height="878" alt="Screenshot 2026-04-05 at 11 04 11 AM" src="https://github.com/user-attachments/assets/99bece77-4216-437b-b9ce-fb9744137dd3" />
+
 <img width="1587" height="886" alt="Screenshot 2026-04-05 at 11 03 06 AM" src="https://github.com/user-attachments/assets/ea27ffc8-56b1-4d36-87a2-6f04192c88b7" />
 
 
