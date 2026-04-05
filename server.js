@@ -1,4 +1,7 @@
+require('dotenv').config();
 const express = require('express');
+const session = require('express-session');
+const bcrypt = require('bcryptjs');
 const Database = require('better-sqlite3');
 const multer = require('multer');
 const { parse } = require('csv-parse/sync');
@@ -10,11 +13,24 @@ const PORT = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, 'data', 'finance.db');
 const SCHEMA_PATH = path.join(__dirname, 'db', 'schema.sql');
 
-// Init DB
+const crypto = require('crypto');
+
+// ─── DB INIT ──────────────────────────────────────────────────────────────────
+
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 const db = new Database(DB_PATH);
 const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
 db.exec(schema);
+
+// Migrate: add receipt_path column if it doesn't exist yet
+try { db.prepare('ALTER TABLE transactions ADD COLUMN receipt_path TEXT').run(); } catch (_) {}
+
+// Persist session secret in DB so it survives container restarts
+let sessionSecret = db.prepare("SELECT value FROM app_settings WHERE key = 'session_secret'").get()?.value;
+if (!sessionSecret) {
+  sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+  db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('session_secret', ?)").run(sessionSecret);
+}
 
 // Seed categories table from existing transaction data (runs once for existing DBs)
 db.prepare(`
@@ -30,11 +46,134 @@ db.prepare(`
     AND (payee = 'Unknown' OR payee = '' OR payee IS NULL)
 `).run();
 
-// Middleware
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+// ─── MULTER ───────────────────────────────────────────────────────────────────
 
 const upload = multer({ dest: path.join(__dirname, 'uploads') });
+
+const receiptStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, 'uploads', 'receipts');
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `receipt-${req.params.id}-${Date.now()}${ext}`);
+  }
+});
+const receiptUpload = multer({
+  storage: receiptStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
+    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
+  }
+});
+
+// ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+
+app.use(session({
+  secret: sessionSecret,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    maxAge: 7 * 24 * 60 * 60 * 1000   // 7 days
+  }
+}));
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+
+function requireAuth(req, res, next) {
+  const PUBLIC = new Set(['/login', '/setup', '/auth/login', '/auth/setup']);
+  if (PUBLIC.has(req.path)) return next();
+
+  // No users yet — force setup
+  const userCount = db.prepare('SELECT COUNT(*) as cnt FROM users').get().cnt;
+  if (userCount === 0) {
+    if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No accounts exist. Visit /setup' });
+    return res.redirect('/setup');
+  }
+
+  if (req.session?.user) return next();
+  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
+  res.redirect('/login');
+}
+
+// Setup page — only when no users exist
+app.get('/setup', (req, res) => {
+  const userCount = db.prepare('SELECT COUNT(*) as cnt FROM users').get().cnt;
+  if (userCount > 0) return res.redirect('/login');
+  res.sendFile(path.join(__dirname, 'public', 'setup.html'));
+});
+
+app.post('/auth/setup', async (req, res) => {
+  const userCount = db.prepare('SELECT COUNT(*) as cnt FROM users').get().cnt;
+  if (userCount > 0) return res.redirect('/login');
+
+  const { username, password, confirm } = req.body;
+  if (!username?.trim() || !password) return res.redirect('/setup?error=missing');
+  if (password !== confirm)            return res.redirect('/setup?error=mismatch');
+  if (password.length < 8)            return res.redirect('/setup?error=short');
+
+  const hash = await bcrypt.hash(password, 12);
+  const result = db.prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)').run(username.trim(), hash);
+  req.session.user = { id: result.lastInsertRowid, username: username.trim() };
+  res.redirect('/');
+});
+
+// Login page
+app.get('/login', (req, res) => {
+  const userCount = db.prepare('SELECT COUNT(*) as cnt FROM users').get().cnt;
+  if (userCount === 0) return res.redirect('/setup');
+  if (req.session?.user) return res.redirect('/');
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+app.post('/auth/login', async (req, res) => {
+  const { username, password } = req.body;
+  const user = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username?.trim());
+  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+    return res.redirect('/login?error=1');
+  }
+  req.session.user = { id: user.id, username: user.username };
+  res.redirect('/');
+});
+
+app.get('/auth/logout', (req, res) => {
+  req.session.destroy(() => res.redirect('/login'));
+});
+
+app.post('/auth/change-password', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Unauthorized' });
+  const { current, newPassword } = req.body;
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.user.id);
+  if (!user || !(await bcrypt.compare(current, user.password_hash))) {
+    return res.status(400).json({ error: 'Current password is incorrect' });
+  }
+  if (!newPassword || newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  }
+  const hash = await bcrypt.hash(newPassword, 12);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, user.id);
+  res.json({ ok: true });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  res.json({ username: req.session?.user?.username || null });
+});
+
+// Protect everything below this line
+app.use(requireAuth);
+
+// Static files (now auth-gated)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve receipt images (auth-gated)
+app.use('/receipts', express.static(path.join(__dirname, 'uploads', 'receipts')));
 
 // ─── TRANSACTIONS ─────────────────────────────────────────────────────────────
 
@@ -139,6 +278,34 @@ app.get('/api/transactions/:id', (req, res) => {
   if (!row) return res.status(404).json({ error: 'Not found' });
   res.json(row);
 });
+
+// ─── RECEIPTS ─────────────────────────────────────────────────────────────────
+
+app.post('/api/transactions/:id/receipt', receiptUpload.single('receipt'), (req, res) => {
+  const tx = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id);
+  if (!tx) return res.status(404).json({ error: 'Not found' });
+  if (!req.file) return res.status(400).json({ error: 'No valid file uploaded (jpg/png/webp/pdf, max 10 MB)' });
+
+  // Remove old receipt file if one existed
+  if (tx.receipt_path) {
+    fs.unlink(path.join(__dirname, 'uploads', 'receipts', tx.receipt_path), () => {});
+  }
+
+  db.prepare('UPDATE transactions SET receipt_path = ? WHERE id = ?').run(req.file.filename, req.params.id);
+  res.json({ receipt_path: req.file.filename });
+});
+
+app.delete('/api/transactions/:id/receipt', (req, res) => {
+  const tx = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id);
+  if (!tx) return res.status(404).json({ error: 'Not found' });
+  if (tx.receipt_path) {
+    fs.unlink(path.join(__dirname, 'uploads', 'receipts', tx.receipt_path), () => {});
+    db.prepare('UPDATE transactions SET receipt_path = NULL WHERE id = ?').run(req.params.id);
+  }
+  res.json({ ok: true });
+});
+
+// ─── CATEGORIES ───────────────────────────────────────────────────────────────
 
 app.get('/api/categories', (req, res) => {
   const rows = db.prepare('SELECT name FROM categories ORDER BY name COLLATE NOCASE').all();

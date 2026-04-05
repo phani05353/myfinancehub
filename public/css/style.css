@@ -144,6 +144,32 @@ body {
 }
 .nav-link.active { color: var(--accent); font-weight: 600; }
 
+.sidebar-user {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+.sidebar-username {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sidebar-username::before { content: '👤'; }
+.sidebar-user-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sidebar-user-actions .btn {
+  justify-content: flex-start;
+  font-size: 12px;
+  padding: 7px 10px;
+}
+
 .overdue-alert {
   margin: 12px;
   padding: 10px 12px;

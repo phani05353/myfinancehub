@@ -123,7 +123,52 @@ function route() {
 }
 
 window.addEventListener('hashchange', route);
-window.addEventListener('load', route);
+window.addEventListener('load', async () => {
+  route();
+  // Load logged-in username into sidebar
+  try {
+    const me = await api('/api/auth/me');
+    const el = document.getElementById('sidebar-username');
+    if (el && me.username) el.textContent = me.username;
+  } catch (_) {}
+});
+
+function changePasswordModal() {
+  openModal(`
+    <h2>Change Password</h2>
+    <form id="cp-form" style="margin-top:16px">
+      <div class="form-group" style="margin-bottom:12px">
+        <label>Current Password</label>
+        <input type="password" id="cp-current" autocomplete="current-password" required>
+      </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label>New Password</label>
+        <input type="password" id="cp-new" autocomplete="new-password" required minlength="8">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">At least 8 characters</div>
+      </div>
+      <div class="form-group" style="margin-bottom:20px">
+        <label>Confirm New Password</label>
+        <input type="password" id="cp-confirm" autocomplete="new-password" required>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Change Password</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('cp-form').onsubmit = async e => {
+    e.preventDefault();
+    const current    = document.getElementById('cp-current').value;
+    const newPassword = document.getElementById('cp-new').value;
+    const confirm    = document.getElementById('cp-confirm').value;
+    if (newPassword !== confirm) { toast('Passwords do not match', 'error'); return; }
+    try {
+      await api('/auth/change-password', { method: 'POST', body: { current, newPassword } });
+      closeModal();
+      toast('Password changed successfully');
+    } catch (e) { toast(e.message, 'error'); }
+  };
+}
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
 

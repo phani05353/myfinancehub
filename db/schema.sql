@@ -40,6 +40,18 @@ CREATE TABLE IF NOT EXISTS reminders (
     created_at  TEXT    DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT UNIQUE NOT NULL COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    created_at    TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS categories (
     id   INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL COLLATE NOCASE

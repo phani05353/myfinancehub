@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1d27">
+  <title>Sign In — Home Finance</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f1117;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: #1a1d27;
+      border: 1px solid #2e3350;
+      border-radius: 14px;
+      padding: 36px 32px;
+      width: 100%;
+      max-width: 380px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+    .logo-icon {
+      background: #6c8ef5;
+      color: #fff;
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 900;
+    }
+    .logo-text {
+      font-size: 18px;
+      font-weight: 700;
+      color: #6c8ef5;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #8892a4;
+      margin-bottom: 28px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #8892a4;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    input {
+      width: 100%;
+      background: #22263a;
+      border: 1px solid #2e3350;
+      border-radius: 8px;
+      padding: 11px 14px;
+      color: #e2e8f0;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.15s;
+      -webkit-appearance: none;
+    }
+    input:focus { border-color: #6c8ef5; }
+
+    .field { margin-bottom: 16px; }
+
+    .btn {
+      width: 100%;
+      background: #6c8ef5;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 13px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: filter 0.15s;
+    }
+    .btn:hover { filter: brightness(1.1); }
+    .btn:active { transform: scale(0.98); }
+
+    .error {
+      background: rgba(248,113,113,0.12);
+      border: 1px solid #f87171;
+      color: #f87171;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <div class="logo-icon">$</div>
+      <div class="logo-text">Home Finance</div>
+    </div>
+
+    <h1>Sign in</h1>
+    <p class="subtitle">Your personal finance dashboard</p>
+
+    <div id="error-box" class="error" style="display:none">
+      Incorrect username or password.
+    </div>
+
+    <form action="/auth/login" method="POST">
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn">Sign in</button>
+    </form>
+  </div>
+
+  <script>
+    if (location.search.includes('error=1')) {
+      document.getElementById('error-box').style.display = 'block';
+    }
+  </script>
+</body>
+</html>

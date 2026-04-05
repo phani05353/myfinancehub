@@ -143,6 +143,7 @@ const transactionsModule = {
           <td data-label="Amount" style="text-align:right">${fmt(r.amount)}</td>
           <td data-label="Notes" style="color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.notes || '')}</td>
           <td data-label="Actions" style="white-space:nowrap">
+            ${r.receipt_path ? `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${escHtml(r.receipt_path)}')" title="View receipt">📎</button>` : ''}
             <button class="btn btn-ghost btn-sm" onclick="transactionsModule.openEditModal(${r.id})">Edit</button>
             <button class="btn btn-danger btn-sm" onclick="transactionsModule.deleteRow(${r.id})">Del</button>
           </td>
@@ -276,6 +277,10 @@ const transactionsModule = {
           <label>Notes</label>
           <textarea id="tx-notes">${escHtml(row.notes || '')}</textarea>
         </div>
+        <div class="form-group" style="margin-bottom:20px">
+          <label>Receipt (optional)</label>
+          <div id="receipt-section">${buildReceiptSection(id, row.receipt_path)}</div>
+        </div>
         <div style="display:flex;gap:10px;justify-content:flex-end">
           <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
           <button type="submit" class="btn btn-primary">Save Changes</button>
@@ -396,6 +401,82 @@ async function addCategory() {
           </div>`).join('');
     toast(`"${name}" added`);
   } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Receipt helpers ──────────────────────────────────────────────────────────
+
+function buildReceiptSection(txId, receiptPath) {
+  const isImage = receiptPath && /\.(jpg|jpeg|png|webp)$/i.test(receiptPath);
+  const isPdf   = receiptPath && /\.pdf$/i.test(receiptPath);
+
+  const existing = receiptPath ? `
+    <div class="receipt-preview" id="receipt-preview">
+      ${isImage
+        ? `<a href="/receipts/${receiptPath}" target="_blank">
+             <img src="/receipts/${receiptPath}" alt="Receipt" style="max-width:100%;max-height:160px;border-radius:6px;border:1px solid var(--border)">
+           </a>`
+        : isPdf
+          ? `<a href="/receipts/${receiptPath}" target="_blank" class="btn btn-ghost btn-sm">📄 View PDF Receipt</a>`
+          : ''
+      }
+      <div style="margin-top:8px">
+        <button type="button" class="btn btn-danger btn-sm" onclick="removeReceipt(${txId})">Remove Receipt</button>
+      </div>
+    </div>` : '';
+
+  return `
+    ${existing}
+    <div id="receipt-upload" style="margin-top:${receiptPath ? '12px' : '0'}">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="file" id="receipt-file" accept="image/*,.pdf" style="flex:1;min-width:0">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="uploadReceipt(${txId})">Upload</button>
+      </div>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:6px">JPG, PNG, WebP or PDF · max 10 MB</p>
+    </div>
+  `;
+}
+
+async function uploadReceipt(txId) {
+  const fileInput = document.getElementById('receipt-file');
+  const file = fileInput?.files[0];
+  if (!file) { toast('Select a file first', 'error'); return; }
+
+  const formData = new FormData();
+  formData.append('receipt', file);
+
+  try {
+    const res = await fetch(`/api/transactions/${txId}/receipt`, { method: 'POST', body: formData });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Upload failed'); }
+    const data = await res.json();
+    document.getElementById('receipt-section').innerHTML = buildReceiptSection(txId, data.receipt_path);
+    toast('Receipt uploaded');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function removeReceipt(txId) {
+  if (!confirm('Remove this receipt?')) return;
+  try {
+    await api(`/api/transactions/${txId}/receipt`, { method: 'DELETE' });
+    document.getElementById('receipt-section').innerHTML = buildReceiptSection(txId, null);
+    toast('Receipt removed');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function viewReceipt(filename) {
+  const isImage = /\.(jpg|jpeg|png|webp)$/i.test(filename);
+  if (isImage) {
+    openModal(`
+      <div style="text-align:center">
+        <img src="/receipts/${filename}" alt="Receipt"
+          style="max-width:100%;max-height:70vh;border-radius:8px;object-fit:contain">
+        <div style="margin-top:12px">
+          <a href="/receipts/${filename}" target="_blank" class="btn btn-ghost btn-sm">Open full size ↗</a>
+        </div>
+      </div>
+    `);
+  } else {
+    window.open(`/receipts/${filename}`, '_blank');
+  }
 }
 
 async function deleteCategory(name) {
