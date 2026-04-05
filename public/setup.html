@@ -75,19 +75,28 @@
     <form action="/auth/setup" method="POST">
       <div class="field">
         <label for="username">Username</label>
-        <input type="text" id="username" name="username" autocomplete="username"
-               required autofocus minlength="2" maxlength="32" placeholder="e.g. phanikumar">
+        <input type="text" id="username" name="username"
+          autocomplete="username"
+          autocorrect="off"
+          autocapitalize="none"
+          spellcheck="false"
+          enterkeyhint="next"
+          minlength="2" maxlength="32" placeholder="e.g. phanikumar" required>
       </div>
       <div class="field">
         <label for="password">Password</label>
         <input type="password" id="password" name="password"
-               autocomplete="new-password" required minlength="8">
+          autocomplete="new-password"
+          enterkeyhint="next"
+          minlength="8" required>
         <p class="hint">At least 8 characters</p>
       </div>
       <div class="field">
         <label for="confirm">Confirm Password</label>
         <input type="password" id="confirm" name="confirm"
-               autocomplete="new-password" required>
+          autocomplete="new-password"
+          enterkeyhint="go"
+          required>
       </div>
       <button type="submit" class="btn">Create Account & Sign In</button>
     </form>

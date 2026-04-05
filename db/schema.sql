@@ -52,6 +52,14 @@ CREATE TABLE IF NOT EXISTS app_settings (
     value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS budgets (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    category   TEXT UNIQUE NOT NULL COLLATE NOCASE,
+    amount     REAL NOT NULL CHECK(amount > 0),
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS categories (
     id   INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL COLLATE NOCASE

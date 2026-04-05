@@ -103,6 +103,7 @@ document.querySelectorAll('.nav-link').forEach(a => {
 const routes = {
   '#/dashboard':     () => dashboardModule.init(),
   '#/transactions':  () => transactionsModule.init(),
+  '#/budget':        () => budgetModule.init(),
   '#/subscriptions': () => subscriptionsModule.init(),
   '#/reminders':     () => remindersModule.init(),
   '#/charts':        () => chartsModule.init(),

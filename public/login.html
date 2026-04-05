@@ -132,11 +132,20 @@
     <form action="/auth/login" method="POST">
       <div class="field">
         <label for="username">Username</label>
-        <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+        <input type="text" id="username" name="username"
+          autocomplete="username"
+          autocorrect="off"
+          autocapitalize="none"
+          spellcheck="false"
+          enterkeyhint="next"
+          required>
       </div>
       <div class="field">
         <label for="password">Password</label>
-        <input type="password" id="password" name="password" autocomplete="current-password" required>
+        <input type="password" id="password" name="password"
+          autocomplete="current-password"
+          enterkeyhint="go"
+          required>
       </div>
       <button type="submit" class="btn">Sign in</button>
     </form>

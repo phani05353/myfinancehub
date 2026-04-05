@@ -305,6 +305,49 @@ app.delete('/api/transactions/:id/receipt', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── BUDGETS ──────────────────────────────────────────────────────────────────
+
+app.get('/api/budgets', (req, res) => {
+  res.json(db.prepare('SELECT * FROM budgets ORDER BY category COLLATE NOCASE').all());
+});
+
+// Budget status: each category's budget vs actual spending for a given month
+app.get('/api/budgets/status', (req, res) => {
+  const month = req.query.month || new Date().toISOString().slice(0, 7);
+  const rows = db.prepare(`
+    SELECT
+      b.id, b.category, b.amount AS budget,
+      COALESCE(SUM(ABS(t.amount)), 0) AS spent
+    FROM budgets b
+    LEFT JOIN transactions t
+      ON lower(t.category) = lower(b.category)
+      AND strftime('%Y-%m', t.date) = ?
+      AND t.amount < 0
+    GROUP BY b.id
+    ORDER BY b.category COLLATE NOCASE
+  `).all(month);
+  res.json(rows);
+});
+
+app.post('/api/budgets', (req, res) => {
+  const { category, amount } = req.body;
+  if (!category?.trim() || !amount || parseFloat(amount) <= 0) {
+    return res.status(400).json({ error: 'category and a positive amount are required' });
+  }
+  db.prepare(`
+    INSERT INTO budgets (category, amount)
+    VALUES (?, ?)
+    ON CONFLICT(category) DO UPDATE SET amount = excluded.amount, updated_at = datetime('now')
+  `).run(category.trim(), parseFloat(amount));
+  res.json(db.prepare('SELECT * FROM budgets WHERE category = ? COLLATE NOCASE').get(category.trim()));
+});
+
+app.delete('/api/budgets/:id', (req, res) => {
+  const result = db.prepare('DELETE FROM budgets WHERE id = ?').run(req.params.id);
+  if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+});
+
 // ─── CATEGORIES ───────────────────────────────────────────────────────────────
 
 app.get('/api/categories', (req, res) => {

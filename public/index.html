@@ -13,15 +13,23 @@
 </head>
 <body>
 
+  <!-- Splash screen -->
+  <div id="splash">
+    <div class="splash-logo">
+      <div class="splash-icon">$</div>
+      <div class="splash-text">Home Finance</div>
+    </div>
+  </div>
+
   <!-- Mobile-only top bar -->
   <header class="mobile-header">
     <button class="hamburger" id="hamburger" aria-label="Open menu">
       <span></span><span></span><span></span>
     </button>
-    <div class="mobile-logo">
+    <a href="#/dashboard" class="mobile-logo" onclick="closeSidebar()">
       <span class="logo-icon">$</span>
       <span>Home Finance</span>
-    </div>
+    </a>
     <div id="mobile-overdue-dot" style="display:none;width:8px;height:8px;background:var(--danger);border-radius:50%"></div>
   </header>
 
@@ -30,13 +38,14 @@
 
   <!-- Sidebar -->
   <nav class="sidebar" id="sidebar">
-    <div class="logo">
+    <a href="#/dashboard" class="logo" onclick="closeSidebar()">
       <span class="logo-icon">$</span>
       <span>Home Finance</span>
-    </div>
+    </a>
     <ul>
       <li><a href="#/dashboard"     class="nav-link">📊 Dashboard</a></li>
       <li><a href="#/transactions"  class="nav-link">💳 Transactions</a></li>
+      <li><a href="#/budget"        class="nav-link">💰 Budget</a></li>
       <li><a href="#/subscriptions" class="nav-link">🔁 Subscriptions</a></li>
       <li><a href="#/reminders"     class="nav-link">🔔 Bill Reminders</a></li>
       <li><a href="#/charts"        class="nav-link">📈 Charts</a></li>
@@ -67,6 +76,7 @@
 
   <script src="/js/app.js"></script>
   <script src="/js/transactions.js"></script>
+  <script src="/js/budget.js"></script>
   <script src="/js/subscriptions.js"></script>
   <script src="/js/reminders.js"></script>
   <script src="/js/charts.js"></script>
