@@ -531,7 +531,12 @@ tr.due-soon td:first-child { color: var(--warning); }
   .drop-zone { padding: 28px 16px; }
 
   /* ── Transactions table → card list on mobile ── */
-  .tx-table { min-width: unset; }
+  /* Disable horizontal scroll wrapper for tx-table */
+  .table-wrap:has(.tx-table) { overflow-x: visible; }
+
+  /* Override global table min-width with higher specificity */
+  table.tx-table { min-width: 0 !important; width: 100%; }
+
   .tx-table thead { display: none; }
   .tx-table tbody tr {
     display: block;
@@ -542,7 +547,7 @@ tr.due-soon td:first-child { color: var(--warning); }
     background: var(--surface2);
   }
   .tx-table tbody tr:hover { background: var(--surface2); }
-  .tx-table tbody tr:last-child { border-bottom: 1px solid var(--border); }
+  .tx-table tbody tr:last-child { border-bottom: 1px solid var(--border); margin-bottom: 0; }
   .tx-table tbody td {
     display: flex;
     justify-content: space-between;
@@ -550,6 +555,7 @@ tr.due-soon td:first-child { color: var(--warning); }
     padding: 5px 0;
     border-bottom: none;
     font-size: 13px;
+    min-width: 0;
   }
   .tx-table tbody td::before {
     content: attr(data-label);
@@ -561,7 +567,7 @@ tr.due-soon td:first-child { color: var(--warning); }
     flex-shrink: 0;
     margin-right: 8px;
   }
-  /* Payee row — larger, no label */
+  /* Payee row — larger, acts as card header */
   .tx-table tbody td[data-label="Payee"] {
     font-size: 15px;
     font-weight: 600;
@@ -571,8 +577,9 @@ tr.due-soon td:first-child { color: var(--warning); }
     margin-bottom: 4px;
   }
   .tx-table tbody td[data-label="Payee"]::before { display: none; }
-  /* Amount right-aligned */
-  .tx-table tbody td[data-label="Amount"] { justify-content: space-between; }
+  /* Actions — full width row with buttons left-aligned */
+  .tx-table tbody td[data-label="Actions"] { justify-content: flex-start; gap: 8px; padding-top: 8px; }
+  .tx-table tbody td[data-label="Actions"]::before { display: none; }
   /* Hide notes on mobile to save space */
   .tx-table tbody td[data-label="Notes"] { display: none; }
 }

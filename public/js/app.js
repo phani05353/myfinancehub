@@ -192,17 +192,16 @@ const dashboardModule = {
         </div>
       </div>` : '';
 
-    // Top categories list
-    const catExpenses = byCategory.filter(c => c.total < 0);
-    const catTotal = catExpenses.reduce((s, c) => s + Math.abs(c.total), 0);
-    const catList = catExpenses.length === 0
+    // Top categories list — API returns ABS totals (positive) for expenses only
+    const catTotal = byCategory.reduce((s, c) => s + c.total, 0);
+    const catList = byCategory.length === 0
       ? '<p style="color:var(--text-muted);font-size:13px">No expense data this month.</p>'
-      : catExpenses.slice(0, 6).map(c => {
-          const pct = catTotal > 0 ? (Math.abs(c.total) / catTotal * 100).toFixed(1) : 0;
+      : byCategory.slice(0, 6).map(c => {
+          const pct = catTotal > 0 ? (c.total / catTotal * 100).toFixed(1) : 0;
           return `<div style="margin-bottom:11px">
             <div style="display:flex;justify-content:space-between;margin-bottom:4px">
               <span style="font-size:13px;font-weight:500">${escHtml(c.category || 'Uncategorized')}</span>
-              <span style="font-size:13px;font-weight:600;color:var(--danger)">${fmtCur(Math.abs(c.total))}</span>
+              <span style="font-size:13px;font-weight:600;color:var(--danger)">${fmtCur(c.total)}</span>
             </div>
             <div style="height:5px;background:var(--surface2);border-radius:3px;overflow:hidden">
               <div style="width:${pct}%;height:100%;background:var(--accent);border-radius:3px"></div>
