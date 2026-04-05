@@ -126,8 +126,7 @@ myfinancehub/
 
 ## Screenshots
 <img width="1581" height="878" alt="Screenshot 2026-04-05 at 11 04 11 AM" src="https://github.com/user-attachments/assets/99bece77-4216-437b-b9ce-fb9744137dd3" />
-
-<img width="1587" height="886" alt="Screenshot 2026-04-05 at 11 03 06 AM" src="https://github.com/user-attachments/assets/ea27ffc8-56b1-4d36-87a2-6f04192c88b7" />
-
-
+<img width="1623" height="877" alt="Screenshot 2026-04-05 at 11 05 16 AM" src="https://github.com/user-attachments/assets/cd1bffed-0e95-47b5-8d6e-f6b3a4a74fba" />
+<img width="1594" height="872" alt="Screenshot 2026-04-05 at 11 05 32 AM" src="https://github.com/user-attachments/assets/6153274c-f8a0-4516-bde8-e8f7e1b88fc9" />
+<img width="479" height="580" alt="Screenshot 2026-04-05 at 11 05 51 AM" src="https://github.com/user-attachments/assets/c26cf836-472d-4833-89f9-b50950127461" />
 
