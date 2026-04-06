@@ -138,7 +138,7 @@ const transactionsModule = {
       tbody.innerHTML = rows.map(r => `
         <tr>
           <td data-label="Date" style="white-space:nowrap">${fmtDate(r.date)}</td>
-          <td data-label="Payee"><span class="payee-cell">${payeeLogoHtml(r.payee)}${escHtml(r.payee)}</span></td>
+          <td data-label="Payee"><span class="payee-cell">${payeeLogoHtml(r.payee, r.amount)}${escHtml(r.payee)}</span></td>
           <td data-label="Category">${r.category ? `<span class="badge badge-blue">${escHtml(r.category)}</span>` : '<span class="badge badge-gray">—</span>'}</td>
           <td data-label="Amount" style="text-align:right">${fmt(r.amount)}</td>
           <td data-label="Notes" style="color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.notes || '')}</td>
@@ -347,8 +347,14 @@ function payeeColor(name) {
 function payeeDomain(name) {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com';
 }
-function payeeLogoHtml(payee) {
+function payeeLogoHtml(payee, amount) {
   if (!payee) return '';
+  // Income transactions get a fixed $ badge instead of a favicon lookup
+  if (amount > 0) {
+    return `<span class="payee-logo-wrap">
+      <span class="payee-initial" style="background:#34d399;display:flex">$</span>
+    </span>`;
+  }
   const domain  = payeeDomain(payee);
   const initial = payee.trim()[0].toUpperCase();
   const color   = payeeColor(payee);
