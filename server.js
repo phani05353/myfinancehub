@@ -48,6 +48,48 @@ db.prepare(`
     AND (payee = 'Unknown' OR payee = '' OR payee IS NULL)
 `).run();
 
+// ─── RULES ENGINE ─────────────────────────────────────────────────────────────
+
+function applyRules(txData) {
+  const rules = db.prepare(
+    'SELECT * FROM rules WHERE enabled = 1 ORDER BY priority DESC, id ASC'
+  ).all();
+
+  let category = txData.category || null;
+
+  for (const rule of rules) {
+    if (!matchRule(rule, txData)) continue;
+    if (rule.action_type === 'set_category') category = rule.action_value;
+  }
+
+  return { category };
+}
+
+function matchRule(rule, tx) {
+  const op  = rule.condition_op;
+  const raw = rule.condition_value;
+
+  if (rule.condition_field === 'amount') {
+    const amt = parseFloat(tx.amount);
+    const val = parseFloat(raw);
+    if (isNaN(amt) || isNaN(val)) return false;
+    if (op === 'gt')  return amt >  val;
+    if (op === 'lt')  return amt <  val;
+    if (op === 'gte') return amt >= val;
+    if (op === 'lte') return amt <= val;
+    if (op === 'eq')  return amt === val;
+    return false;
+  }
+
+  const field = String(tx[rule.condition_field] || '').toLowerCase();
+  const val   = raw.toLowerCase();
+  if (op === 'contains')    return field.includes(val);
+  if (op === 'equals')      return field === val;
+  if (op === 'starts_with') return field.startsWith(val);
+  if (op === 'ends_with')   return field.endsWith(val);
+  return false;
+}
+
 // ─── MULTER ───────────────────────────────────────────────────────────────────
 
 const upload = multer({ dest: path.join(__dirname, 'uploads') });
@@ -289,9 +331,10 @@ app.post('/api/transactions', (req, res) => {
   if (!date || !payee || amount === undefined) {
     return res.status(400).json({ error: 'date, payee, and amount are required' });
   }
+  const resolved = applyRules({ payee, amount: parseFloat(amount), notes, category });
   const result = db.prepare(
     'INSERT INTO transactions (date, payee, category, amount, notes) VALUES (?, ?, ?, ?, ?)'
-  ).run(date, payee, category || null, parseFloat(amount), notes || null);
+  ).run(date, payee, resolved.category, parseFloat(amount), notes || null);
   res.json(db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid));
 });
 
@@ -787,6 +830,75 @@ app.get('/api/year-review/:year', (req, res) => {
   });
 });
 
+// ─── RULES CRUD ───────────────────────────────────────────────────────────────
+
+const VALID_FIELDS = new Set(['payee', 'notes', 'amount']);
+const VALID_OPS    = new Set(['contains', 'equals', 'starts_with', 'ends_with', 'gt', 'lt', 'gte', 'lte', 'eq']);
+const VALID_ACTIONS = new Set(['set_category']);
+
+app.get('/api/rules', (req, res) => {
+  res.json(db.prepare('SELECT * FROM rules ORDER BY priority DESC, id ASC').all());
+});
+
+app.post('/api/rules', (req, res) => {
+  const { name, condition_field, condition_op, condition_value, action_type, action_value, priority = 0 } = req.body;
+  if (!name?.trim() || !condition_field || !condition_op || !condition_value?.trim() || !action_type || !action_value?.trim()) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+  if (!VALID_FIELDS.has(condition_field))  return res.status(400).json({ error: 'Invalid condition field' });
+  if (!VALID_OPS.has(condition_op))        return res.status(400).json({ error: 'Invalid condition operator' });
+  if (!VALID_ACTIONS.has(action_type))     return res.status(400).json({ error: 'Invalid action type' });
+
+  const result = db.prepare(
+    'INSERT INTO rules (name, condition_field, condition_op, condition_value, action_type, action_value, priority) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(name.trim(), condition_field, condition_op, condition_value.trim(), action_type, action_value.trim(), parseInt(priority) || 0);
+  res.json(db.prepare('SELECT * FROM rules WHERE id = ?').get(result.lastInsertRowid));
+});
+
+app.put('/api/rules/:id', (req, res) => {
+  const rule = db.prepare('SELECT * FROM rules WHERE id = ?').get(req.params.id);
+  if (!rule) return res.status(404).json({ error: 'Not found' });
+  const { name, condition_field, condition_op, condition_value, action_type, action_value, priority, enabled } = req.body;
+  db.prepare(`UPDATE rules SET name=?, condition_field=?, condition_op=?, condition_value=?,
+    action_type=?, action_value=?, priority=?, enabled=? WHERE id=?`).run(
+    name ?? rule.name, condition_field ?? rule.condition_field,
+    condition_op ?? rule.condition_op, condition_value ?? rule.condition_value,
+    action_type ?? rule.action_type, action_value ?? rule.action_value,
+    priority !== undefined ? parseInt(priority) : rule.priority,
+    enabled !== undefined ? (enabled ? 1 : 0) : rule.enabled,
+    req.params.id
+  );
+  res.json(db.prepare('SELECT * FROM rules WHERE id = ?').get(req.params.id));
+});
+
+app.delete('/api/rules/:id', (req, res) => {
+  const result = db.prepare('DELETE FROM rules WHERE id = ?').run(req.params.id);
+  if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+});
+
+// Apply all enabled rules to every existing transaction
+app.post('/api/rules/apply', (req, res) => {
+  const rules = db.prepare('SELECT * FROM rules WHERE enabled = 1 ORDER BY priority DESC, id ASC').all();
+  if (!rules.length) return res.json({ updated: 0 });
+
+  const txs    = db.prepare('SELECT * FROM transactions').all();
+  const update = db.prepare("UPDATE transactions SET category=?, updated_at=datetime('now') WHERE id=?");
+  let updated  = 0;
+
+  db.transaction(() => {
+    for (const tx of txs) {
+      const resolved = applyRules({ payee: tx.payee, amount: tx.amount, notes: tx.notes, category: tx.category });
+      if (resolved.category !== tx.category) {
+        update.run(resolved.category, tx.id);
+        updated++;
+      }
+    }
+  })();
+
+  res.json({ updated });
+});
+
 // ─── IMPORT ───────────────────────────────────────────────────────────────────
 
 app.post('/api/import/csv', upload.single('csvfile'), (req, res) => {
@@ -875,7 +987,8 @@ app.post('/api/import/csv', upload.single('csvfile'), (req, res) => {
         const exists = checkStmt.get(isoDate, payee, amount, 'import');
         if (exists) { skipped++; return; }
 
-        insertStmt.run(isoDate, payee, category, amount, notes, 'import');
+        const resolved = applyRules({ payee, amount, notes, category });
+        insertStmt.run(isoDate, payee, resolved.category, amount, notes, 'import');
         imported++;
       } catch (e) {
         errors.push({ row: i + 2, error: e.message });

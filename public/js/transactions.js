@@ -242,7 +242,7 @@ const transactionsModule = {
 
       closeModal();
       toast('Transaction added');
-      await this.loadRows();
+      if (document.getElementById('tx-body')) await this.loadRows();
     } catch (e) { toast(e.message, 'error'); }
   },
 

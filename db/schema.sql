@@ -72,6 +72,19 @@ CREATE TABLE IF NOT EXISTS invites (
     expires_at TEXT    NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS rules (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT    NOT NULL,
+    condition_field TEXT    NOT NULL,   -- 'payee' | 'notes' | 'amount'
+    condition_op    TEXT    NOT NULL,   -- 'contains' | 'equals' | 'starts_with' | 'gt' | 'lt' | 'gte' | 'lte'
+    condition_value TEXT    NOT NULL,
+    action_type     TEXT    NOT NULL,   -- 'set_category'
+    action_value    TEXT    NOT NULL,
+    priority        INTEGER NOT NULL DEFAULT 0,
+    enabled         INTEGER NOT NULL DEFAULT 1,
+    created_at      TEXT    DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_transactions_date     ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_payee    ON transactions(payee);
 CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);

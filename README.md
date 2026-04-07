@@ -49,8 +49,9 @@ The app will be available at [http://localhost:3000](http://localhost:3000). The
 **Run manually on a homelab (e.g. port 3090):**
 
 ```bash
-# Create data directory on the host first
+# Create persistent directories on the host first
 mkdir -p /home/youruser/finance-hub/data
+mkdir -p /home/youruser/finance-hub/receipts
 
 # Build and run
 docker build -t home-finance .
@@ -59,10 +60,11 @@ docker run -d \
   --restart unless-stopped \
   -p 3090:3000 \
   -v /home/youruser/finance-hub/data:/app/data \
+  -v /home/youruser/finance-hub/receipts:/app/uploads/receipts \
   home-finance
 ```
 
-**Redeploy without losing data:**
+**Redeploy without losing data or receipts:**
 
 ```bash
 docker stop home-finance && docker rm home-finance
@@ -70,10 +72,13 @@ docker build -t home-finance .
 docker run -d --name home-finance --restart unless-stopped \
   -p 3090:3000 \
   -v /home/youruser/finance-hub/data:/app/data \
+  -v /home/youruser/finance-hub/receipts:/app/uploads/receipts \
   home-finance
 ```
 
-Data lives in `finance.db` on the host — it is never touched during a rebuild.
+Two bind mounts keep your data safe across rebuilds:
+- `/app/data` — SQLite database
+- `/app/uploads/receipts` — receipt images and PDFs
 
 > **Schema note:** Adding new tables to `db/schema.sql` is safe (applied automatically on startup). Adding columns to *existing* tables requires a manual `ALTER TABLE` migration on the host database.
 

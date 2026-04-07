@@ -109,6 +109,7 @@ const routes = {
   '#/charts':        () => chartsModule.init(),
   '#/import':        () => importModule.init(),
   '#/year-review':   () => yearReviewModule.init(),
+  '#/rules':         () => rulesModule.init(),
 };
 
 function route() {

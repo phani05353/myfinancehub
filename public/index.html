@@ -53,6 +53,7 @@
       <li><a href="#/charts"        class="nav-link">📈 Charts</a></li>
       <li><a href="#/import"        class="nav-link">📥 Import</a></li>
       <li><a href="#/year-review"  class="nav-link">📅 Year in Review</a></li>
+      <li><a href="#/rules"        class="nav-link">⚡ Rules Engine</a></li>
     </ul>
     <div id="overdue-badge" class="overdue-alert hidden"></div>
     <div class="sidebar-user">
@@ -69,6 +70,9 @@
   <main class="content">
     <div id="view"></div>
   </main>
+
+  <!-- Floating add button -->
+  <button id="fab" onclick="transactionsModule.openAddModal()" aria-label="Add transaction">+</button>
 
   <!-- Modal -->
   <div id="modal-overlay" class="hidden">
@@ -93,5 +97,6 @@
   <script src="/js/charts.js"></script>
   <script src="/js/import.js"></script>
   <script src="/js/yearreview.js"></script>
+  <script src="/js/rules.js"></script>
 </body>
 </html>

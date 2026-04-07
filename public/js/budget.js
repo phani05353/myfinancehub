@@ -110,32 +110,35 @@ const budgetModule = {
     const barColor  = pct >= 100 ? 'var(--danger)' : pct >= 80 ? 'var(--warning)' : 'var(--success)';
     const pctLabel  = pct.toFixed(1) + '%';
 
+    const catJs = escHtml(b.category).replace(/'/g, "\\'");
     return `
       <div class="budget-card ${over ? 'budget-card--over' : ''}">
         <div class="budget-card-header">
           <span class="budget-cat">${escHtml(b.category)}</span>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-ghost btn-sm" onclick="budgetModule.openEditModal(${b.id},'${escHtml(b.category)}',${b.budget})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="budgetModule.deleteBudget(${b.id})">✕</button>
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();budgetModule.openEditModal(${b.id},'${escHtml(b.category)}',${b.budget})">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();budgetModule.deleteBudget(${b.id})">✕</button>
           </div>
         </div>
 
-        <div class="budget-amounts">
-          <span style="font-size:22px;font-weight:700;color:${barColor}">${fmtCur(b.spent)}</span>
-          <span style="color:var(--text-muted);font-size:13px">of ${fmtCur(b.budget)}</span>
-        </div>
+        <div class="budget-card-body" onclick="budgetModule.openTxModal('${catJs}','${this.currentMonth}')">
+          <div class="budget-amounts">
+            <span style="font-size:22px;font-weight:700;color:${barColor}">${fmtCur(b.spent)}</span>
+            <span style="color:var(--text-muted);font-size:13px">of ${fmtCur(b.budget)}</span>
+          </div>
 
-        <div class="budget-bar-track" style="margin:10px 0 6px">
-          <div class="budget-bar-fill" style="width:${barPct.toFixed(1)}%;background:${barColor}"></div>
-        </div>
+          <div class="budget-bar-track" style="margin:10px 0 6px">
+            <div class="budget-bar-fill" style="width:${barPct.toFixed(1)}%;background:${barColor}"></div>
+          </div>
 
-        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px">
-          <span style="color:${over ? 'var(--danger)' : 'var(--success)'};font-weight:600">
-            ${over
-              ? `⚠ ${fmtCur(Math.abs(remaining))} over budget`
-              : `${fmtCur(remaining)} remaining`}
-          </span>
-          <span class="budget-pct-badge" style="background:${barColor}20;color:${barColor}">${pctLabel}</span>
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px">
+            <span style="color:${over ? 'var(--danger)' : 'var(--success)'};font-weight:600">
+              ${over
+                ? `⚠ ${fmtCur(Math.abs(remaining))} over budget`
+                : `${fmtCur(remaining)} remaining`}
+            </span>
+            <span class="budget-pct-badge" style="background:${barColor}20;color:${barColor}">${pctLabel} · View →</span>
+          </div>
         </div>
       </div>
     `;
@@ -205,6 +208,61 @@ const budgetModule = {
       await api(`/api/budgets/${id}`, { method: 'DELETE' });
       toast('Budget removed');
       await this.load();
+    } catch (e) { toast(e.message, 'error'); }
+  },
+
+  async openTxModal(category, month) {
+    const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const [y, m] = month.split('-');
+    const label = `${MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`;
+
+    openModal(`
+      <h2 style="margin-bottom:2px">${escHtml(category)}</h2>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px">${label}</p>
+      <div id="budget-tx-list" style="color:var(--text-muted)">Loading…</div>
+    `);
+
+    try {
+      const { rows } = await api(`/api/transactions?category=${encodeURIComponent(category)}&month=${month}&limit=100`);
+
+      if (!rows || rows.length === 0) {
+        document.getElementById('budget-tx-list').innerHTML =
+          '<p style="color:var(--text-muted);text-align:center;padding:24px 0">No transactions this month.</p>';
+        return;
+      }
+
+      const total = rows.reduce((s, t) => s + t.amount, 0);
+      document.getElementById('budget-tx-list').innerHTML = `
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Payee</th>
+                <th style="text-align:right">Amount</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(t => `
+                <tr>
+                  <td style="white-space:nowrap;color:var(--text-muted)">${fmtDate(t.date)}</td>
+                  <td>${escHtml(t.payee)}</td>
+                  <td style="text-align:right">${fmt(t.amount)}</td>
+                  <td style="color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(t.notes || '')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr style="border-top:2px solid var(--border)">
+                <td colspan="2" style="font-weight:600;padding-top:8px">Total spent</td>
+                <td style="text-align:right;font-weight:700;padding-top:8px">${fmtCur(Math.abs(total))}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      `;
     } catch (e) { toast(e.message, 'error'); }
   }
 };
