@@ -310,108 +310,184 @@ const dashboardModule = {
         </div>
       </div>` : '';
 
-    // Top categories list — API returns ABS totals (positive) for expenses only
+    // Top categories — radial dials
     const catTotal = byCategory.reduce((s, c) => s + c.total, 0);
+    const CAT_PALETTE = ['#6c8ef5','#a78bfa','#34d399','#fbbf24','#f87171','#60a5fa'];
+    const R = 32, CIRC = 2 * Math.PI * R;
     const catList = byCategory.length === 0
       ? '<p style="color:var(--text-muted);font-size:13px">No expense data this month.</p>'
-      : byCategory.slice(0, 6).map(c => {
-          const pct = catTotal > 0 ? (c.total / catTotal * 100).toFixed(1) : 0;
-          return `<div style="margin-bottom:11px">
-            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-              <span style="font-size:13px;font-weight:500">${escHtml(c.category || 'Uncategorized')}</span>
-              <span style="font-size:13px;font-weight:600;color:var(--danger)">${fmtCur(c.total)}</span>
-            </div>
-            <div style="height:5px;background:var(--surface2);border-radius:3px;overflow:hidden">
-              <div style="width:${pct}%;height:100%;background:var(--accent);border-radius:3px"></div>
-            </div>
-          </div>`;
-        }).join('');
+      : `<div class="cat-dials">` + byCategory.slice(0, 6).map((c, i) => {
+          const pct     = catTotal > 0 ? (c.total / catTotal * 100) : 0;
+          const offset  = CIRC * (1 - pct / 100);
+          const color   = CAT_PALETTE[i % CAT_PALETTE.length];
+          const name    = (c.category || 'Uncategorized');
+          const short   = name.length > 11 ? name.slice(0, 10) + '…' : name;
+          return `
+            <div class="cat-dial-item">
+              <div class="cat-dial-ring">
+                <svg viewBox="0 0 80 80" width="80" height="80">
+                  <circle cx="40" cy="40" r="${R}" fill="none" stroke="var(--surface2)" stroke-width="7"/>
+                  <circle cx="40" cy="40" r="${R}" fill="none" stroke="${color}" stroke-width="7"
+                    stroke-linecap="round"
+                    stroke-dasharray="${CIRC.toFixed(2)}"
+                    stroke-dashoffset="${offset.toFixed(2)}"
+                    transform="rotate(-90 40 40)"
+                    style="transition:stroke-dashoffset 0.6s ease"/>
+                  <text x="40" y="44" text-anchor="middle"
+                    style="fill:${color};font-size:13px;font-weight:800;font-family:system-ui">
+                    ${pct.toFixed(0)}%
+                  </text>
+                </svg>
+              </div>
+              <div class="cat-dial-label" title="${escHtml(name)}">${escHtml(short)}</div>
+              <div class="cat-dial-amount" style="color:${color}">${fmtCur(c.total)}</div>
+            </div>`;
+        }).join('') + `</div>`;
 
     // Recent transactions
     const txRows = (recentTx.rows || []);
     const recentList = txRows.length === 0
       ? '<p style="color:var(--text-muted);font-size:13px">No transactions this month.</p>'
       : txRows.map(r => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-            <div>
-              <div style="font-size:13px;font-weight:600">${escHtml(r.payee)}</div>
-              <div style="font-size:11px;color:var(--text-muted)">${fmtDate(r.date)}${r.category ? ' · ' + escHtml(r.category) : ''}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0">
+              ${typeof payeeLogoHtml === 'function' ? payeeLogoHtml(r.payee, r.amount) : ''}
+              <div style="min-width:0">
+                <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(r.payee)}</div>
+                <div style="font-size:11px;color:var(--text-muted)">${fmtDate(r.date)}${r.category ? ' · ' + escHtml(r.category) : ''}</div>
+              </div>
             </div>
-            <div style="font-size:14px">${fmt(r.amount)}</div>
+            <div style="font-size:14px;white-space:nowrap;margin-left:12px">${fmt(r.amount)}</div>
           </div>`).join('');
 
+    // Greeting
+    const hour = today.getHours();
+    const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    const dateLabel = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+    // Net hero colour + label
+    const netPositive = summary.net >= 0;
+    const netColor    = netPositive ? 'var(--success)' : 'var(--danger)';
+    const netLabel    = netPositive ? 'surplus' : 'deficit';
+
     view.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
-        <h1 style="margin-bottom:0">Dashboard — ${monthName}</h1>
-        <div style="display:flex;gap:8px">
-          <a href="#/transactions" class="btn btn-primary btn-sm">+ Transaction</a>
-          <a href="#/reminders" class="btn btn-ghost btn-sm">+ Bill Reminder</a>
+      <!-- Greeting bar -->
+      <div class="dash-greeting">
+        <div>
+          <div class="dash-greeting-text">${greeting} 👋</div>
+          <div class="dash-greeting-sub">${dateLabel} · ${monthName}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          <a href="#/transactions" class="btn btn-primary btn-sm">+ Add</a>
+          <a href="#/import"       class="btn btn-ghost btn-sm">Import CSV</a>
         </div>
       </div>
 
-      <div class="stats-grid">
+      <!-- Hero net card -->
+      <div class="dash-hero">
+        <div class="dash-hero-left">
+          <div class="dash-hero-label">Net this month</div>
+          <div class="dash-hero-amount" style="color:${netColor}">${netPositive ? '+' : '−'}${fmtCur(Math.abs(summary.net))}</div>
+          <div class="dash-hero-sub">${netLabel} · ${monthName}</div>
+        </div>
+        <div class="dash-hero-right">
+          <div class="dash-hero-stat">
+            <span class="dash-hero-stat-label">Income</span>
+            <span class="dash-hero-stat-val income-text">${fmtCur(summary.income)}</span>
+          </div>
+          <div class="dash-hero-divider"></div>
+          <div class="dash-hero-stat">
+            <span class="dash-hero-stat-label">Spent</span>
+            <span class="dash-hero-stat-val expense-text">${fmtCur(Math.abs(summary.expenses))}</span>
+          </div>
+          <div class="dash-hero-divider"></div>
+          <div class="dash-hero-stat">
+            <span class="dash-hero-stat-label">Subscriptions</span>
+            <span class="dash-hero-stat-val">${fmtCur(subTotal)}<span style="font-size:11px;color:var(--text-muted)">/mo</span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Savings rate -->
+      ${savingsBar}
+
+      <!-- Stat cards -->
+      <div class="stats-grid" style="margin-bottom:20px">
         <div class="stat-card">
-          <div class="label">📈 Income</div>
+          <div class="label">Income</div>
           <div class="value income">${fmtCur(summary.income)}</div>
+          <div class="sublabel">this month</div>
         </div>
         <div class="stat-card">
-          <div class="label">📉 Expenses</div>
+          <div class="label">Expenses</div>
           <div class="value expense">${fmtCur(Math.abs(summary.expenses))}</div>
+          <div class="sublabel">this month</div>
         </div>
         <div class="stat-card">
-          <div class="label">💰 Net</div>
-          <div class="value ${summary.net >= 0 ? 'income' : 'expense'}">${fmtCur(summary.net)}</div>
-          <div class="sublabel">${summary.net >= 0 ? 'Surplus' : 'Deficit'} this month</div>
+          <div class="label">Savings Rate</div>
+          <div class="value ${savingsRate >= 20 ? 'income' : savingsRate >= 0 ? 'neutral' : 'expense'}">${savingsRate.toFixed(1)}%</div>
+          <div class="sublabel">${savingsRate >= 20 ? 'On track' : savingsRate >= 0 ? 'Could improve' : 'Over budget'}</div>
         </div>
         <div class="stat-card">
-          <div class="label">🔁 Subscriptions/mo</div>
+          <div class="label">Subscriptions</div>
           <div class="value neutral">${fmtCur(subTotal)}</div>
           <div class="sublabel">${subs.length} active</div>
         </div>
       </div>
 
-      ${savingsBar}
-
+      <!-- Bills + Top Spending -->
       <div class="dash-grid">
         <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
             <h2 style="margin-bottom:0">Upcoming Bills</h2>
-            ${overdueReminders.length > 0 ? `<span class="badge badge-red">${overdueReminders.length} overdue</span>` : ''}
+            ${overdueReminders.length > 0
+              ? `<span class="badge badge-red">⚠ ${overdueReminders.length} overdue</span>`
+              : '<span style="font-size:12px;color:var(--success);font-weight:600">✓ All clear</span>'}
           </div>
           ${reminders.length === 0
-            ? '<p style="color:var(--text-muted);font-size:13px">No upcoming bills in next 30 days.</p>'
-            : `<div class="table-wrap"><table>
-                <thead><tr><th>Bill</th><th>Due</th><th>Amount</th><th>Status</th></tr></thead>
-                <tbody>
-                ${reminders.slice(0, 8).map(r => {
-                  const overdue = r.due_date < todayStr;
-                  return `<tr class="${overdue ? 'overdue' : ''}">
-                    <td>${escHtml(r.title)}</td>
-                    <td style="white-space:nowrap">${fmtDate(r.due_date)}</td>
-                    <td style="white-space:nowrap">${r.amount ? fmt(-Math.abs(r.amount)) : '—'}</td>
-                    <td><span class="badge ${overdue ? 'badge-red' : 'badge-yellow'}">${overdue ? 'Overdue' : 'Due'}</span></td>
-                  </tr>`;
-                }).join('')}
-                </tbody>
-              </table></div>`
+            ? '<p style="color:var(--text-muted);font-size:13px">No upcoming bills in the next 30 days.</p>'
+            : reminders.slice(0, 6).map(r => {
+                const overdue = r.due_date < todayStr;
+                const daysUntil = Math.round((new Date(r.due_date) - new Date(todayStr)) / 86400000);
+                const dueLabel = overdue ? `${Math.abs(daysUntil)}d overdue` : daysUntil === 0 ? 'Due today' : `in ${daysUntil}d`;
+                return `
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <div style="width:8px;height:8px;border-radius:50%;background:${overdue ? 'var(--danger)' : daysUntil <= 3 ? 'var(--warning)' : 'var(--success)'};flex-shrink:0"></div>
+                      <div>
+                        <div style="font-size:13px;font-weight:600">${escHtml(r.title)}</div>
+                        <div style="font-size:11px;color:${overdue ? 'var(--danger)' : 'var(--text-muted)'};font-weight:${overdue ? '600' : '400'}">${dueLabel}</div>
+                      </div>
+                    </div>
+                    <div style="font-size:13px;font-weight:600;color:var(--text-muted)">${r.amount ? fmtCur(Math.abs(r.amount)) : '—'}</div>
+                  </div>`;
+              }).join('')
           }
+          ${reminders.length > 6 ? `<div style="margin-top:12px"><a href="#/reminders" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">View all ${reminders.length} →</a></div>` : ''}
         </div>
+
         <div class="card">
-          <h2>Top Spending This Month</h2>
+          <h2 style="margin-bottom:16px">Top Spending This Month</h2>
           ${catList}
+          ${byCategory.length > 0 ? `<div style="margin-top:14px"><a href="#/charts" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">Full breakdown →</a></div>` : ''}
         </div>
       </div>
 
+      <!-- Recent transactions -->
       <div class="card" style="margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
           <h2 style="margin-bottom:0">Recent Transactions</h2>
           <a href="#/transactions" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">View all →</a>
         </div>
         ${recentList}
       </div>
 
+      <!-- 6-month trend chart -->
       <div class="card">
-        <h2>6-Month Trend</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h2 style="margin-bottom:0">6-Month Trend</h2>
+          <a href="#/charts" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">Full charts →</a>
+        </div>
         <div class="chart-container"><canvas id="trend-chart"></canvas></div>
       </div>
     `;

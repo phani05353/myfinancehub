@@ -14,146 +14,324 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       min-height: 100vh;
       display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
+      overflow: hidden;
     }
 
-    .card {
-      background: #1a1d27;
-      border: 1px solid #2e3350;
-      border-radius: 14px;
-      padding: 36px 32px;
+    /* ── Animated background glows ── */
+    .bg {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .glow {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.18;
+      animation: drift 12s ease-in-out infinite alternate;
+    }
+    .glow-1 { width: 600px; height: 600px; background: #6c8ef5; top: -150px; left: -100px; animation-delay: 0s; }
+    .glow-2 { width: 400px; height: 400px; background: #a78bfa; bottom: -100px; right: 30%; animation-delay: -4s; }
+    .glow-3 { width: 300px; height: 300px; background: #34d399; bottom: 10%; right: -80px; animation-delay: -8s; opacity: 0.1; }
+    @keyframes drift {
+      from { transform: translate(0, 0) scale(1); }
+      to   { transform: translate(30px, 20px) scale(1.08); }
+    }
+
+    /* ── Layout ── */
+    .layout {
+      position: relative;
+      z-index: 1;
+      display: flex;
       width: 100%;
+      min-height: 100vh;
+    }
+
+    /* ── Left branding panel ── */
+    .brand-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 60px 56px;
+      background: linear-gradient(135deg, rgba(108,142,245,0.07) 0%, rgba(167,139,250,0.04) 100%);
+      border-right: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 48px;
+    }
+    .brand-icon {
+      width: 52px; height: 52px;
+      background: linear-gradient(135deg, #6c8ef5, #a78bfa);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 900;
+      color: #fff;
+      box-shadow: 0 0 40px rgba(108,142,245,0.4);
+    }
+    .brand-name {
+      font-size: 22px;
+      font-weight: 700;
+      color: #e2e8f0;
+      letter-spacing: -0.3px;
+    }
+
+    .brand-tagline {
+      font-size: 38px;
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.8px;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #e2e8f0 0%, #8892a4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .brand-sub {
+      font-size: 15px;
+      color: #8892a4;
+      line-height: 1.6;
+      margin-bottom: 44px;
       max-width: 380px;
     }
 
-    .logo {
+    .feature-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .feature-list li {
       display: flex;
       align-items: center;
       gap: 12px;
-      margin-bottom: 32px;
+      font-size: 14px;
+      color: #8892a4;
     }
-    .logo-icon {
-      background: #6c8ef5;
-      color: #fff;
-      width: 38px; height: 38px;
-      border-radius: 10px;
+    .feature-list li::before {
+      content: '';
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: rgba(52,211,153,0.15);
+      border: 1px solid rgba(52,211,153,0.35);
+      flex-shrink: 0;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6l3 3 5-5' stroke='%2334d399' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: 12px;
+    }
+    .feature-list li strong { color: #e2e8f0; font-weight: 600; }
+
+    /* ── Right form panel ── */
+    .form-panel {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
-      font-weight: 900;
-    }
-    .logo-text {
-      font-size: 18px;
-      font-weight: 700;
-      color: #6c8ef5;
+      padding: 40px 48px;
+      width: 420px;
+      flex-shrink: 0;
     }
 
-    h1 {
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 6px;
+    .form-card {
+      width: 100%;
+      max-width: 360px;
     }
-    .subtitle {
-      font-size: 13px;
-      color: #8892a4;
-      margin-bottom: 28px;
-    }
+
+    .form-header { margin-bottom: 32px; }
+    .form-header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.3px; margin-bottom: 6px; }
+    .form-header p  { font-size: 14px; color: #8892a4; }
 
     label {
       display: block;
-      font-size: 12px;
-      font-weight: 600;
+      font-size: 11px;
+      font-weight: 700;
       color: #8892a4;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 6px;
+      letter-spacing: 0.07em;
+      margin-bottom: 7px;
     }
-
     input {
       width: 100%;
-      background: #22263a;
+      background: #1a1d27;
       border: 1px solid #2e3350;
-      border-radius: 8px;
-      padding: 11px 14px;
+      border-radius: 10px;
+      padding: 12px 16px;
       color: #e2e8f0;
       font-size: 15px;
       outline: none;
-      transition: border-color 0.15s;
+      transition: border-color 0.15s, box-shadow 0.15s;
       -webkit-appearance: none;
     }
-    input:focus { border-color: #6c8ef5; }
-
-    .field { margin-bottom: 16px; }
+    input:focus {
+      border-color: #6c8ef5;
+      box-shadow: 0 0 0 3px rgba(108,142,245,0.15);
+    }
+    .field { margin-bottom: 18px; }
 
     .btn {
       width: 100%;
-      background: #6c8ef5;
+      background: linear-gradient(135deg, #6c8ef5, #8b6cf7);
       color: #fff;
       border: none;
-      border-radius: 8px;
-      padding: 13px;
+      border-radius: 10px;
+      padding: 14px;
       font-size: 15px;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
       margin-top: 8px;
-      transition: filter 0.15s;
+      transition: opacity 0.15s, transform 0.1s;
+      letter-spacing: 0.01em;
+      box-shadow: 0 4px 20px rgba(108,142,245,0.35);
     }
-    .btn:hover { filter: brightness(1.1); }
+    .btn:hover  { opacity: 0.92; }
     .btn:active { transform: scale(0.98); }
 
     .error {
-      background: rgba(248,113,113,0.12);
-      border: 1px solid #f87171;
+      background: rgba(248,113,113,0.1);
+      border: 1px solid rgba(248,113,113,0.4);
       color: #f87171;
-      border-radius: 8px;
-      padding: 10px 14px;
+      border-radius: 10px;
+      padding: 11px 14px;
       font-size: 13px;
       margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .error::before { content: '⚠'; font-size: 14px; }
+
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #2e3350, transparent);
+      margin: 28px 0;
+    }
+
+    .secure-note {
+      text-align: center;
+      font-size: 12px;
+      color: #4a5568;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .secure-note::before { content: '🔒'; font-size: 11px; }
+
+    /* ── Mobile: hide brand panel, show form only ── */
+    @media (max-width: 768px) {
+      body { overflow: auto; }
+      .brand-panel { display: none; }
+      .form-panel {
+        width: 100%;
+        padding: 32px 24px;
+        align-items: flex-start;
+        padding-top: 60px;
+      }
+      .form-card { max-width: 100%; }
+
+      /* Show mini logo on mobile */
+      .mobile-logo {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 36px;
+      }
+      .mobile-logo .brand-icon { width: 40px; height: 40px; font-size: 18px; border-radius: 11px; }
+      .mobile-logo .brand-name { font-size: 18px; }
+    }
+    @media (min-width: 769px) {
+      .mobile-logo { display: none; }
     }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="logo">
-      <div class="logo-icon">$</div>
-      <div class="logo-text">Home Finance</div>
+
+  <!-- Animated background -->
+  <div class="bg">
+    <div class="glow glow-1"></div>
+    <div class="glow glow-2"></div>
+    <div class="glow glow-3"></div>
+  </div>
+
+  <div class="layout">
+    <!-- Left branding panel (desktop only) -->
+    <div class="brand-panel">
+      <div class="brand-logo">
+        <div class="brand-icon">$</div>
+        <span class="brand-name">Home Finance</span>
+      </div>
+
+      <h1 class="brand-tagline">Your finances,<br>beautifully<br>organized.</h1>
+      <p class="brand-sub">A self-hosted personal finance dashboard — track spending, set budgets, and see the full picture of your money.</p>
+
+      <ul class="feature-list">
+        <li><strong>Track</strong> income & expenses in one place</li>
+        <li><strong>Budget</strong> by category with visual progress</li>
+        <li><strong>Automate</strong> with a custom rules engine</li>
+        <li><strong>Review</strong> your year with annual reports</li>
+        <li><strong>Private</strong> — self-hosted, no cloud required</li>
+      </ul>
     </div>
 
-    <h1>Sign in</h1>
-    <p class="subtitle">Your personal finance dashboard</p>
+    <!-- Right form panel -->
+    <div class="form-panel">
+      <div class="form-card">
+        <!-- Mobile logo -->
+        <div class="mobile-logo">
+          <div class="brand-icon">$</div>
+          <span class="brand-name">Home Finance</span>
+        </div>
 
-    <div id="error-box" class="error" style="display:none">
-      Incorrect username or password.
+        <div class="form-header">
+          <h1>Welcome back</h1>
+          <p>Sign in to your dashboard</p>
+        </div>
+
+        <div id="error-box" class="error" style="display:none">
+          Incorrect username or password.
+        </div>
+
+        <form action="/auth/login" method="POST">
+          <div class="field">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username"
+              autocomplete="username"
+              autocorrect="off"
+              autocapitalize="none"
+              spellcheck="false"
+              enterkeyhint="next"
+              placeholder="your username"
+              required>
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password"
+              autocomplete="current-password"
+              enterkeyhint="go"
+              placeholder="••••••••"
+              required>
+          </div>
+          <button type="submit" class="btn">Sign in →</button>
+        </form>
+
+        <div class="divider"></div>
+        <p class="secure-note">Self-hosted & private — your data stays local</p>
+      </div>
     </div>
-
-    <form action="/auth/login" method="POST">
-      <div class="field">
-        <label for="username">Username</label>
-        <input type="text" id="username" name="username"
-          autocomplete="username"
-          autocorrect="off"
-          autocapitalize="none"
-          spellcheck="false"
-          enterkeyhint="next"
-          required>
-      </div>
-      <div class="field">
-        <label for="password">Password</label>
-        <input type="password" id="password" name="password"
-          autocomplete="current-password"
-          enterkeyhint="go"
-          required>
-      </div>
-      <button type="submit" class="btn">Sign in</button>
-    </form>
   </div>
 
   <script>
     if (location.search.includes('error=1')) {
-      document.getElementById('error-box').style.display = 'block';
+      document.getElementById('error-box').style.display = 'flex';
     }
   </script>
 </body>
