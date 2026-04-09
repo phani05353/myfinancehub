@@ -17,33 +17,8 @@
       overflow: hidden;
     }
 
-    /* ── Animated background glows ── */
-    .bg {
-      position: fixed;
-      inset: 0;
-      z-index: 0;
-      overflow: hidden;
-      pointer-events: none;
-    }
-    .glow {
-      position: absolute;
-      border-radius: 50%;
-      filter: blur(80px);
-      opacity: 0.18;
-      animation: drift 12s ease-in-out infinite alternate;
-    }
-    .glow-1 { width: 600px; height: 600px; background: #6c8ef5; top: -150px; left: -100px; animation-delay: 0s; }
-    .glow-2 { width: 400px; height: 400px; background: #a78bfa; bottom: -100px; right: 30%; animation-delay: -4s; }
-    .glow-3 { width: 300px; height: 300px; background: #34d399; bottom: 10%; right: -80px; animation-delay: -8s; opacity: 0.1; }
-    @keyframes drift {
-      from { transform: translate(0, 0) scale(1); }
-      to   { transform: translate(30px, 20px) scale(1.08); }
-    }
-
     /* ── Layout ── */
     .layout {
-      position: relative;
-      z-index: 1;
       display: flex;
       width: 100%;
       min-height: 100vh;
@@ -54,53 +29,84 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      justify-content: center;
-      padding: 60px 56px;
-      background: linear-gradient(135deg, rgba(108,142,245,0.07) 0%, rgba(167,139,250,0.04) 100%);
-      border-right: 1px solid rgba(255,255,255,0.06);
+      justify-content: flex-end;
+      padding: 56px;
+      position: relative;
+      overflow: hidden;
+      background: #0f1117;
+    }
+
+    /* Image fills the panel */
+    .brand-panel-img {
+      position: absolute;
+      inset: 0;
+      background-size: cover;
+      background-position: center;
+      opacity: 0;
+      transition: opacity 1.2s ease;
+    }
+    .brand-panel-img.loaded { opacity: 1; }
+
+    /* Dark gradient overlay — heavier at bottom so text pops */
+    .brand-panel::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        to bottom,
+        rgba(8, 10, 18, 0.45) 0%,
+        rgba(8, 10, 18, 0.55) 40%,
+        rgba(8, 10, 18, 0.82) 75%,
+        rgba(8, 10, 18, 0.95) 100%
+      );
+      pointer-events: none;
+    }
+
+    /* All brand content sits above the overlay */
+    .brand-content {
+      position: relative;
+      z-index: 1;
     }
 
     .brand-logo {
       display: flex;
       align-items: center;
       gap: 14px;
-      margin-bottom: 48px;
+      margin-bottom: 40px;
     }
     .brand-icon {
-      width: 52px; height: 52px;
+      width: 48px; height: 48px;
       background: linear-gradient(135deg, #6c8ef5, #a78bfa);
-      border-radius: 14px;
+      border-radius: 13px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 900;
       color: #fff;
-      box-shadow: 0 0 40px rgba(108,142,245,0.4);
+      box-shadow: 0 0 32px rgba(108,142,245,0.45);
     }
     .brand-name {
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 700;
       color: #e2e8f0;
       letter-spacing: -0.3px;
     }
 
     .brand-tagline {
-      font-size: 38px;
+      font-size: 36px;
       font-weight: 800;
       line-height: 1.15;
       letter-spacing: -0.8px;
-      margin-bottom: 16px;
-      background: linear-gradient(135deg, #e2e8f0 0%, #8892a4 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      margin-bottom: 14px;
+      color: #f0f4ff;
+      text-shadow: 0 2px 20px rgba(0,0,0,0.5);
     }
     .brand-sub {
-      font-size: 15px;
-      color: #8892a4;
-      line-height: 1.6;
-      margin-bottom: 44px;
+      font-size: 14px;
+      color: rgba(210,220,240,0.7);
+      line-height: 1.65;
+      margin-bottom: 40px;
       max-width: 380px;
     }
 
@@ -108,28 +114,42 @@
       list-style: none;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 12px;
     }
     .feature-list li {
       display: flex;
       align-items: center;
       gap: 12px;
-      font-size: 14px;
-      color: #8892a4;
+      font-size: 13.5px;
+      color: rgba(210,220,240,0.65);
     }
     .feature-list li::before {
       content: '';
-      width: 20px; height: 20px;
+      width: 18px; height: 18px;
       border-radius: 50%;
       background: rgba(52,211,153,0.15);
-      border: 1px solid rgba(52,211,153,0.35);
+      border: 1px solid rgba(52,211,153,0.4);
       flex-shrink: 0;
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6l3 3 5-5' stroke='%2334d399' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: center;
-      background-size: 12px;
+      background-size: 11px;
     }
-    .feature-list li strong { color: #e2e8f0; font-weight: 600; }
+    .feature-list li strong { color: rgba(240,244,255,0.9); font-weight: 600; }
+
+    /* Photo credit */
+    .photo-credit {
+      position: absolute;
+      bottom: 16px;
+      right: 20px;
+      z-index: 2;
+      font-size: 10px;
+      color: rgba(255,255,255,0.28);
+      text-decoration: none;
+      letter-spacing: 0.03em;
+      transition: color 0.15s;
+    }
+    .photo-credit:hover { color: rgba(255,255,255,0.55); }
 
     /* ── Right form panel ── */
     .form-panel {
@@ -139,6 +159,10 @@
       padding: 40px 48px;
       width: 420px;
       flex-shrink: 0;
+      background: rgba(15, 17, 23, 0.97);
+      border-left: 1px solid rgba(255,255,255,0.05);
+      position: relative;
+      z-index: 1;
     }
 
     .form-card {
@@ -226,60 +250,100 @@
     }
     .secure-note::before { content: '🔒'; font-size: 11px; }
 
-    /* ── Mobile: hide brand panel, show form only ── */
+    /* ── Mobile ── */
     @media (max-width: 768px) {
       body { overflow: auto; }
-      .brand-panel { display: none; }
+
+      .layout { position: relative; }
+
+      /* Image as full-page background on mobile */
+      .brand-panel {
+        display: none;
+      }
+
+      /* Mobile bg image behind the form */
+      .mobile-bg {
+        position: fixed;
+        inset: 0;
+        background-size: cover;
+        background-position: center;
+        z-index: 0;
+        opacity: 0;
+        transition: opacity 1.2s ease;
+      }
+      .mobile-bg.loaded { opacity: 1; }
+      .mobile-bg::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: rgba(8, 10, 18, 0.88);
+      }
+
       .form-panel {
         width: 100%;
-        padding: 32px 24px;
+        padding: 40px 24px 32px;
         align-items: flex-start;
-        padding-top: 60px;
+        background: transparent;
+        border-left: none;
+        position: relative;
+        z-index: 1;
       }
-      .form-card { max-width: 100%; }
+      .form-card {
+        max-width: 100%;
+        /* Subtle glass card on mobile */
+        background: rgba(15, 17, 23, 0.75);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 18px;
+        padding: 32px 24px;
+      }
 
       /* Show mini logo on mobile */
       .mobile-logo {
         display: flex;
         align-items: center;
         gap: 10px;
-        margin-bottom: 36px;
+        margin-bottom: 32px;
       }
       .mobile-logo .brand-icon { width: 40px; height: 40px; font-size: 18px; border-radius: 11px; }
       .mobile-logo .brand-name { font-size: 18px; }
     }
     @media (min-width: 769px) {
       .mobile-logo { display: none; }
+      .mobile-bg   { display: none; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Animated background -->
-  <div class="bg">
-    <div class="glow glow-1"></div>
-    <div class="glow glow-2"></div>
-    <div class="glow glow-3"></div>
-  </div>
+  <!-- Mobile-only background (hidden on desktop via CSS) -->
+  <div class="mobile-bg" id="mobile-bg"></div>
 
   <div class="layout">
     <!-- Left branding panel (desktop only) -->
-    <div class="brand-panel">
-      <div class="brand-logo">
-        <div class="brand-icon">$</div>
-        <span class="brand-name">Home Finance</span>
+    <div class="brand-panel" id="brand-panel">
+      <div class="brand-panel-img" id="brand-img"></div>
+
+      <div class="brand-content">
+        <div class="brand-logo">
+          <div class="brand-icon">$</div>
+          <span class="brand-name">Home Finance</span>
+        </div>
+
+        <h1 class="brand-tagline">Your finances,<br>beautifully<br>organized.</h1>
+        <p class="brand-sub">A self-hosted personal finance dashboard — track spending, set budgets, and see the full picture of your money.</p>
+
+        <ul class="feature-list">
+          <li><strong>Track</strong> income &amp; expenses in one place</li>
+          <li><strong>Budget</strong> by category with visual progress</li>
+          <li><strong>Automate</strong> with a custom rules engine</li>
+          <li><strong>Review</strong> your year with annual reports</li>
+          <li><strong>Private</strong> — self-hosted, no cloud required</li>
+        </ul>
       </div>
 
-      <h1 class="brand-tagline">Your finances,<br>beautifully<br>organized.</h1>
-      <p class="brand-sub">A self-hosted personal finance dashboard — track spending, set budgets, and see the full picture of your money.</p>
-
-      <ul class="feature-list">
-        <li><strong>Track</strong> income & expenses in one place</li>
-        <li><strong>Budget</strong> by category with visual progress</li>
-        <li><strong>Automate</strong> with a custom rules engine</li>
-        <li><strong>Review</strong> your year with annual reports</li>
-        <li><strong>Private</strong> — self-hosted, no cloud required</li>
-      </ul>
+      <a class="photo-credit" id="photo-credit" href="https://unsplash.com" target="_blank" rel="noopener">Photo · Unsplash</a>
     </div>
 
     <!-- Right form panel -->
@@ -324,7 +388,7 @@
         </form>
 
         <div class="divider"></div>
-        <p class="secure-note">Self-hosted & private — your data stays local</p>
+        <p class="secure-note">Self-hosted &amp; private — your data stays local</p>
       </div>
     </div>
   </div>
@@ -332,6 +396,46 @@
   <script>
     if (location.search.includes('error=1')) {
       document.getElementById('error-box').style.display = 'flex';
+    }
+
+    // Curated dark/moody Unsplash photos — city nights, architecture, abstract
+    const photos = [
+      { id: '1477346611705-65d1883cee1e', credit: 'Luca Bravo' },
+      { id: '1519681393784-d120267933ba', credit: 'Nathan Anderson' },
+      { id: '1506905925346-21bda4d32df4', credit: 'Sven Scheuermeier' },
+      { id: '1444703686981-a3abbc4d4fe3', credit: 'Greg Rakozy' },
+      { id: '1451187580459-43490279c0fa', credit: 'NASA' },
+      { id: '1489824904134-891605a2b264', credit: 'Michael Discenza' },
+      { id: '1493210977955-f7d9e1f6b5c3', credit: 'Luca Bravo' },
+      { id: '1502899576159-f224dc2349fa', credit: 'Luca Bravo' },
+      { id: '1514539079130-25950c84af65', credit: 'Taneli Lahtinen' },
+      { id: '1486325212027-8081e485255e', credit: 'Micaela Parente' },
+    ];
+
+    const pick = photos[Math.floor(Math.random() * photos.length)];
+    const imgUrl = `https://images.unsplash.com/photo-${pick.id}?auto=format&fit=crop&w=1920&q=75`;
+
+    function applyImage(el, onLoad) {
+      const img = new Image();
+      img.onload = () => {
+        el.style.backgroundImage = `url('${imgUrl}')`;
+        // Small delay so the fade-in feels intentional
+        requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('loaded')));
+        if (onLoad) onLoad();
+      };
+      img.src = imgUrl;
+    }
+
+    const isMobile = window.innerWidth <= 768;
+
+    if (isMobile) {
+      applyImage(document.getElementById('mobile-bg'));
+    } else {
+      applyImage(document.getElementById('brand-img'), () => {
+        const credit = document.getElementById('photo-credit');
+        credit.textContent = `Photo by ${pick.credit} · Unsplash`;
+        credit.href = `https://unsplash.com/?utm_source=homefinance&utm_medium=referral`;
+      });
     }
   </script>
 </body>
