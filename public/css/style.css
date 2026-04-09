@@ -1098,16 +1098,26 @@ tr.due-soon td:first-child { color: var(--warning); }
   .cat-dial-ring svg { width: 68px; height: 68px; }
 }
 
-/* ── Dashboard budget overview rows ─────────────────────────────────────────── */
-.dash-budget-row {
+/* ── Dashboard budget overview grid ─────────────────────────────────────────── */
+.dash-budget-grid {
   display: grid;
-  grid-template-columns: 130px 1fr 130px 90px;
-  align-items: center;
-  gap: 12px;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--border);
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
 }
-.dash-budget-row:last-child { border-bottom: none; }
+.dash-budget-item {
+  background: var(--surface2);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dash-budget-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
 .dash-budget-name {
   font-size: 13px;
   font-weight: 600;
@@ -1115,28 +1125,42 @@ tr.due-soon td:first-child { color: var(--warning); }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.dash-budget-amounts {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.dash-budget-of {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
 .dash-budget-bar-wrap {
-  height: 6px;
-  background: var(--surface2);
-  border-radius: 3px;
+  height: 8px;
+  background: var(--surface);
+  border-radius: 4px;
   overflow: hidden;
 }
 .dash-budget-bar-fill {
   height: 100%;
-  border-radius: 3px;
-  transition: width 0.4s ease;
+  border-radius: 4px;
+  transition: width 0.5s ease;
 }
-.dash-budget-meta { font-size: 12px; text-align: right; white-space: nowrap; }
-.dash-budget-label { font-size: 11px; font-weight: 600; text-align: right; white-space: nowrap; }
+.dash-budget-item-bot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.dash-budget-pct {
+  font-size: 11px;
+  font-weight: 700;
+}
+.dash-budget-status {
+  font-size: 11px;
+  font-weight: 600;
+}
 
 @media (max-width: 600px) {
-  .dash-budget-row {
-    grid-template-columns: 1fr 80px;
-    grid-template-rows: auto auto;
-    gap: 4px 8px;
-  }
-  .dash-budget-name { grid-column: 1; grid-row: 1; }
-  .dash-budget-meta { grid-column: 2; grid-row: 1; text-align: right; }
-  .dash-budget-bar-wrap { grid-column: 1 / -1; grid-row: 2; }
-  .dash-budget-label { display: none; }
+  .dash-budget-grid { grid-template-columns: 1fr; }
 }

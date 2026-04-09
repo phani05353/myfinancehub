@@ -368,19 +368,22 @@ const dashboardModule = {
         const pct      = b.budget > 0 ? b.spent / b.budget * 100 : 0;
         const barPct   = Math.min(100, pct);
         const color    = pct > 100 ? 'var(--danger)' : pct >= 80 ? 'var(--warning)' : 'var(--success)';
-        const label    = pct > 100 ? `${fmtCur(b.spent - b.budget)} over` : `${fmtCur(b.budget - b.spent)} left`;
-        const labelCol = pct > 100 ? 'var(--danger)' : pct >= 80 ? 'var(--warning)' : 'var(--text-muted)';
+        const over     = b.spent > b.budget;
+        const label    = over ? `${fmtCur(b.spent - b.budget)} over` : `${fmtCur(b.budget - b.spent)} left`;
+        const labelCol = pct > 100 ? 'var(--danger)' : pct >= 80 ? 'var(--warning)' : 'var(--success)';
         return `
-          <div class="dash-budget-row">
-            <div class="dash-budget-name">${escHtml(b.category)}</div>
+          <div class="dash-budget-item">
+            <div class="dash-budget-item-top">
+              <span class="dash-budget-name">${escHtml(b.category)}</span>
+              <span class="dash-budget-amounts">${fmtCur(b.spent)} <span class="dash-budget-of">of ${fmtCur(b.budget)}</span></span>
+            </div>
             <div class="dash-budget-bar-wrap">
               <div class="dash-budget-bar-fill" style="width:${barPct.toFixed(1)}%;background:${color}"></div>
             </div>
-            <div class="dash-budget-meta">
-              <span style="font-weight:600">${fmtCur(b.spent)}</span>
-              <span style="color:var(--text-muted)"> / ${fmtCur(b.budget)}</span>
+            <div class="dash-budget-item-bot">
+              <span class="dash-budget-pct" style="color:${color}">${pct.toFixed(0)}%</span>
+              <span class="dash-budget-status" style="color:${labelCol}">${label}</span>
             </div>
-            <div class="dash-budget-label" style="color:${labelCol}">${label}</div>
           </div>`;
       }).join('');
       const overCount = budgetStatus.filter(b => b.spent > b.budget).length;
@@ -393,8 +396,8 @@ const dashboardModule = {
               <a href="#/budget" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">Manage →</a>
             </div>
           </div>
-          ${rows}
-          ${budgetStatus.length > 6 ? `<div style="margin-top:12px"><a href="#/budget" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">View all ${budgetStatus.length} →</a></div>` : ''}
+          <div class="dash-budget-grid">${rows}</div>
+          ${budgetStatus.length > 6 ? `<div style="margin-top:14px"><a href="#/budget" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">View all ${budgetStatus.length} →</a></div>` : ''}
         </div>`;
     })();
 
