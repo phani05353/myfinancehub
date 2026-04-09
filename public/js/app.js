@@ -254,13 +254,14 @@ const dashboardModule = {
     const currentMonth = today.toISOString().slice(0, 7);
     const todayStr = today.toISOString().slice(0, 10);
 
-    const [summary, reminders, subs, trend, byCategory, recentTx] = await Promise.all([
+    const [summary, reminders, subs, trend, byCategory, recentTx, budgetStatus] = await Promise.all([
       api(`/api/transactions/summary?month=${currentMonth}`),
       api('/api/reminders?paid=0&upcoming_days=30'),
       api('/api/subscriptions?active=1'),
       api('/api/charts/spending-trend?months=6'),
       api(`/api/charts/category-breakdown?month=${currentMonth}`),
-      api(`/api/transactions?limit=5&month=${currentMonth}`)
+      api(`/api/transactions?limit=5&month=${currentMonth}`),
+      api(`/api/budgets/status?month=${currentMonth}`).catch(() => [])
     ]);
 
     const overdueReminders = reminders.filter(r => r.due_date < todayStr);
@@ -360,6 +361,43 @@ const dashboardModule = {
             <div style="font-size:14px;white-space:nowrap;margin-left:12px">${fmt(r.amount)}</div>
           </div>`).join('');
 
+    // Budget overview section
+    const budgetSection = budgetStatus.length === 0 ? '' : (() => {
+      const sorted = [...budgetStatus].sort((a, b) => (b.spent / b.budget) - (a.spent / a.budget));
+      const rows = sorted.slice(0, 6).map(b => {
+        const pct      = b.budget > 0 ? b.spent / b.budget * 100 : 0;
+        const barPct   = Math.min(100, pct);
+        const color    = pct > 100 ? 'var(--danger)' : pct >= 80 ? 'var(--warning)' : 'var(--success)';
+        const label    = pct > 100 ? `${fmtCur(b.spent - b.budget)} over` : `${fmtCur(b.budget - b.spent)} left`;
+        const labelCol = pct > 100 ? 'var(--danger)' : pct >= 80 ? 'var(--warning)' : 'var(--text-muted)';
+        return `
+          <div class="dash-budget-row">
+            <div class="dash-budget-name">${escHtml(b.category)}</div>
+            <div class="dash-budget-bar-wrap">
+              <div class="dash-budget-bar-fill" style="width:${barPct.toFixed(1)}%;background:${color}"></div>
+            </div>
+            <div class="dash-budget-meta">
+              <span style="font-weight:600">${fmtCur(b.spent)}</span>
+              <span style="color:var(--text-muted)"> / ${fmtCur(b.budget)}</span>
+            </div>
+            <div class="dash-budget-label" style="color:${labelCol}">${label}</div>
+          </div>`;
+      }).join('');
+      const overCount = budgetStatus.filter(b => b.spent > b.budget).length;
+      return `
+        <div class="card" style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <h2 style="margin-bottom:0">Budget Overview</h2>
+            <div style="display:flex;align-items:center;gap:12px">
+              ${overCount > 0 ? `<span class="badge badge-red">⚠ ${overCount} over limit</span>` : '<span style="font-size:12px;color:var(--success);font-weight:600">✓ All on track</span>'}
+              <a href="#/budget" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">Manage →</a>
+            </div>
+          </div>
+          ${rows}
+          ${budgetStatus.length > 6 ? `<div style="margin-top:12px"><a href="#/budget" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">View all ${budgetStatus.length} →</a></div>` : ''}
+        </div>`;
+    })();
+
     // Greeting
     const hour = today.getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -444,6 +482,9 @@ const dashboardModule = {
           ${byCategory.length > 0 ? `<div style="margin-top:14px"><a href="#/charts" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">Full breakdown →</a></div>` : ''}
         </div>
       </div>
+
+      <!-- Budget overview -->
+      ${budgetSection}
 
       <!-- Recent transactions -->
       <div class="card" style="margin-bottom:16px">

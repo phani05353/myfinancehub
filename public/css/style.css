@@ -1097,3 +1097,46 @@ tr.due-soon td:first-child { color: var(--warning); }
   .cat-dials { grid-template-columns: repeat(3, 1fr); gap: 10px 4px; }
   .cat-dial-ring svg { width: 68px; height: 68px; }
 }
+
+/* ── Dashboard budget overview rows ─────────────────────────────────────────── */
+.dash-budget-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 130px 90px;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.dash-budget-row:last-child { border-bottom: none; }
+.dash-budget-name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dash-budget-bar-wrap {
+  height: 6px;
+  background: var(--surface2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.dash-budget-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.dash-budget-meta { font-size: 12px; text-align: right; white-space: nowrap; }
+.dash-budget-label { font-size: 11px; font-weight: 600; text-align: right; white-space: nowrap; }
+
+@media (max-width: 600px) {
+  .dash-budget-row {
+    grid-template-columns: 1fr 80px;
+    grid-template-rows: auto auto;
+    gap: 4px 8px;
+  }
+  .dash-budget-name { grid-column: 1; grid-row: 1; }
+  .dash-budget-meta { grid-column: 2; grid-row: 1; text-align: right; }
+  .dash-budget-bar-wrap { grid-column: 1 / -1; grid-row: 2; }
+  .dash-budget-label { display: none; }
+}
