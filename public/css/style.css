@@ -102,9 +102,9 @@ body {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   align-items: flex-end;
-  padding: 0 16px env(safe-area-inset-bottom, 0);
+  padding: 0 12px 10px;
   padding-top: env(safe-area-inset-top);
-  gap: 12px;
+  gap: 10px;
   z-index: 300;
 }
 
@@ -792,13 +792,22 @@ tr.due-soon td:first-child { color: var(--warning); }
   /* Show mobile header */
   .mobile-header { display: flex; }
 
-  /* Sidebar becomes a drawer */
+  /* Sidebar becomes a drawer that starts below the mobile header */
   .sidebar {
     transform: translateX(-100%);
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     width: 260px;
+    top: calc(var(--mobile-header-h) + env(safe-area-inset-top));
+    padding-top: 12px;
+    border-top: none;
   }
   .sidebar.open { transform: translateX(0); }
+  /* Hide the sidebar logo on mobile — the header already shows it */
+  .sidebar .logo { display: none; }
+  /* Overlay also starts below the header */
+  .sidebar-overlay {
+    top: calc(var(--mobile-header-h) + env(safe-area-inset-top));
+  }
 
   /* Content takes full width, shifted down for mobile header + safe area */
   .content {

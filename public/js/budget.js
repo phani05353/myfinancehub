@@ -4,11 +4,11 @@ const budgetModule = {
   async init() {
     this.currentMonth = new Date().toISOString().slice(0, 7);
     document.getElementById('view').innerHTML = `
-      <div class="page-title-row" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
-        <h1 style="margin-bottom:0">💰 Budget</h1>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+        <h1 style="margin-bottom:0;flex:1">💰 Budget</h1>
         <div class="budget-toolbar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <input type="month" id="budget-month" value="${this.currentMonth}"
-            onchange="budgetModule.changeMonth(this.value)">
+            style="width:160px" onchange="budgetModule.changeMonth(this.value)">
           <button class="btn btn-primary" onclick="budgetModule.openAddModal()">+ Set Budget</button>
         </div>
       </div>
