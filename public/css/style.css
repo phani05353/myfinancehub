@@ -358,7 +358,6 @@ tbody tr:last-child { border-bottom: none; }
 /* ── FILTER BAR (transaction filters) ── */
 .filter-bar {
   display: grid;
-  /* Mobile: Month + Category side-by-side, Search + buttons full width */
   grid-template-columns: 1fr 1fr;
   grid-template-areas:
     "month   category"
@@ -383,6 +382,63 @@ tbody tr:last-child { border-bottom: none; }
     grid-template-areas: "month search category actions";
   }
   .filter-actions .btn { flex: none; }
+}
+
+/* ── Transaction search bar ── */
+.tx-search-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.tx-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+}
+.tx-search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.tx-search-input {
+  width: 100%;
+  padding: 9px 12px 9px 34px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.tx-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(108,142,245,0.15);
+}
+.tx-filter-select {
+  padding: 9px 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tx-filter-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+@media (max-width: 600px) {
+  .tx-search-row { gap: 8px; }
+  .tx-filter-select { flex: 1; }
 }
 
 /* ── BUTTONS ── */

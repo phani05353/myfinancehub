@@ -11,44 +11,40 @@ const transactionsModule = {
   },
 
   async render() {
-    const [categories, payees] = await Promise.all([
-      api('/api/categories'),
-      api('/api/payees')
-    ]);
-
+    const categories = await api('/api/categories').catch(() => []);
     const today = new Date().toISOString().slice(0, 7);
 
-    document.getElementById('view').innerHTML = `
-      <div class="page-title-row" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-        <h1 style="margin-bottom:0">Transactions</h1>
-        <button class="btn btn-primary" onclick="transactionsModule.openAddModal()">+ Add</button>
-      </div>
+    // Generate last 24 months for dropdown
+    const monthOptions = ['<option value="">All time</option>'];
+    const d = new Date();
+    for (let i = 0; i < 24; i++) {
+      const val = d.toISOString().slice(0, 7);
+      const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+      monthOptions.push(`<option value="${val}" ${i === 0 ? 'selected' : ''}>${label}</option>`);
+      d.setMonth(d.getMonth() - 1);
+    }
 
-      <div class="card" style="margin-bottom:20px">
-        <div class="filter-bar">
-          <div class="form-group filter-month">
-            <label>Month</label>
-            <input type="month" id="filter-month" value="${today}">
+    document.getElementById('view').innerHTML = `
+      <h1 style="margin-bottom:16px">Transactions</h1>
+
+      <div class="card" style="margin-bottom:16px;padding:14px 16px">
+        <div class="tx-search-row">
+          <div class="tx-search-wrap">
+            <svg class="tx-search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="8.5" cy="8.5" r="5.5"/><path d="M15 15l-3-3"/>
+            </svg>
+            <input type="text" id="filter-search" class="tx-search-input" placeholder="Search payee, notes, category…" autocomplete="off">
           </div>
-          <div class="form-group filter-search">
-            <label>Search</label>
-            <input type="text" id="filter-search" placeholder="Payee, notes, category…">
-          </div>
-          <div class="form-group filter-category">
-            <label>Category</label>
-            <select id="filter-category">
-              <option value="">All Categories</option>
-              ${categories.map(c => `<option>${c}</option>`).join('')}
-            </select>
-          </div>
-          <div class="filter-actions">
-            <button class="btn btn-primary" onclick="transactionsModule.applyFilters()">Filter</button>
-            <button class="btn btn-ghost" onclick="transactionsModule.clearFilters()">Clear</button>
-          </div>
+          <select id="filter-month" class="tx-filter-select">
+            ${monthOptions.join('')}
+          </select>
+          <select id="filter-category" class="tx-filter-select">
+            <option value="">All categories</option>
+            ${categories.map(c => `<option>${escHtml(c)}</option>`).join('')}
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="transactionsModule.clearFilters()">Clear</button>
         </div>
       </div>
-
-      <div id="summary-row" style="margin-bottom:16px"></div>
 
       <div class="card">
         <div class="table-wrap">
@@ -68,19 +64,29 @@ const transactionsModule = {
       </div>
     `;
 
-    document.getElementById('filter-month').addEventListener('keydown', e => { if (e.key === 'Enter') this.applyFilters(); });
-    document.getElementById('filter-search').addEventListener('keydown', e => { if (e.key === 'Enter') this.applyFilters(); });
+    // Instant filter on select change
+    document.getElementById('filter-month').addEventListener('change', () => this.applyFilters());
+    document.getElementById('filter-category').addEventListener('change', () => this.applyFilters());
 
-    await this.loadRows();
+    // Debounced search on type
+    let searchTimer;
+    document.getElementById('filter-search').addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => this.applyFilters(), 300);
+    });
+
+    await this.applyFilters();
   },
 
   async applyFilters() {
     this.page = 0;
-    this.filters = {
-      month: document.getElementById('filter-month')?.value || '',
-      search: document.getElementById('filter-search')?.value || '',
-      category: document.getElementById('filter-category')?.value || ''
-    };
+    const month    = document.getElementById('filter-month')?.value || '';
+    const search   = document.getElementById('filter-search')?.value.trim() || '';
+    const category = document.getElementById('filter-category')?.value || '';
+    this.filters = {};
+    if (month)    this.filters.month    = month;
+    if (search)   this.filters.search   = search;
+    if (category) this.filters.category = category;
     await this.loadRows();
   },
 
@@ -88,9 +94,12 @@ const transactionsModule = {
     this.page = 0;
     this.filters = {};
     const today = new Date().toISOString().slice(0, 7);
-    document.getElementById('filter-month').value = today;
-    document.getElementById('filter-search').value = '';
-    document.getElementById('filter-category').value = '';
+    const fm = document.getElementById('filter-month');
+    const fs = document.getElementById('filter-search');
+    const fc = document.getElementById('filter-category');
+    if (fm) fm.value = today;
+    if (fs) fs.value = '';
+    if (fc) fc.value = '';
     await this.loadRows();
   },
 
@@ -102,33 +111,6 @@ const transactionsModule = {
     });
     const { rows, total } = await api(`/api/transactions?${params}`);
     this.total = total;
-
-    const month = this.filters.month || new Date().toISOString().slice(0, 7);
-    const summary = await api(`/api/transactions/summary?month=${month}`);
-
-    const sumEl = document.getElementById('summary-row');
-    if (sumEl) {
-      sumEl.innerHTML = `
-        <div class="stats-grid" style="margin-bottom:0">
-          <div class="stat-card" style="padding:14px 18px">
-            <div class="label">Income</div>
-            <div class="value income" style="font-size:20px">${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(summary.income)}</div>
-          </div>
-          <div class="stat-card" style="padding:14px 18px">
-            <div class="label">Expenses</div>
-            <div class="value expense" style="font-size:20px">${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Math.abs(summary.expenses))}</div>
-          </div>
-          <div class="stat-card" style="padding:14px 18px">
-            <div class="label">Net</div>
-            <div class="value ${summary.net >= 0 ? 'income' : 'expense'}" style="font-size:20px">${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(summary.net)}</div>
-          </div>
-          <div class="stat-card" style="padding:14px 18px">
-            <div class="label">Transactions</div>
-            <div class="value neutral" style="font-size:20px">${total}</div>
-          </div>
-        </div>
-      `;
-    }
 
     const tbody = document.getElementById('tx-body');
     if (!tbody) return;
