@@ -6,9 +6,9 @@ const budgetModule = {
     document.getElementById('view').innerHTML = `
       <div class="page-title-row" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
         <h1 style="margin-bottom:0">💰 Budget</h1>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="budget-toolbar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <input type="month" id="budget-month" value="${this.currentMonth}"
-            style="width:160px" onchange="budgetModule.changeMonth(this.value)">
+            onchange="budgetModule.changeMonth(this.value)">
           <button class="btn btn-primary" onclick="budgetModule.openAddModal()">+ Set Budget</button>
         </div>
       </div>

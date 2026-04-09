@@ -57,7 +57,7 @@ const remindersModule = {
     const today = new Date().toISOString().slice(0, 10);
     return `
       <div class="table-wrap">
-        <table>
+        <table class="rem-table">
           <thead>
             <tr>
               <th>Title</th><th>Due Date</th><th>Amount</th><th>Recurring</th>
@@ -69,15 +69,15 @@ const remindersModule = {
             ${reminders.map(r => {
               const isOverdue = r.due_date < today && !r.paid;
               return `<tr class="${isOverdue ? 'overdue' : ''}">
-                <td><strong>${escHtml(r.title)}</strong>${r.notes ? `<br><span style="color:var(--text-muted);font-size:11px">${escHtml(r.notes)}</span>` : ''}</td>
-                <td>${fmtDate(r.due_date)}</td>
-                <td>${r.amount ? fmt(-Math.abs(r.amount)) : '—'}</td>
-                <td>${r.recurring ? `<span class="badge badge-blue">Every ${r.recur_days}d</span>` : '<span class="badge badge-gray">Once</span>'}</td>
+                <td data-label="Title"><strong>${escHtml(r.title)}</strong>${r.notes ? `<br><span style="color:var(--text-muted);font-size:11px">${escHtml(r.notes)}</span>` : ''}</td>
+                <td data-label="Due Date">${fmtDate(r.due_date)}</td>
+                <td data-label="Amount">${r.amount ? fmt(-Math.abs(r.amount)) : '—'}</td>
+                <td data-label="Recurring">${r.recurring ? `<span class="badge badge-blue">Every ${r.recur_days}d</span>` : '<span class="badge badge-gray">Once</span>'}</td>
                 ${showPayBtn
-                  ? `<td><span class="badge ${isOverdue ? 'badge-red' : 'badge-yellow'}">${isOverdue ? 'Overdue' : 'Pending'}</span></td>`
-                  : `<td style="color:var(--text-muted)">${fmtDate(r.paid_date)}</td>`
+                  ? `<td data-label="Status"><span class="badge ${isOverdue ? 'badge-red' : 'badge-yellow'}">${isOverdue ? 'Overdue' : 'Pending'}</span></td>`
+                  : `<td data-label="Paid On" style="color:var(--text-muted)">${fmtDate(r.paid_date)}</td>`
                 }
-                <td style="white-space:nowrap">
+                <td data-label="Actions">
                   ${showPayBtn ? `<button class="btn btn-success btn-sm" onclick="remindersModule.markPaid(${r.id})">✓ Paid</button>` : ''}
                   <button class="btn btn-ghost btn-sm" onclick="remindersModule.openEditModal(${r.id})">Edit</button>
                   <button class="btn btn-danger btn-sm" onclick="remindersModule.deleteRow(${r.id})">Del</button>

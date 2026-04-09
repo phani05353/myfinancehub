@@ -72,7 +72,7 @@ const importModule = {
           </div>
         </div>
 
-        <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div class="export-btn-row" style="display:flex;gap:12px;flex-wrap:wrap">
           <button class="btn btn-primary" onclick="importModule.exportCSV()">
             ⬇ Download CSV
           </button>

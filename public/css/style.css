@@ -1296,3 +1296,165 @@ tr.due-soon td:first-child { color: var(--warning); }
 @media (max-width: 600px) {
   .dash-budget-grid { grid-template-columns: 1fr; }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   COMPREHENSIVE MOBILE FIXES
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Global: extra bottom padding so FAB never covers content ── */
+@media (max-width: 768px) {
+  .content {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* ── Charts: shorter canvas on mobile ── */
+  .chart-container { height: 200px; }
+
+  /* ── Dashboard hero: smaller amount on narrow screens ── */
+  .dash-hero-stat { padding: 0 10px; }
+  .dash-hero-stat-val { font-size: 15px; }
+  .dash-hero-divider { height: 22px; }
+
+  /* ── Rules: stack rule-actions below rule body ── */
+  .rule-row {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .rule-actions {
+    width: 100%;
+    justify-content: flex-end;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Subscriptions table → card list ── */
+  .table-wrap:has(.sub-table) { overflow-x: visible; }
+  table.sub-table { min-width: 0 !important; width: 100%; }
+  .sub-table thead { display: none; }
+  .sub-table tbody tr {
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    padding: 12px 14px;
+    background: var(--surface2);
+  }
+  .sub-table tbody tr:last-child { margin-bottom: 0; }
+  .sub-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: none;
+    font-size: 13px;
+  }
+  .sub-table tbody td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+    margin-right: 8px;
+  }
+  .sub-table tbody td[data-label="Name"] {
+    font-size: 15px;
+    font-weight: 600;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+  }
+  .sub-table tbody td[data-label="Name"]::before { display: none; }
+  .sub-table tbody td[data-label="Actions"] {
+    justify-content: flex-start;
+    gap: 8px;
+    padding-top: 8px;
+    flex-wrap: wrap;
+  }
+  .sub-table tbody td[data-label="Actions"]::before { display: none; }
+  /* Hide less-critical cols on mobile */
+  .sub-table tbody td[data-label="Payee"],
+  .sub-table tbody td[data-label="Category"] { display: none; }
+
+  /* ── Reminders table → card list ── */
+  .table-wrap:has(.rem-table) { overflow-x: visible; }
+  table.rem-table { min-width: 0 !important; width: 100%; }
+  .rem-table thead { display: none; }
+  .rem-table tbody tr {
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    padding: 12px 14px;
+    background: var(--surface2);
+  }
+  .rem-table tbody tr.overdue { border-color: rgba(248,113,113,0.4); }
+  .rem-table tbody tr:last-child { margin-bottom: 0; }
+  .rem-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: none;
+    font-size: 13px;
+  }
+  .rem-table tbody td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+    margin-right: 8px;
+  }
+  .rem-table tbody td[data-label="Title"] {
+    font-size: 15px;
+    font-weight: 600;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+    display: block;
+  }
+  .rem-table tbody td[data-label="Title"]::before { display: none; }
+  .rem-table tbody td[data-label="Actions"] {
+    justify-content: flex-start;
+    gap: 8px;
+    padding-top: 8px;
+    flex-wrap: wrap;
+  }
+  .rem-table tbody td[data-label="Actions"]::before { display: none; }
+  /* Hide less-critical col on mobile */
+  .rem-table tbody td[data-label="Recurring"] { display: none; }
+
+  /* ── Budget page toolbar ── */
+  .budget-toolbar {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .budget-toolbar > * { width: 100%; }
+
+  /* ── Year in Review: month summary table scrolls horizontally ── */
+  .yr-month-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* ── Import/Export buttons wrap on mobile ── */
+  .export-btn-row { flex-direction: column; align-items: stretch; }
+  .export-btn-row .btn { width: 100%; justify-content: center; }
+}
+
+/* ── Very small screens (iPhone SE, 375px and below) ── */
+@media (max-width: 390px) {
+  .dash-hero { padding: 14px 16px; }
+  .dash-hero-amount { font-size: 26px; }
+  .dash-hero-right { gap: 0; }
+  .dash-hero-stat { padding: 0 8px; }
+  .dash-hero-stat-val { font-size: 13px; }
+  .dash-hero-divider { display: none; }
+
+  h1 { font-size: 18px; }
+  .card { padding: 12px; }
+
+  /* Single column budget grid on tiny screens */
+  .dash-budget-grid { grid-template-columns: 1fr; }
+}

@@ -143,8 +143,8 @@ const yearReviewModule = {
     }).join('');
 
     return `
-      <div class="table-wrap">
-        <table>
+      <div class="table-wrap yr-month-table-wrap">
+        <table style="min-width:320px">
           <thead>
             <tr>
               <th>Month</th>

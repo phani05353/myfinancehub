@@ -147,7 +147,7 @@ const rulesModule = {
 
         <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:14px">
           <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">IF condition</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div class="form-row" style="margin-bottom:10px">
             <div class="form-group" style="margin-bottom:0">
               <label>Field</label>
               <select id="rule-field" onchange="rulesModule.updateOpOptions()" required>

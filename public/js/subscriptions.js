@@ -76,7 +76,7 @@ const subscriptionsModule = {
     const today = new Date().toISOString().slice(0, 10);
     return `
       <div class="table-wrap">
-        <table>
+        <table class="sub-table">
           <thead>
             <tr><th>Name</th><th>Payee</th><th>Amount</th><th>Billing</th><th>Next Due</th><th>Category</th><th>Actions</th></tr>
           </thead>
@@ -85,13 +85,13 @@ const subscriptionsModule = {
               const isDueSoon = s.next_due_date <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
               const isOverdue = s.next_due_date < today;
               return `<tr class="${isOverdue ? 'overdue' : isDueSoon ? 'due-soon' : ''}">
-                <td><strong>${escHtml(s.name)}</strong></td>
-                <td>${escHtml(s.payee || '—')}</td>
-                <td>${fmt(-Math.abs(s.amount))}</td>
-                <td><span class="badge badge-blue">${s.billing_cycle}</span></td>
-                <td>${fmtDate(s.next_due_date)} ${isOverdue ? '<span class="badge badge-red">Overdue</span>' : isDueSoon ? '<span class="badge badge-yellow">Soon</span>' : ''}</td>
-                <td>${s.category ? `<span class="badge badge-gray">${escHtml(s.category)}</span>` : '—'}</td>
-                <td style="white-space:nowrap">
+                <td data-label="Name"><strong>${escHtml(s.name)}</strong></td>
+                <td data-label="Payee">${escHtml(s.payee || '—')}</td>
+                <td data-label="Amount">${fmt(-Math.abs(s.amount))}</td>
+                <td data-label="Billing"><span class="badge badge-blue">${s.billing_cycle}</span></td>
+                <td data-label="Next Due">${fmtDate(s.next_due_date)} ${isOverdue ? '<span class="badge badge-red">Overdue</span>' : isDueSoon ? '<span class="badge badge-yellow">Soon</span>' : ''}</td>
+                <td data-label="Category">${s.category ? `<span class="badge badge-gray">${escHtml(s.category)}</span>` : '—'}</td>
+                <td data-label="Actions">
                   <button class="btn btn-ghost btn-sm" onclick="subscriptionsModule.openEditModal(${s.id})">Edit</button>
                   <button class="btn btn-ghost btn-sm" onclick="subscriptionsModule.toggleActive(${s.id}, ${s.active ? 0 : 1})">${s.active ? 'Pause' : 'Resume'}</button>
                   <button class="btn btn-danger btn-sm" onclick="subscriptionsModule.deleteRow(${s.id})">Del</button>
