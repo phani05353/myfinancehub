@@ -64,11 +64,11 @@ const yearReviewModule = {
         <div class="yr-charts-grid">
           <div class="card">
             <h2 style="margin-bottom:16px">Monthly Income vs Expenses</h2>
-            <div class="chart-container" style="height:260px"><canvas id="yr-monthly-chart"></canvas></div>
+            <div class="chart-container chart-container--tall"><canvas id="yr-monthly-chart"></canvas></div>
           </div>
           <div class="card">
             <h2 style="margin-bottom:16px">Spending by Category</h2>
-            <div class="chart-container" style="height:260px"><canvas id="yr-cat-chart"></canvas></div>
+            <div class="chart-container chart-container--tall"><canvas id="yr-cat-chart"></canvas></div>
           </div>
         </div>
         <div class="card" style="margin-top:20px">

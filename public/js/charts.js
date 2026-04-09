@@ -12,11 +12,11 @@ const chartsModule = {
     const currentMonth = months[0] || new Date().toISOString().slice(0, 7);
 
     document.getElementById('view').innerHTML = `
-      <div class="page-title-row" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-        <h1 style="margin-bottom:0">Charts</h1>
-        <div style="display:flex;gap:8px;align-items:center">
-          <label style="color:var(--text-muted);font-size:13px">Month:</label>
-          <select id="chart-month" style="width:150px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+        <h1 style="margin-bottom:0;flex:1">Charts</h1>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <label style="color:var(--text-muted);font-size:13px;white-space:nowrap">Month:</label>
+          <select id="chart-month" class="tx-filter-select-panel">
             ${months.map(m => `<option value="${m}" ${m === currentMonth ? 'selected' : ''}>${m}</option>`).join('')}
           </select>
         </div>
@@ -34,15 +34,15 @@ const chartsModule = {
       </div>
 
       <div class="card" style="margin-top:20px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-          <h2>Income vs Expenses Trend</h2>
-          <select id="trend-months" style="width:140px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+          <h2 style="margin-bottom:0">Income vs Expenses Trend</h2>
+          <select id="trend-months" class="tx-filter-select-panel">
             <option value="3">Last 3 months</option>
             <option value="6" selected>Last 6 months</option>
             <option value="12">Last 12 months</option>
           </select>
         </div>
-        <div class="chart-container" style="height:260px"><canvas id="trend-chart"></canvas></div>
+        <div class="chart-container chart-container--tall"><canvas id="trend-chart"></canvas></div>
       </div>
 
       <div class="card" style="margin-top:20px">
@@ -137,18 +137,18 @@ const chartsModule = {
         const total = byPayee.reduce((s, p) => s + Math.abs(p.total), 0);
         tbl.innerHTML = `
           <div class="table-wrap">
-            <table>
-              <thead><tr><th>Payee</th><th style="text-align:right">Transactions</th><th style="text-align:right">Total Spent</th><th>Share</th></tr></thead>
+            <table class="payee-detail-table">
+              <thead><tr><th>Payee</th><th style="text-align:right">Txns</th><th style="text-align:right">Total</th><th class="hide-mobile">Share</th></tr></thead>
               <tbody>
                 ${byPayee.map(p => {
                   const pct = total > 0 ? (Math.abs(p.total) / total * 100).toFixed(1) : 0;
                   return `<tr>
-                    <td>${escHtml(p.payee)}</td>
-                    <td style="text-align:right;color:var(--text-muted)">${p.count}</td>
-                    <td style="text-align:right"><span class="amount-negative">$${Math.abs(p.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></td>
-                    <td>
+                    <td data-label="Payee">${escHtml(p.payee)}</td>
+                    <td data-label="Txns" style="text-align:right;color:var(--text-muted)">${p.count}</td>
+                    <td data-label="Total" style="text-align:right"><span class="amount-negative">$${Math.abs(p.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></td>
+                    <td data-label="Share" class="hide-mobile">
                       <div style="display:flex;align-items:center;gap:8px">
-                        <div style="flex:1;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden">
+                        <div style="flex:1;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;min-width:60px">
                           <div style="width:${pct}%;height:100%;background:var(--accent);border-radius:3px"></div>
                         </div>
                         <span style="color:var(--text-muted);font-size:11px;min-width:36px">${pct}%</span>

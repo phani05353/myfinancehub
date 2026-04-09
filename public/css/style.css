@@ -270,6 +270,16 @@ h1 { font-size: 22px; margin-bottom: 20px; color: var(--text); }
 h2 { font-size: 17px; margin-bottom: 14px; }
 h3 { font-size: 14px; color: var(--text-muted); margin-bottom: 8px; }
 
+/* ── Page title row: always wraps safely ── */
+.page-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
 /* ── CARDS ── */
 .card {
   background: var(--surface);
@@ -693,12 +703,16 @@ input[type="checkbox"] {
   height: 280px;
   margin-bottom: 8px;
 }
+.chart-container--tall { height: 260px; }
 
 .charts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
   gap: 16px;
 }
+
+/* Utility: hide on mobile */
+.hide-mobile { }
 
 /* ── OVERDUE HIGHLIGHT ── */
 tr.overdue td { color: var(--danger); }
@@ -1318,6 +1332,16 @@ tr.due-soon td:first-child { color: var(--warning); }
 
   /* ── Charts: shorter canvas on mobile ── */
   .chart-container { height: 200px; }
+  .chart-container--tall { height: 200px; }
+  .charts-grid { grid-template-columns: 1fr; }
+
+  /* ── Hide-mobile utility ── */
+  .hide-mobile { display: none !important; }
+
+  /* ── Charts payee detail table → compact on mobile ── */
+  .payee-detail-table { min-width: 0 !important; }
+  .payee-detail-table thead th:nth-child(2) { display: none; }
+  .payee-detail-table tbody td:nth-child(2) { display: none; }
 
   /* ── Dashboard hero: smaller amount on narrow screens ── */
   .dash-hero-stat { padding: 0 10px; }

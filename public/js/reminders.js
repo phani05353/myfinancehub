@@ -14,9 +14,9 @@ const remindersModule = {
     const dueSoon = upcoming.filter(r => r.due_date >= today && r.due_date <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
 
     document.getElementById('view').innerHTML = `
-      <div class="page-title-row" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-        <h1 style="margin-bottom:0">Bill Reminders</h1>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+        <h1 style="margin-bottom:0;flex:1">Bill Reminders</h1>
+        <div style="display:flex;gap:8px;flex-shrink:0">
           <button class="btn btn-ghost" onclick="remindersModule.openDetectModal()">⟳ Detect</button>
           <button class="btn btn-primary" onclick="remindersModule.openAddModal()">+ Add</button>
         </div>

@@ -29,9 +29,9 @@ const subscriptionsModule = {
     const yearlyTotal = monthlyTotal * 12;
 
     document.getElementById('view').innerHTML = `
-      <div class="page-title-row" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-        <h1 style="margin-bottom:0">Subscriptions</h1>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+        <h1 style="margin-bottom:0;flex:1">Subscriptions</h1>
+        <div style="display:flex;gap:8px;flex-shrink:0">
           <button class="btn btn-ghost" onclick="subscriptionsModule.openDetectModal()">⟳ Sync</button>
           <button class="btn btn-primary" onclick="subscriptionsModule.openAddModal()">+ Add</button>
         </div>
