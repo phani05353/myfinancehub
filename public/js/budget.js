@@ -4,7 +4,7 @@ const budgetModule = {
   async init() {
     this.currentMonth = new Date().toISOString().slice(0, 7);
     document.getElementById('view').innerHTML = `
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+      <div class="budget-title-row" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
         <h1 style="margin-bottom:0;flex:1">💰 Budget</h1>
         <div class="budget-toolbar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <input type="month" id="budget-month" value="${this.currentMonth}"

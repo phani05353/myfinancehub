@@ -1461,12 +1461,20 @@ tr.due-soon td:first-child { color: var(--warning); }
   /* Hide less-critical col on mobile */
   .rem-table tbody td[data-label="Recurring"] { display: none; }
 
-  /* ── Budget page toolbar ── */
-  .budget-toolbar {
+  /* ── Budget page: stack title row vertically on mobile ── */
+  .budget-title-row {
     flex-direction: column;
     align-items: stretch !important;
   }
-  .budget-toolbar > * { width: 100%; }
+  .budget-title-row h1 { flex: none; }
+  .budget-toolbar {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .budget-toolbar input[type="month"] { flex: 1; min-width: 0; width: auto !important; }
+  .budget-toolbar .btn { flex-shrink: 0; }
 
   /* ── Year in Review: month summary table scrolls horizontally ── */
   .yr-month-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
