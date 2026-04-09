@@ -42,7 +42,7 @@ const budgetModule = {
     const remaining   = totalBudget - totalSpent;
     const overCount   = status.filter(b => b.spent > b.budget).length;
     const overallPct  = totalBudget > 0 ? Math.min(100, totalSpent / totalBudget * 100) : 0;
-    const barColor    = overallPct >= 100 ? 'var(--danger)' : overallPct >= 80 ? 'var(--warning)' : 'var(--success)';
+    const barColor    = overallPct > 100 ? 'var(--danger)' : overallPct >= 100 ? 'var(--warning)' : overallPct >= 80 ? 'var(--warning)' : 'var(--success)';
 
     document.getElementById('budget-summary').innerHTML = `
       <div class="stats-grid" style="margin-bottom:16px">
@@ -107,7 +107,7 @@ const budgetModule = {
     const over      = b.spent > b.budget;
     const remaining = b.budget - b.spent;
     const barPct    = Math.min(100, pct);
-    const barColor  = pct >= 100 ? 'var(--danger)' : pct >= 80 ? 'var(--warning)' : 'var(--success)';
+    const barColor  = pct > 100 ? 'var(--danger)' : pct >= 100 ? 'var(--warning)' : pct >= 80 ? 'var(--warning)' : 'var(--success)';
     const pctLabel  = pct.toFixed(1) + '%';
 
     const catJs = escHtml(b.category).replace(/'/g, "\\'");

@@ -23,6 +23,11 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# AI / tooling
+.claude/
+.wolf/
+CLAUDE.md
+
 # Editor / IDE
 .vscode/
 .idea/

@@ -377,10 +377,6 @@ const dashboardModule = {
           <div class="dash-greeting-text">${greeting} 👋</div>
           <div class="dash-greeting-sub">${dateLabel} · ${monthName}</div>
         </div>
-        <div style="display:flex;gap:8px;flex-shrink:0">
-          <a href="#/transactions" class="btn btn-primary btn-sm">+ Add</a>
-          <a href="#/import"       class="btn btn-ghost btn-sm">Import CSV</a>
-        </div>
       </div>
 
       <!-- Hero net card -->
@@ -410,30 +406,6 @@ const dashboardModule = {
 
       <!-- Savings rate -->
       ${savingsBar}
-
-      <!-- Stat cards -->
-      <div class="stats-grid" style="margin-bottom:20px">
-        <div class="stat-card">
-          <div class="label">Income</div>
-          <div class="value income">${fmtCur(summary.income)}</div>
-          <div class="sublabel">this month</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Expenses</div>
-          <div class="value expense">${fmtCur(Math.abs(summary.expenses))}</div>
-          <div class="sublabel">this month</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Savings Rate</div>
-          <div class="value ${savingsRate >= 20 ? 'income' : savingsRate >= 0 ? 'neutral' : 'expense'}">${savingsRate.toFixed(1)}%</div>
-          <div class="sublabel">${savingsRate >= 20 ? 'On track' : savingsRate >= 0 ? 'Could improve' : 'Over budget'}</div>
-        </div>
-        <div class="stat-card">
-          <div class="label">Subscriptions</div>
-          <div class="value neutral">${fmtCur(subTotal)}</div>
-          <div class="sublabel">${subs.length} active</div>
-        </div>
-      </div>
 
       <!-- Bills + Top Spending -->
       <div class="dash-grid">
