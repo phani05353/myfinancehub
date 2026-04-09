@@ -899,6 +899,37 @@ app.post('/api/rules/apply', (req, res) => {
   res.json({ updated });
 });
 
+// ─── EXPORT ───────────────────────────────────────────────────────────────────
+
+app.get('/api/export/csv', (req, res) => {
+  const { month } = req.query;
+  let rows;
+  if (month) {
+    rows = db.prepare(
+      "SELECT date, payee, category, amount, notes FROM transactions WHERE strftime('%Y-%m', date) = ? ORDER BY date DESC"
+    ).all(month);
+  } else {
+    rows = db.prepare(
+      'SELECT date, payee, category, amount, notes FROM transactions ORDER BY date DESC'
+    ).all();
+  }
+
+  const escape = v => {
+    if (v == null) return '';
+    const s = String(v);
+    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  const header = 'Date,Payee,Category,Amount,Notes';
+  const lines  = rows.map(r => [r.date, r.payee, r.category, r.amount, r.notes].map(escape).join(','));
+  const csv    = [header, ...lines].join('\r\n');
+
+  const filename = month ? `transactions-${month}.csv` : 'transactions-all.csv';
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(csv);
+});
+
 // ─── IMPORT ───────────────────────────────────────────────────────────────────
 
 app.post('/api/import/csv', upload.single('csvfile'), (req, res) => {
