@@ -11,14 +11,11 @@ const transactionsModule = {
   },
 
   async render() {
-    const categories = await api('/api/categories').catch(() => []);
-    const today = new Date().toISOString().slice(0, 7);
-
-    // Generate last 24 months for dropdown
+    // Generate last 24 months for period dropdown
     const monthOptions = ['<option value="">All time</option>'];
     const d = new Date();
     for (let i = 0; i < 24; i++) {
-      const val = d.toISOString().slice(0, 7);
+      const val   = d.toISOString().slice(0, 7);
       const label = d.toLocaleString('default', { month: 'long', year: 'numeric' });
       monthOptions.push(`<option value="${val}" ${i === 0 ? 'selected' : ''}>${label}</option>`);
       d.setMonth(d.getMonth() - 1);
@@ -27,26 +24,41 @@ const transactionsModule = {
     document.getElementById('view').innerHTML = `
       <h1 style="margin-bottom:16px">Transactions</h1>
 
-      <div class="card" style="margin-bottom:16px;padding:14px 16px">
-        <div class="tx-search-row">
+      <div class="card tx-search-card">
+        <!-- Search + filter icon row -->
+        <div class="tx-searchbar-row">
           <div class="tx-search-wrap">
             <svg class="tx-search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="8.5" cy="8.5" r="5.5"/><path d="M15 15l-3-3"/>
             </svg>
-            <input type="text" id="filter-search" class="tx-search-input" placeholder="Search payee, notes, category…" autocomplete="off">
+            <input type="text" id="filter-search" class="tx-search-input"
+              placeholder="Search payee or notes…" autocomplete="off" autocorrect="off">
+            <button id="filter-clear-x" class="tx-clear-x" style="display:none"
+              onclick="transactionsModule.clearFilters()" title="Clear">✕</button>
           </div>
-          <select id="filter-month" class="tx-filter-select">
-            ${monthOptions.join('')}
-          </select>
-          <select id="filter-category" class="tx-filter-select">
-            <option value="">All categories</option>
-            ${categories.map(c => `<option>${escHtml(c)}</option>`).join('')}
-          </select>
-          <button class="btn btn-ghost btn-sm" onclick="transactionsModule.clearFilters()">Clear</button>
+          <button id="filter-toggle-btn" class="tx-filter-toggle" onclick="transactionsModule.toggleFilterPanel()" title="Filter by period">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 5h14M6 10h8M9 15h2"/>
+            </svg>
+            <span class="tx-filter-dot" id="filter-dot" style="display:none"></span>
+          </button>
+        </div>
+
+        <!-- Collapsible filter panel -->
+        <div class="tx-filter-panel" id="filter-panel" style="display:none">
+          <div class="tx-filter-panel-inner">
+            <div>
+              <label class="tx-filter-label">Period</label>
+              <select id="filter-month" class="tx-filter-select-panel">
+                ${monthOptions.join('')}
+              </select>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="transactionsModule.clearFilters()">Clear filters</button>
+          </div>
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" style="margin-top:12px">
         <div class="table-wrap">
           <table class="tx-table">
             <thead>
@@ -64,13 +76,11 @@ const transactionsModule = {
       </div>
     `;
 
-    // Instant filter on select change
     document.getElementById('filter-month').addEventListener('change', () => this.applyFilters());
-    document.getElementById('filter-category').addEventListener('change', () => this.applyFilters());
 
-    // Debounced search on type
     let searchTimer;
-    document.getElementById('filter-search').addEventListener('input', () => {
+    document.getElementById('filter-search').addEventListener('input', e => {
+      document.getElementById('filter-clear-x').style.display = e.target.value ? 'flex' : 'none';
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => this.applyFilters(), 300);
     });
@@ -78,15 +88,26 @@ const transactionsModule = {
     await this.applyFilters();
   },
 
+  toggleFilterPanel() {
+    const panel = document.getElementById('filter-panel');
+    const btn   = document.getElementById('filter-toggle-btn');
+    const open  = panel.style.display === 'none';
+    panel.style.display = open ? 'block' : 'none';
+    btn.classList.toggle('tx-filter-toggle--active', open);
+  },
+
   async applyFilters() {
     this.page = 0;
-    const month    = document.getElementById('filter-month')?.value || '';
-    const search   = document.getElementById('filter-search')?.value.trim() || '';
-    const category = document.getElementById('filter-category')?.value || '';
+    const month  = document.getElementById('filter-month')?.value || '';
+    const search = document.getElementById('filter-search')?.value.trim() || '';
     this.filters = {};
-    if (month)    this.filters.month    = month;
-    if (search)   this.filters.search   = search;
-    if (category) this.filters.category = category;
+    if (month)  this.filters.month  = month;
+    if (search) this.filters.search = search;
+
+    // Show dot on filter icon when period is not default (current month)
+    const dot = document.getElementById('filter-dot');
+    if (dot) dot.style.display = (month && month !== new Date().toISOString().slice(0, 7)) ? 'block' : 'none';
+
     await this.loadRows();
   },
 
@@ -96,10 +117,12 @@ const transactionsModule = {
     const today = new Date().toISOString().slice(0, 7);
     const fm = document.getElementById('filter-month');
     const fs = document.getElementById('filter-search');
-    const fc = document.getElementById('filter-category');
-    if (fm) fm.value = today;
-    if (fs) fs.value = '';
-    if (fc) fc.value = '';
+    const cx = document.getElementById('filter-clear-x');
+    const dot = document.getElementById('filter-dot');
+    if (fm)  fm.value = today;
+    if (fs)  fs.value = '';
+    if (cx)  cx.style.display = 'none';
+    if (dot) dot.style.display = 'none';
     await this.loadRows();
   },
 
