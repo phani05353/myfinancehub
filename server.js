@@ -577,6 +577,18 @@ app.delete('/api/subscriptions/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+app.post('/api/subscriptions/:id/pay', (req, res) => {
+  const sub = db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(req.params.id);
+  if (!sub) return res.status(404).json({ error: 'Not found' });
+  const d = new Date(sub.next_due_date + 'T00:00:00');
+  if (sub.billing_cycle === 'monthly') d.setMonth(d.getMonth() + 1);
+  else if (sub.billing_cycle === 'yearly') d.setFullYear(d.getFullYear() + 1);
+  else if (sub.billing_cycle === 'weekly') d.setDate(d.getDate() + 7);
+  const nextDate = d.toISOString().slice(0, 10);
+  db.prepare('UPDATE subscriptions SET next_due_date = ? WHERE id = ?').run(nextDate, req.params.id);
+  res.json({ next_due_date: nextDate });
+});
+
 // ─── REMINDERS ────────────────────────────────────────────────────────────────
 
 app.get('/api/reminders', (req, res) => {

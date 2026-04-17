@@ -92,6 +92,7 @@ const subscriptionsModule = {
                 <td data-label="Next Due">${fmtDate(s.next_due_date)} ${isOverdue ? '<span class="badge badge-red">Overdue</span>' : isDueSoon ? '<span class="badge badge-yellow">Soon</span>' : ''}</td>
                 <td data-label="Category">${s.category ? `<span class="badge badge-gray">${escHtml(s.category)}</span>` : '—'}</td>
                 <td data-label="Actions">
+                  ${isOverdue || isDueSoon ? `<button class="btn btn-success btn-sm" onclick="subscriptionsModule.markPaid(${s.id})">✓ Paid</button>` : ''}
                   <button class="btn btn-ghost btn-sm" onclick="subscriptionsModule.openEditModal(${s.id})">Edit</button>
                   <button class="btn btn-ghost btn-sm" onclick="subscriptionsModule.toggleActive(${s.id}, ${s.active ? 0 : 1})">${s.active ? 'Pause' : 'Resume'}</button>
                   <button class="btn btn-danger btn-sm" onclick="subscriptionsModule.deleteRow(${s.id})">Del</button>
@@ -363,6 +364,14 @@ const subscriptionsModule = {
     try {
       await api(`/api/subscriptions/${id}`, { method: 'PUT', body: { active: newActive } });
       toast(newActive ? 'Subscription resumed' : 'Subscription paused');
+      await this.render();
+    } catch (e) { toast(e.message, 'error'); }
+  },
+
+  async markPaid(id) {
+    try {
+      const result = await api(`/api/subscriptions/${id}/pay`, { method: 'POST', body: {} });
+      toast(`Marked paid. Next due: ${fmtDate(result.next_due_date)}`);
       await this.render();
     } catch (e) { toast(e.message, 'error'); }
   },
