@@ -118,6 +118,9 @@ function route() {
   document.querySelectorAll('.nav-link').forEach(a => {
     a.classList.toggle('active', a.getAttribute('href') === hash);
   });
+  document.querySelectorAll('.bn-tab[data-route]').forEach(a => {
+    a.classList.toggle('active', a.getAttribute('data-route') === hash);
+  });
   // Scroll content to top on navigation
   window.scrollTo(0, 0);
   if (handler) handler();

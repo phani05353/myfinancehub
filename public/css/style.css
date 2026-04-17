@@ -167,6 +167,7 @@ body {
   position: fixed;
   top: 0; left: 0; bottom: 0;
   z-index: 200;
+  transition: transform 0.22s cubic-bezier(0.4,0,0.2,1);
 }
 
 .logo {
@@ -262,7 +263,36 @@ body {
   padding: 32px;
   max-width: 100%;
   overflow-x: hidden;
+  transition: margin-left 0.22s cubic-bezier(0.4,0,0.2,1);
 }
+
+/* ── DESKTOP SIDEBAR TOGGLE TAB ── */
+.sidebar-toggle {
+  display: none; /* shown only on desktop via media query override below */
+  position: fixed;
+  top: 50%;
+  left: calc(var(--sidebar-width) - 1px);
+  transform: translateY(-50%);
+  z-index: 210;
+  width: 18px;
+  height: 44px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  padding: 0;
+  transition: left 0.22s cubic-bezier(0.4,0,0.2,1), color 0.15s, background 0.15s;
+}
+.sidebar-toggle:hover { color: var(--accent); background: var(--surface-2, #1e2130); }
+
+/* Collapsed state */
+body.sidebar-collapsed .sidebar { transform: translateX(-100%); }
+body.sidebar-collapsed .content { margin-left: 0; }
+body.sidebar-collapsed .sidebar-toggle { left: 0; border-radius: 0 6px 6px 0; }
 
 #view { max-width: 1200px; margin: 0 auto; }
 
@@ -392,6 +422,9 @@ tbody tr:last-child { border-bottom: none; }
     grid-template-areas: "month search category actions";
   }
   .filter-actions .btn { flex: none; }
+
+  /* Show the desktop sidebar toggle tab */
+  .sidebar-toggle { display: flex; }
 }
 
 /* ── Transaction search bar ── */
@@ -1033,6 +1066,59 @@ tr.due-soon td:first-child { color: var(--warning); }
   flex-shrink: 0;
 }
 
+/* ── BOTTOM NAV (mobile only) ── */
+.bottom-nav {
+  display: none;
+}
+@media (max-width: 768px) {
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 300;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    justify-content: space-around;
+    align-items: stretch;
+  }
+  .bn-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 8px 4px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    background: none;
+    border: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: color 0.15s;
+  }
+  .bn-tab svg {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+  }
+  .bn-tab.active,
+  .bn-tab:active {
+    color: var(--accent);
+  }
+  .bn-tab.active svg {
+    filter: drop-shadow(0 0 6px rgba(108,142,245,0.5));
+  }
+  /* Shift FAB above the bottom nav */
+  #fab {
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* ── FLOATING ADD BUTTON ── */
 #fab {
   position: fixed;
@@ -1327,7 +1413,7 @@ tr.due-soon td:first-child { color: var(--warning); }
 /* ── Global: extra bottom padding so FAB never covers content ── */
 @media (max-width: 768px) {
   .content {
-    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(120px + env(safe-area-inset-bottom, 0px));
   }
 
   /* ── Charts: shorter canvas on mobile ── */
