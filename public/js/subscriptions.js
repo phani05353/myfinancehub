@@ -85,7 +85,7 @@ const subscriptionsModule = {
               const isDueSoon = s.next_due_date <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
               const isOverdue = s.next_due_date < today;
               return `<tr class="${isOverdue ? 'overdue' : isDueSoon ? 'due-soon' : ''}">
-                <td data-label="Name"><strong>${escHtml(s.name)}</strong></td>
+                <td data-label="Name"><span class="payee-cell">${payeeLogoHtml(s.name, -1)}<strong>${escHtml(s.name)}</strong></span></td>
                 <td data-label="Payee">${escHtml(s.payee || '—')}</td>
                 <td data-label="Amount">${fmt(-Math.abs(s.amount))}</td>
                 <td data-label="Billing"><span class="badge badge-blue">${s.billing_cycle}</span></td>

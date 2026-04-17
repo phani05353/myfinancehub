@@ -69,7 +69,7 @@ const remindersModule = {
             ${reminders.map(r => {
               const isOverdue = r.due_date < today && !r.paid;
               return `<tr class="${isOverdue ? 'overdue' : ''}">
-                <td data-label="Title"><strong>${escHtml(r.title)}</strong>${r.notes ? `<br><span style="color:var(--text-muted);font-size:11px">${escHtml(r.notes)}</span>` : ''}</td>
+                <td data-label="Title"><span class="payee-cell">${payeeLogoHtml(r.title, -1)}<span><strong>${escHtml(r.title)}</strong>${r.notes ? `<span style="display:block;color:var(--text-muted);font-size:11px;margin-top:2px">${escHtml(r.notes)}</span>` : ''}</span></span></td>
                 <td data-label="Due Date">${fmtDate(r.due_date)}</td>
                 <td data-label="Amount">${r.amount ? fmt(-Math.abs(r.amount)) : '—'}</td>
                 <td data-label="Recurring">${r.recurring ? `<span class="badge badge-blue">Every ${r.recur_days}d</span>` : '<span class="badge badge-gray">Once</span>'}</td>
