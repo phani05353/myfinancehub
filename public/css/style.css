@@ -1113,10 +1113,6 @@ tr.due-soon td:first-child { color: var(--warning); }
   .bn-tab.active svg {
     filter: drop-shadow(0 0 6px rgba(108,142,245,0.5));
   }
-  /* Shift FAB above the bottom nav */
-  #fab {
-    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
-  }
 }
 
 /* ── FLOATING ADD BUTTON ── */
@@ -1144,6 +1140,11 @@ tr.due-soon td:first-child { color: var(--warning); }
 }
 #fab:hover  { transform: scale(1.08); box-shadow: 0 6px 28px rgba(108,142,245,0.6); }
 #fab:active { transform: scale(0.93); }
+
+/* Lift FAB above the bottom nav on mobile */
+@media (max-width: 768px) {
+  #fab { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+}
 
 /* ── RULES ENGINE ── */
 .rule-row {
