@@ -262,16 +262,19 @@ const dashboardModule = {
     const today = new Date();
     const currentMonth = today.toISOString().slice(0, 7);
     const todayStr = today.toISOString().slice(0, 10);
+    const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().slice(0, 7);
 
-    const [summary, reminders, subs, trend, byCategory, recentTx, budgetStatus] = await Promise.all([
+    const [summary, reminders, subs, trend, byCategory, allMonthTx, budgetStatus, prevByCategory] = await Promise.all([
       api(`/api/transactions/summary?month=${currentMonth}`),
       api('/api/reminders?paid=0&upcoming_days=30'),
       api('/api/subscriptions?active=1'),
       api('/api/charts/spending-trend?months=6'),
       api(`/api/charts/category-breakdown?month=${currentMonth}`),
-      api(`/api/transactions?limit=5&month=${currentMonth}`),
-      api(`/api/budgets/status?month=${currentMonth}`).catch(() => [])
+      api(`/api/transactions?limit=300&month=${currentMonth}`),
+      api(`/api/budgets/status?month=${currentMonth}`).catch(() => []),
+      api(`/api/charts/category-breakdown?month=${prevMonth}`).catch(() => [])
     ]);
+    const recentTx = { rows: (allMonthTx.rows || []).slice(0, 5) };
 
     const overdueReminders = reminders.filter(r => r.due_date < todayStr);
 
@@ -410,6 +413,142 @@ const dashboardModule = {
         </div>`;
     })();
 
+    // ── Spending Insights ────────────────────────────────────────────────────
+    const insights = [];
+    const prevCatMap = {};
+    (prevByCategory || []).forEach(c => { prevCatMap[c.category] = c.total; });
+
+    // Over-budget categories
+    const overBudget = budgetStatus.filter(b => b.spent > b.budget);
+    const nearBudget = budgetStatus.filter(b => b.budget > 0 && b.spent / b.budget >= 0.8 && b.spent <= b.budget);
+    if (overBudget.length > 0) {
+      const names = overBudget.slice(0, 2).map(b => b.category).join(', ') + (overBudget.length > 2 ? ` +${overBudget.length - 2} more` : '');
+      insights.push({ type: 'danger', icon: '⚠', text: `${overBudget.length} budget${overBudget.length > 1 ? 's' : ''} exceeded — <strong>${names}</strong>` });
+    } else if (nearBudget.length > 0) {
+      insights.push({ type: 'warning', icon: '📊', text: `<strong>${nearBudget.length} categor${nearBudget.length > 1 ? 'ies are' : 'y is'}</strong> nearing the limit (≥80%) — ${nearBudget.slice(0, 2).map(b => b.category).join(', ')}` });
+    } else if (budgetStatus.length > 0) {
+      insights.push({ type: 'success', icon: '✓', text: `All <strong>${budgetStatus.length} budget categories</strong> are on track this month` });
+    }
+
+    // Month-over-month biggest change
+    const catChanges = byCategory.map(c => {
+      const prev = prevCatMap[c.category];
+      if (!prev || prev < 20) return null;
+      return { category: c.category, current: c.total, prev, pct: ((c.total - prev) / prev) * 100 };
+    }).filter(Boolean).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+
+    if (catChanges.length > 0) {
+      const top = catChanges[0];
+      if (top.pct >= 25) {
+        insights.push({ type: 'warning', icon: '↑', text: `<strong>${top.category}</strong> spending up <strong>${top.pct.toFixed(0)}%</strong> vs last month (${fmtCur(top.prev)} → ${fmtCur(top.current)})` });
+      } else if (top.pct <= -25) {
+        insights.push({ type: 'success', icon: '↓', text: `<strong>${top.category}</strong> spending down <strong>${Math.abs(top.pct).toFixed(0)}%</strong> vs last month — nice!` });
+      }
+    }
+
+    // Savings rate commentary
+    if (summary.income > 0) {
+      if (savingsRate >= 20) {
+        insights.push({ type: 'success', icon: '💰', text: `Saving <strong>${savingsRate.toFixed(0)}%</strong> of income this month — great work!` });
+      } else if (savingsRate < 0) {
+        insights.push({ type: 'danger', icon: '📉', text: `Spending exceeds income by <strong>${fmtCur(Math.abs(summary.net))}</strong> this month` });
+      }
+    }
+
+    // Spending pace
+    const dayOfMonth = today.getDate();
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const pace = dayOfMonth > 0 ? (Math.abs(summary.expenses) / dayOfMonth) * daysInMonth : 0;
+    if (pace > 0 && summary.income > 0 && dayOfMonth >= 5 && dayOfMonth <= 25) {
+      const paceVsIncome = (pace / summary.income) * 100;
+      if (paceVsIncome > 110) {
+        insights.push({ type: 'warning', icon: '🔮', text: `At current pace, spending will reach <strong>${fmtCur(pace)}</strong> by month end` });
+      }
+    }
+
+    // Limit to 3 most relevant
+    const insightsHtml = insights.length === 0 ? '' : `
+      <div class="card insights-card" style="margin-bottom:16px">
+        <h2 style="margin-bottom:12px">💡 Spending Insights</h2>
+        <div class="insights-list">
+          ${insights.slice(0, 3).map(i => `
+            <div class="insight-row insight-row--${i.type}">
+              <span class="insight-icon">${i.icon}</span>
+              <span class="insight-text">${i.text}</span>
+            </div>`).join('')}
+        </div>
+      </div>`;
+
+    // ── Weekly Digest ─────────────────────────────────────────────────────────
+    const weekAgo = new Date(today);
+    weekAgo.setDate(today.getDate() - 6);
+    const weekStartStr = weekAgo.toISOString().slice(0, 10);
+    const weekEndStr   = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+
+    const allRows  = allMonthTx.rows || [];
+    const weekRows = allRows.filter(r => r.date >= weekStartStr && r.amount < 0);
+    const weekSpent = weekRows.reduce((s, r) => s + Math.abs(r.amount), 0);
+    const weekIncome = allRows.filter(r => r.date >= weekStartStr && r.amount > 0).reduce((s, r) => s + r.amount, 0);
+
+    const weekCatMap = {};
+    weekRows.forEach(r => {
+      const cat = r.category || 'Uncategorized';
+      weekCatMap[cat] = (weekCatMap[cat] || 0) + Math.abs(r.amount);
+    });
+    const weekTopCats = Object.entries(weekCatMap).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const weekBills   = reminders.filter(r => r.due_date >= todayStr && r.due_date <= weekEndStr);
+
+    const weekDigestHtml = `
+      <details class="card weekly-digest" style="margin-bottom:16px" open>
+        <summary class="weekly-digest-summary">
+          <div class="weekly-digest-title">
+            <span class="weekly-digest-icon">📅</span>
+            <span>This Week</span>
+          </div>
+          <div class="weekly-digest-meta">
+            <span class="weekly-digest-total">${fmtCur(weekSpent)} spent</span>
+            ${weekIncome > 0 ? `<span class="weekly-digest-income">+${fmtCur(weekIncome)} in</span>` : ''}
+          </div>
+        </summary>
+        <div class="weekly-digest-body">
+          <div class="weekly-digest-cols">
+            <div class="weekly-col">
+              <div class="weekly-col-title">Top Categories</div>
+              ${weekTopCats.length === 0
+                ? '<p style="color:var(--text-muted);font-size:13px">No expenses this week</p>'
+                : weekTopCats.map(([cat, amt]) => {
+                    const pct = weekSpent > 0 ? (amt / weekSpent * 100) : 0;
+                    return `
+                      <div class="weekly-cat-row">
+                        <div class="weekly-cat-bar-wrap">
+                          <span class="weekly-cat-name">${escHtml(cat)}</span>
+                          <div class="weekly-cat-bar"><div style="width:${pct.toFixed(0)}%;height:100%;background:var(--accent);border-radius:2px;opacity:0.7"></div></div>
+                        </div>
+                        <span class="weekly-cat-amt">${fmtCur(amt)}</span>
+                      </div>`;
+                  }).join('')}
+            </div>
+            <div class="weekly-col">
+              <div class="weekly-col-title">Bills Due This Week</div>
+              ${weekBills.length === 0
+                ? '<p style="color:var(--text-muted);font-size:13px">No bills due this week ✓</p>'
+                : weekBills.map(r => {
+                    const days = Math.round((new Date(r.due_date) - new Date(todayStr)) / 86400000);
+                    const label = days === 0 ? 'Due today' : `in ${days}d`;
+                    return `
+                      <div class="weekly-bill-row">
+                        <div>
+                          <div style="font-size:13px;font-weight:600">${escHtml(r.title)}</div>
+                          <div style="font-size:11px;color:var(--warning)">${label}</div>
+                        </div>
+                        <span style="font-size:13px;color:var(--text-muted)">${r.amount ? fmtCur(Math.abs(r.amount)) : '—'}</span>
+                      </div>`;
+                  }).join('')}
+            </div>
+          </div>
+        </div>
+      </details>`;
+
     // Greeting
     const hour = today.getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -456,6 +595,12 @@ const dashboardModule = {
 
       <!-- Savings rate -->
       ${savingsBar}
+
+      <!-- Spending Insights -->
+      ${insightsHtml}
+
+      <!-- Weekly Digest -->
+      ${weekDigestHtml}
 
       <!-- Bills + Top Spending -->
       <div class="dash-grid">
