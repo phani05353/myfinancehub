@@ -128,6 +128,12 @@ function route() {
     '<div class="empty-state"><div class="empty-icon">404</div><p>Page not found</p></div>';
 }
 
+function refreshCurrentView() {
+  const hash = location.hash || '#/dashboard';
+  const handler = routes[hash];
+  if (handler) handler();
+}
+
 window.addEventListener('hashchange', route);
 window.addEventListener('load', async () => {
   route();

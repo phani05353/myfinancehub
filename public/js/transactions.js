@@ -248,6 +248,7 @@ const transactionsModule = {
       closeModal();
       toast('Transaction added');
       if (document.getElementById('tx-body')) await this.loadRows();
+      else refreshCurrentView();
     } catch (e) { toast(e.message, 'error'); }
   },
 
