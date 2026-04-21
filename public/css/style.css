@@ -317,6 +317,28 @@ h3 { font-size: 14px; color: var(--text-muted); margin-bottom: 8px; }
   border-radius: var(--radius);
   padding: 18px;
   margin-bottom: 16px;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.dash-enter .card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(108,142,245,0.35);
+  box-shadow: 0 6px 24px -8px rgba(0,0,0,0.4);
+}
+
+/* Accent dot before dashboard section headings */
+.dash-enter .card > h2:first-child::before,
+.dash-enter .card > div:first-child > h2::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6c8ef5, #a78bfa);
+  margin-right: 10px;
+  vertical-align: middle;
+  box-shadow: 0 0 8px rgba(108,142,245,0.6);
+  position: relative;
+  top: -2px;
 }
 
 .stats-grid {
@@ -1213,6 +1235,10 @@ tr.due-soon td:first-child { color: var(--warning); }
   .weekly-digest-cols { grid-template-columns: 1fr; gap: 16px; }
 }
 
+/* When the weekly digest sits in the side-by-side insights row, stack its inner cols */
+.dash-grid--insights .weekly-digest-cols { grid-template-columns: 1fr; gap: 14px; }
+.dash-grid--insights { align-items: start; }
+
 /* ── RULES ENGINE ── */
 .rule-row {
   display: flex;
@@ -1287,24 +1313,119 @@ tr.due-soon td:first-child { color: var(--warning); }
   font-weight: 700;
   letter-spacing: -0.3px;
 }
+.dash-greeting-text .wave {
+  display: inline-block;
+  transform-origin: 70% 70%;
+  animation: wave 2.4s ease-in-out;
+  animation-iteration-count: 2;
+}
+@keyframes wave {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  10%, 30% { transform: rotate(14deg); }
+  20%, 40% { transform: rotate(-8deg); }
+  50% { transform: rotate(8deg); }
+}
 .dash-greeting-sub {
   font-size: 13px;
   color: var(--text-muted);
   margin-top: 2px;
 }
+.dash-month-ring {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.dash-month-ring svg {
+  filter: drop-shadow(0 0 8px rgba(108,142,245,0.35));
+}
+.dash-month-ring-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* ── DASHBOARD ENTRANCE ANIMATIONS ── */
+@keyframes dashFadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.dash-enter > * {
+  animation: dashFadeUp 0.55s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+}
+.dash-enter > *:nth-child(1) { animation-delay: 0.00s; }
+.dash-enter > *:nth-child(2) { animation-delay: 0.08s; }
+.dash-enter > *:nth-child(3) { animation-delay: 0.16s; }
+.dash-enter > *:nth-child(4) { animation-delay: 0.24s; }
+.dash-enter > *:nth-child(5) { animation-delay: 0.32s; }
+.dash-enter > *:nth-child(6) { animation-delay: 0.40s; }
+.dash-enter > *:nth-child(7) { animation-delay: 0.48s; }
+.dash-enter > *:nth-child(8) { animation-delay: 0.56s; }
 
 /* Hero net card */
 .dash-hero {
-  background: linear-gradient(135deg, rgba(108,142,245,0.1) 0%, rgba(167,139,250,0.06) 100%);
-  border: 1px solid rgba(108,142,245,0.25);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(108,142,245,0.18) 0%, transparent 45%),
+    radial-gradient(circle at 100% 100%, rgba(167,139,250,0.15) 0%, transparent 45%),
+    linear-gradient(135deg, rgba(108,142,245,0.06) 0%, rgba(167,139,250,0.04) 100%);
+  border: 1px solid rgba(108,142,245,0.28);
   border-radius: var(--radius);
-  padding: 24px 28px;
+  padding: 26px 30px;
   margin-bottom: 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 24px;
   flex-wrap: wrap;
+  box-shadow: 0 8px 40px -12px rgba(108,142,245,0.25);
+}
+
+/* Animated aurora blobs inside the hero */
+.dash-hero-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+}
+.dash-hero-blob--1 {
+  width: 340px; height: 340px;
+  background: radial-gradient(circle, rgba(108,142,245,0.5), transparent 70%);
+  top: -140px; left: -100px;
+  animation: heroBlob1 18s ease-in-out infinite alternate;
+}
+.dash-hero-blob--2 {
+  width: 280px; height: 280px;
+  background: radial-gradient(circle, rgba(167,139,250,0.45), transparent 70%);
+  bottom: -120px; right: 15%;
+  animation: heroBlob2 22s ease-in-out infinite alternate;
+}
+@keyframes heroBlob1 {
+  0%   { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(80px, 60px) scale(1.2); }
+}
+@keyframes heroBlob2 {
+  0%   { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(-60px, -40px) scale(1.15); }
+}
+
+/* Positive net gets celebratory gradient text; negative uses solid danger */
+.dash-hero-amount--positive {
+  background: linear-gradient(135deg, #34d399 0%, #6c8ef5 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 0 20px rgba(52,211,153,0.25));
+}
+.dash-hero-amount--negative {
+  color: var(--danger);
+  filter: drop-shadow(0 0 16px rgba(248,113,113,0.2));
 }
 .dash-hero-label {
   font-size: 11px;
@@ -1455,6 +1576,19 @@ tr.due-soon td:first-child { color: var(--warning); }
   height: 100%;
   border-radius: 4px;
   transition: width 0.5s ease;
+  position: relative;
+  overflow: hidden;
+}
+.dash-budget-bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+  animation: budgetShimmer 2.6s infinite;
+}
+@keyframes budgetShimmer {
+  0%   { transform: translateX(-100%); }
+  60%, 100% { transform: translateX(100%); }
 }
 .dash-budget-item-bot {
   display: flex;

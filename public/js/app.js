@@ -264,11 +264,10 @@ const dashboardModule = {
     const todayStr = today.toISOString().slice(0, 10);
     const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().slice(0, 7);
 
-    const [summary, reminders, subs, trend, byCategory, allMonthTx, budgetStatus, prevByCategory] = await Promise.all([
+    const [summary, reminders, subs, byCategory, allMonthTx, budgetStatus, prevByCategory] = await Promise.all([
       api(`/api/transactions/summary?month=${currentMonth}`),
       api('/api/reminders?paid=0&upcoming_days=30'),
       api('/api/subscriptions?active=1'),
-      api('/api/charts/spending-trend?months=6'),
       api(`/api/charts/category-breakdown?month=${currentMonth}`),
       api(`/api/transactions?limit=300&month=${currentMonth}`),
       api(`/api/budgets/status?month=${currentMonth}`).catch(() => []),
@@ -556,23 +555,50 @@ const dashboardModule = {
 
     // Net hero colour + label
     const netPositive = summary.net >= 0;
-    const netColor    = netPositive ? 'var(--success)' : 'var(--danger)';
     const netLabel    = netPositive ? 'surplus' : 'deficit';
+    const netClass    = netPositive ? 'positive' : 'negative';
+
+    // Month progress (day N of M)
+    const monthProgress = (dayOfMonth / daysInMonth) * 100;
+    const ringRadius = 18;
+    const ringCirc = 2 * Math.PI * ringRadius;
+    const ringOffset = ringCirc * (1 - monthProgress / 100);
 
     view.innerHTML = `
+    <div class="dash-enter">
       <!-- Greeting bar -->
       <div class="dash-greeting">
         <div>
-          <div class="dash-greeting-text">${greeting} 👋</div>
+          <div class="dash-greeting-text">${greeting} <span class="wave">👋</span></div>
           <div class="dash-greeting-sub">${dateLabel} · ${monthName}</div>
+        </div>
+        <div class="dash-month-ring" title="Day ${dayOfMonth} of ${daysInMonth}">
+          <svg viewBox="0 0 48 48" width="48" height="48">
+            <circle cx="24" cy="24" r="${ringRadius}" fill="none" stroke="var(--surface2)" stroke-width="4"/>
+            <circle cx="24" cy="24" r="${ringRadius}" fill="none" stroke="url(#ringGrad)" stroke-width="4"
+              stroke-linecap="round"
+              stroke-dasharray="${ringCirc.toFixed(2)}"
+              stroke-dashoffset="${ringOffset.toFixed(2)}"
+              transform="rotate(-90 24 24)"/>
+            <defs>
+              <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#6c8ef5"/>
+                <stop offset="100%" stop-color="#a78bfa"/>
+              </linearGradient>
+            </defs>
+            <text x="24" y="28" text-anchor="middle" style="fill:var(--text);font-size:12px;font-weight:700;font-family:system-ui">${dayOfMonth}</text>
+          </svg>
+          <div class="dash-month-ring-sub">of ${daysInMonth}</div>
         </div>
       </div>
 
       <!-- Hero net card -->
       <div class="dash-hero">
+        <div class="dash-hero-blob dash-hero-blob--1"></div>
+        <div class="dash-hero-blob dash-hero-blob--2"></div>
         <div class="dash-hero-left">
           <div class="dash-hero-label">Net this month</div>
-          <div class="dash-hero-amount" style="color:${netColor}">${netPositive ? '+' : '−'}${fmtCur(Math.abs(summary.net))}</div>
+          <div class="dash-hero-amount dash-hero-amount--${netClass}">${netPositive ? '+' : '−'}${fmtCur(Math.abs(summary.net))}</div>
           <div class="dash-hero-sub">${netLabel} · ${monthName}</div>
         </div>
         <div class="dash-hero-right">
@@ -596,11 +622,11 @@ const dashboardModule = {
       <!-- Savings rate -->
       ${savingsBar}
 
-      <!-- Spending Insights -->
-      ${insightsHtml}
-
-      <!-- Weekly Digest -->
-      ${weekDigestHtml}
+      <!-- Insights + Weekly Digest side by side -->
+      <div class="dash-grid dash-grid--insights">
+        ${insightsHtml || '<div></div>'}
+        ${weekDigestHtml}
+      </div>
 
       <!-- Bills + Top Spending -->
       <div class="dash-grid">
@@ -651,36 +677,7 @@ const dashboardModule = {
         </div>
         ${recentList}
       </div>
-
-      <!-- 6-month trend chart -->
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-          <h2 style="margin-bottom:0">6-Month Trend</h2>
-          <a href="#/charts" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">Full charts →</a>
-        </div>
-        <div class="chart-container"><canvas id="trend-chart"></canvas></div>
-      </div>
+    </div>
     `;
-
-    if (trend.length > 0) {
-      new Chart(document.getElementById('trend-chart'), {
-        type: 'bar',
-        data: {
-          labels: trend.map(t => t.month),
-          datasets: [
-            { label: 'Income',   data: trend.map(t => t.income),   backgroundColor: 'rgba(52,211,153,0.5)',  borderColor: '#34d399', borderWidth: 2, borderRadius: 4 },
-            { label: 'Expenses', data: trend.map(t => t.expenses), backgroundColor: 'rgba(248,113,113,0.5)', borderColor: '#f87171', borderWidth: 2, borderRadius: 4 }
-          ]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { labels: { color: '#8892a4', boxWidth: 12 } } },
-          scales: {
-            x: { ticks: { color: '#8892a4', maxRotation: 45 }, grid: { color: '#2e3350' } },
-            y: { ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() }, grid: { color: '#2e3350' } }
-          }
-        }
-      });
-    }
   }
 };
