@@ -1430,6 +1430,8 @@ tr.due-soon td:first-child { color: var(--warning); }
 .dash-enter > *:nth-child(6) { animation-delay: 0.40s; }
 .dash-enter > *:nth-child(7) { animation-delay: 0.48s; }
 .dash-enter > *:nth-child(8) { animation-delay: 0.56s; }
+.dash-enter > *:nth-child(9) { animation-delay: 0.60s; }
+.dash-enter > *:nth-child(n+10) { animation-delay: 0.64s; }
 
 /* Hero net card */
 .dash-hero {
