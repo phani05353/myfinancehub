@@ -264,14 +264,14 @@ const dashboardModule = {
     const todayStr = today.toISOString().slice(0, 10);
     const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().slice(0, 7);
 
-    const [summary, reminders, subs, byCategory, allMonthTx, budgetStatus, prevByCategory] = await Promise.all([
+    const [summary, prevSummary, reminders, subs, byCategory, allMonthTx, budgetStatus] = await Promise.all([
       api(`/api/transactions/summary?month=${currentMonth}`),
+      api(`/api/transactions/summary?month=${prevMonth}`).catch(() => ({ income: 0, expenses: 0, net: 0 })),
       api('/api/reminders?paid=0&upcoming_days=30'),
       api('/api/subscriptions?active=1'),
       api(`/api/charts/category-breakdown?month=${currentMonth}`),
-      api(`/api/transactions?limit=300&month=${currentMonth}`),
-      api(`/api/budgets/status?month=${currentMonth}`).catch(() => []),
-      api(`/api/charts/category-breakdown?month=${prevMonth}`).catch(() => [])
+      api(`/api/transactions?limit=500&month=${currentMonth}`),
+      api(`/api/budgets/status?month=${currentMonth}`).catch(() => [])
     ]);
     const recentTx = { rows: (allMonthTx.rows || []).slice(0, 5) };
 
@@ -412,141 +412,138 @@ const dashboardModule = {
         </div>`;
     })();
 
-    // ── Spending Insights ────────────────────────────────────────────────────
-    const insights = [];
-    const prevCatMap = {};
-    (prevByCategory || []).forEach(c => { prevCatMap[c.category] = c.total; });
-
-    // Over-budget categories
-    const overBudget = budgetStatus.filter(b => b.spent > b.budget);
-    const nearBudget = budgetStatus.filter(b => b.budget > 0 && b.spent / b.budget >= 0.8 && b.spent <= b.budget);
-    if (overBudget.length > 0) {
-      const names = overBudget.slice(0, 2).map(b => b.category).join(', ') + (overBudget.length > 2 ? ` +${overBudget.length - 2} more` : '');
-      insights.push({ type: 'danger', icon: '⚠', text: `${overBudget.length} budget${overBudget.length > 1 ? 's' : ''} exceeded — <strong>${names}</strong>` });
-    } else if (nearBudget.length > 0) {
-      insights.push({ type: 'warning', icon: '📊', text: `<strong>${nearBudget.length} categor${nearBudget.length > 1 ? 'ies are' : 'y is'}</strong> nearing the limit (≥80%) — ${nearBudget.slice(0, 2).map(b => b.category).join(', ')}` });
-    } else if (budgetStatus.length > 0) {
-      insights.push({ type: 'success', icon: '✓', text: `All <strong>${budgetStatus.length} budget categories</strong> are on track this month` });
-    }
-
-    // Month-over-month biggest change
-    const catChanges = byCategory.map(c => {
-      const prev = prevCatMap[c.category];
-      if (!prev || prev < 20) return null;
-      return { category: c.category, current: c.total, prev, pct: ((c.total - prev) / prev) * 100 };
-    }).filter(Boolean).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
-
-    if (catChanges.length > 0) {
-      const top = catChanges[0];
-      if (top.pct >= 25) {
-        insights.push({ type: 'warning', icon: '↑', text: `<strong>${top.category}</strong> spending up <strong>${top.pct.toFixed(0)}%</strong> vs last month (${fmtCur(top.prev)} → ${fmtCur(top.current)})` });
-      } else if (top.pct <= -25) {
-        insights.push({ type: 'success', icon: '↓', text: `<strong>${top.category}</strong> spending down <strong>${Math.abs(top.pct).toFixed(0)}%</strong> vs last month — nice!` });
-      }
-    }
-
-    // Savings rate commentary
-    if (summary.income > 0) {
-      if (savingsRate >= 20) {
-        insights.push({ type: 'success', icon: '💰', text: `Saving <strong>${savingsRate.toFixed(0)}%</strong> of income this month — great work!` });
-      } else if (savingsRate < 0) {
-        insights.push({ type: 'danger', icon: '📉', text: `Spending exceeds income by <strong>${fmtCur(Math.abs(summary.net))}</strong> this month` });
-      }
-    }
-
-    // Spending pace
+    const allRows    = allMonthTx.rows || [];
     const dayOfMonth = today.getDate();
     const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    const pace = dayOfMonth > 0 ? (Math.abs(summary.expenses) / dayOfMonth) * daysInMonth : 0;
-    if (pace > 0 && summary.income > 0 && dayOfMonth >= 5 && dayOfMonth <= 25) {
-      const paceVsIncome = (pace / summary.income) * 100;
-      if (paceVsIncome > 110) {
-        insights.push({ type: 'warning', icon: '🔮', text: `At current pace, spending will reach <strong>${fmtCur(pace)}</strong> by month end` });
+
+    // ── Daily Spending Flow (for Chart.js bar chart) ─────────────────────────
+    const dailyExpense = new Array(daysInMonth).fill(0);
+    const dailyIncome  = new Array(daysInMonth).fill(0);
+    allRows.forEach(r => {
+      const day = parseInt(r.date.slice(8, 10), 10);
+      if (day >= 1 && day <= daysInMonth) {
+        if (r.amount < 0) dailyExpense[day - 1] += Math.abs(r.amount);
+        else              dailyIncome[day - 1]  += r.amount;
       }
-    }
-
-    // Limit to 3 most relevant
-    const insightsHtml = insights.length === 0 ? '' : `
-      <div class="card insights-card" style="margin-bottom:16px">
-        <h2 style="margin-bottom:12px">💡 Spending Insights</h2>
-        <div class="insights-list">
-          ${insights.slice(0, 3).map(i => `
-            <div class="insight-row insight-row--${i.type}">
-              <span class="insight-icon">${i.icon}</span>
-              <span class="insight-text">${i.text}</span>
-            </div>`).join('')}
-        </div>
-      </div>`;
-
-    // ── Weekly Digest ─────────────────────────────────────────────────────────
-    const weekAgo = new Date(today);
-    weekAgo.setDate(today.getDate() - 6);
-    const weekStartStr = weekAgo.toISOString().slice(0, 10);
-    const weekEndStr   = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-
-    const allRows  = allMonthTx.rows || [];
-    const weekRows = allRows.filter(r => r.date >= weekStartStr && r.amount < 0);
-    const weekSpent = weekRows.reduce((s, r) => s + Math.abs(r.amount), 0);
-    const weekIncome = allRows.filter(r => r.date >= weekStartStr && r.amount > 0).reduce((s, r) => s + r.amount, 0);
-
-    const weekCatMap = {};
-    weekRows.forEach(r => {
-      const cat = r.category || 'Uncategorized';
-      weekCatMap[cat] = (weekCatMap[cat] || 0) + Math.abs(r.amount);
     });
-    const weekTopCats = Object.entries(weekCatMap).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    const weekBills   = reminders.filter(r => r.due_date >= todayStr && r.due_date <= weekEndStr);
+    const peakDay = dailyExpense.indexOf(Math.max(...dailyExpense)) + 1;
+    const peakAmt = Math.max(...dailyExpense);
+    const spentMTD = dailyExpense.reduce((a, b) => a + b, 0);
+    const avgDaily = dayOfMonth > 0 ? spentMTD / dayOfMonth : 0;
+    const projMonthEnd = avgDaily * daysInMonth;
 
-    const weekDigestHtml = `
-      <details class="card weekly-digest" style="margin-bottom:16px" open>
-        <summary class="weekly-digest-summary">
-          <div class="weekly-digest-title">
-            <span class="weekly-digest-icon">📅</span>
-            <span>This Week</span>
+    // ── Month-over-Month Comparison ──────────────────────────────────────────
+    const deltaPct = (curr, prev) => {
+      if (!prev || prev === 0) return null;
+      return ((curr - prev) / Math.abs(prev)) * 100;
+    };
+    const prevSavingsRate = prevSummary.income > 0
+      ? (prevSummary.net / prevSummary.income) * 100
+      : 0;
+    const momRows = [
+      { label: 'Income',   curr: summary.income,            prev: prevSummary.income,            goodUp: true  },
+      { label: 'Spending', curr: Math.abs(summary.expenses), prev: Math.abs(prevSummary.expenses), goodUp: false },
+      { label: 'Net',      curr: summary.net,               prev: prevSummary.net,               goodUp: true  },
+      { label: 'Savings',  curr: savingsRate,               prev: prevSavingsRate,               goodUp: true, isPct: true }
+    ];
+    const momHtml = momRows.map(r => {
+      const d = deltaPct(r.curr, r.prev);
+      const up = d !== null && d > 0;
+      const flat = d === null || Math.abs(d) < 1;
+      const good = flat ? null : (r.goodUp ? up : !up);
+      const deltaClass = flat ? 'mom-flat' : (good ? 'mom-good' : 'mom-bad');
+      const arrow = flat ? '→' : (up ? '↑' : '↓');
+      const deltaText = d === null ? '—' : `${arrow} ${Math.abs(d).toFixed(0)}%`;
+      const currText = r.isPct ? `${r.curr.toFixed(1)}%` : fmtCur(Math.abs(r.curr)) + (r.label === 'Net' && r.curr < 0 ? ' ▾' : '');
+      return `
+        <div class="mom-row">
+          <div class="mom-label">${r.label}</div>
+          <div class="mom-values">
+            <span class="mom-curr">${currText}</span>
+            <span class="mom-delta ${deltaClass}">${deltaText}</span>
           </div>
-          <div class="weekly-digest-meta">
-            <span class="weekly-digest-total">${fmtCur(weekSpent)} spent</span>
-            ${weekIncome > 0 ? `<span class="weekly-digest-income">+${fmtCur(weekIncome)} in</span>` : ''}
-          </div>
-        </summary>
-        <div class="weekly-digest-body">
-          <div class="weekly-digest-cols">
-            <div class="weekly-col">
-              <div class="weekly-col-title">Top Categories</div>
-              ${weekTopCats.length === 0
-                ? '<p style="color:var(--text-muted);font-size:13px">No expenses this week</p>'
-                : weekTopCats.map(([cat, amt]) => {
-                    const pct = weekSpent > 0 ? (amt / weekSpent * 100) : 0;
-                    return `
-                      <div class="weekly-cat-row">
-                        <div class="weekly-cat-bar-wrap">
-                          <span class="weekly-cat-name">${escHtml(cat)}</span>
-                          <div class="weekly-cat-bar"><div style="width:${pct.toFixed(0)}%;height:100%;background:var(--accent);border-radius:2px;opacity:0.7"></div></div>
-                        </div>
-                        <span class="weekly-cat-amt">${fmtCur(amt)}</span>
-                      </div>`;
-                  }).join('')}
+          <div class="mom-prev">prev ${r.isPct ? r.prev.toFixed(1) + '%' : fmtCur(Math.abs(r.prev))}</div>
+        </div>`;
+    }).join('');
+
+    // ── Top Merchants (by spend this month) ──────────────────────────────────
+    const merchantMap = {};
+    allRows.forEach(r => {
+      if (r.amount >= 0) return;
+      const key = (r.payee || 'Unknown').trim();
+      if (!merchantMap[key]) merchantMap[key] = { payee: key, total: 0, count: 0 };
+      merchantMap[key].total += Math.abs(r.amount);
+      merchantMap[key].count += 1;
+    });
+    const topMerchants = Object.values(merchantMap)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 6);
+    const merchantMax = topMerchants[0]?.total || 1;
+    const merchantsHtml = topMerchants.length === 0
+      ? '<p style="color:var(--text-muted);font-size:13px">No expense data this month.</p>'
+      : topMerchants.map(m => {
+          const pct = (m.total / merchantMax) * 100;
+          return `
+            <div class="merchant-row">
+              <div class="merchant-logo">${typeof payeeLogoHtml === 'function' ? payeeLogoHtml(m.payee, -1) : ''}</div>
+              <div class="merchant-body">
+                <div class="merchant-top">
+                  <span class="merchant-name" title="${escHtml(m.payee)}">${escHtml(m.payee)}</span>
+                  <span class="merchant-amt">${fmtCur(m.total)}</span>
+                </div>
+                <div class="merchant-bar"><div class="merchant-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
+                <div class="merchant-meta">${m.count} transaction${m.count > 1 ? 's' : ''}</div>
+              </div>
+            </div>`;
+        }).join('');
+
+    // ── Largest Transactions (top 5 expenses this month) ─────────────────────
+    const largest = allRows
+      .filter(r => r.amount < 0)
+      .sort((a, b) => a.amount - b.amount)
+      .slice(0, 5);
+    const largestHtml = largest.length === 0
+      ? '<p style="color:var(--text-muted);font-size:13px">No expenses this month.</p>'
+      : largest.map(r => `
+          <div class="largest-row">
+            <div class="largest-left">
+              ${typeof payeeLogoHtml === 'function' ? payeeLogoHtml(r.payee, r.amount) : ''}
+              <div class="largest-body">
+                <div class="largest-name">${escHtml(r.payee)}</div>
+                <div class="largest-meta">${fmtDate(r.date)}${r.category ? ' · ' + escHtml(r.category) : ''}</div>
+              </div>
             </div>
-            <div class="weekly-col">
-              <div class="weekly-col-title">Bills Due This Week</div>
-              ${weekBills.length === 0
-                ? '<p style="color:var(--text-muted);font-size:13px">No bills due this week ✓</p>'
-                : weekBills.map(r => {
-                    const days = Math.round((new Date(r.due_date) - new Date(todayStr)) / 86400000);
-                    const label = days === 0 ? 'Due today' : `in ${days}d`;
-                    return `
-                      <div class="weekly-bill-row">
-                        <div>
-                          <div style="font-size:13px;font-weight:600">${escHtml(r.title)}</div>
-                          <div style="font-size:11px;color:var(--warning)">${label}</div>
-                        </div>
-                        <span style="font-size:13px;color:var(--text-muted)">${r.amount ? fmtCur(Math.abs(r.amount)) : '—'}</span>
-                      </div>`;
-                  }).join('')}
-            </div>
-          </div>
-        </div>
-      </details>`;
+            <div class="largest-amt expense-text">${fmtCur(Math.abs(r.amount))}</div>
+          </div>`).join('');
+
+    // ── Spending by Day of Week ──────────────────────────────────────────────
+    const dowNames  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const dowTotals = new Array(7).fill(0);
+    const dowCounts = new Array(7).fill(0);
+    allRows.forEach(r => {
+      if (r.amount >= 0) return;
+      // Parse date as local to avoid UTC offset bumping Sun→Sat etc.
+      const [y, m, d] = r.date.split('-').map(Number);
+      const dow = new Date(y, m - 1, d).getDay();
+      dowTotals[dow] += Math.abs(r.amount);
+      dowCounts[dow] += 1;
+    });
+    const dowMax = Math.max(...dowTotals, 1);
+    const dowPeakIdx = dowTotals.indexOf(Math.max(...dowTotals));
+    const dowHtml = dowTotals.every(t => t === 0)
+      ? '<p style="color:var(--text-muted);font-size:13px">No expenses this month.</p>'
+      : `<div class="dow-grid">
+          ${dowNames.map((name, i) => {
+            const h = (dowTotals[i] / dowMax) * 100;
+            const isPeak = i === dowPeakIdx && dowTotals[i] > 0;
+            return `
+              <div class="dow-col${isPeak ? ' dow-col--peak' : ''}" title="${name}: ${fmtCur(dowTotals[i])} across ${dowCounts[i]} tx">
+                <div class="dow-amt">${dowTotals[i] > 0 ? fmtCur(dowTotals[i]).replace('.00', '') : ''}</div>
+                <div class="dow-bar-wrap"><div class="dow-bar" style="height:${Math.max(h, 2).toFixed(1)}%"></div></div>
+                <div class="dow-label">${name}</div>
+              </div>`;
+          }).join('')}
+        </div>`;
 
     // Greeting
     const hour = today.getHours();
@@ -622,10 +619,48 @@ const dashboardModule = {
       <!-- Savings rate -->
       ${savingsBar}
 
-      <!-- Insights + Weekly Digest side by side -->
-      <div class="dash-grid dash-grid--insights">
-        ${insightsHtml || '<div></div>'}
-        ${weekDigestHtml}
+      <!-- Daily spending flow (full-width chart) -->
+      <div class="card dash-flow-card" style="margin-bottom:16px">
+        <div class="dash-flow-head">
+          <div>
+            <h2 style="margin-bottom:2px">Daily Spending Flow</h2>
+            <div class="dash-flow-sub">${monthName} · Peak ${peakAmt > 0 ? `${fmtCur(peakAmt)} on day ${peakDay}` : '—'}</div>
+          </div>
+          <div class="dash-flow-stats">
+            <div class="dash-flow-stat">
+              <span class="dash-flow-stat-val">${fmtCur(spentMTD)}</span>
+              <span class="dash-flow-stat-label">MTD</span>
+            </div>
+            <div class="dash-flow-stat">
+              <span class="dash-flow-stat-val">${fmtCur(avgDaily)}</span>
+              <span class="dash-flow-stat-label">Daily avg</span>
+            </div>
+            <div class="dash-flow-stat">
+              <span class="dash-flow-stat-val">${fmtCur(projMonthEnd)}</span>
+              <span class="dash-flow-stat-label">Projected</span>
+            </div>
+          </div>
+        </div>
+        <div class="dash-flow-chart"><canvas id="dash-daily-chart"></canvas></div>
+      </div>
+
+      <!-- Month-over-Month + Top Merchants -->
+      <div class="dash-grid">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <h2 style="margin-bottom:0">vs Last Month</h2>
+            <span style="font-size:11px;color:var(--text-muted);font-weight:600">${monthName}</span>
+          </div>
+          <div class="mom-list">${momHtml}</div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <h2 style="margin-bottom:0">Top Merchants</h2>
+            <a href="#/charts" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">All →</a>
+          </div>
+          ${merchantsHtml}
+        </div>
       </div>
 
       <!-- Bills + Top Spending -->
@@ -666,6 +701,27 @@ const dashboardModule = {
         </div>
       </div>
 
+      <!-- Largest Transactions + Day of Week -->
+      <div class="dash-grid">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <h2 style="margin-bottom:0">Largest This Month</h2>
+            <a href="#/transactions" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">All →</a>
+          </div>
+          <div class="largest-list">${largestHtml}</div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <h2 style="margin-bottom:0">Day of the Week</h2>
+            ${dowPeakIdx >= 0 && dowTotals[dowPeakIdx] > 0
+              ? `<span style="font-size:11px;color:var(--text-muted);font-weight:600">Heaviest: <span style="color:var(--accent);font-weight:700">${dowNames[dowPeakIdx]}</span></span>`
+              : ''}
+          </div>
+          ${dowHtml}
+        </div>
+      </div>
+
       <!-- Budget overview -->
       ${budgetSection}
 
@@ -679,5 +735,62 @@ const dashboardModule = {
       </div>
     </div>
     `;
+
+    // Daily spending chart
+    const canvas = document.getElementById('dash-daily-chart');
+    if (canvas && typeof Chart !== 'undefined') {
+      if (this._dailyChart) this._dailyChart.destroy();
+      const labels = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+      const bg = labels.map(d => d === dayOfMonth ? '#a78bfa' : '#6c8ef5');
+      const border = labels.map(d => d === dayOfMonth ? '#c4b5fd' : 'rgba(108,142,245,0.9)');
+      this._dailyChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Spent',
+            data: dailyExpense.map(n => Number(n.toFixed(2))),
+            backgroundColor: bg,
+            borderColor: border,
+            borderWidth: 0,
+            borderRadius: 4,
+            maxBarThickness: 22
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: items => `Day ${items[0].label}`,
+                label: ctx => {
+                  const d = parseInt(ctx.label, 10) - 1;
+                  const inc = dailyIncome[d] || 0;
+                  const exp = ctx.raw;
+                  return [` Spent  $${exp.toLocaleString('en-US', { minimumFractionDigits: 2 })}`]
+                    .concat(inc > 0 ? [` Income $${inc.toLocaleString('en-US', { minimumFractionDigits: 2 })}`] : []);
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#8892a4', font: { size: 10 }, maxRotation: 0, autoSkip: true, autoSkipPadding: 8 },
+              grid: { display: false }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: {
+                color: '#8892a4', font: { size: 10 },
+                callback: v => v === 0 ? '0' : '$' + (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v)
+              },
+              grid: { color: 'rgba(46,51,80,0.5)' }
+            }
+          }
+        }
+      });
+    }
   }
 };

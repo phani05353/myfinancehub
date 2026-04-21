@@ -1168,76 +1168,144 @@ tr.due-soon td:first-child { color: var(--warning); }
   #fab { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
 }
 
-/* ── SPENDING INSIGHTS ── */
-.insights-list { display: flex; flex-direction: column; gap: 8px; }
-.insight-row {
+/* ── DAILY SPENDING FLOW ── */
+.dash-flow-card { padding-bottom: 12px; }
+.dash-flow-head {
   display: flex;
+  justify-content: space-between;
   align-items: flex-start;
-  gap: 10px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 13.5px;
-  line-height: 1.45;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
 }
-.insight-row--success  { background: rgba(52,211,153,0.08);  border: 1px solid rgba(52,211,153,0.2); }
-.insight-row--warning  { background: rgba(251,191,36,0.08);  border: 1px solid rgba(251,191,36,0.2); }
-.insight-row--danger   { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); }
-.insight-icon { flex-shrink: 0; font-size: 15px; margin-top: 1px; }
-.insight-text { color: var(--text-muted); }
-.insight-text strong { color: var(--text); font-weight: 600; }
+.dash-flow-sub { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+.dash-flow-stats { display: flex; gap: 6px; flex-wrap: wrap; }
+.dash-flow-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 8px 14px;
+  background: var(--surface2);
+  border-radius: 10px;
+  min-width: 82px;
+}
+.dash-flow-stat-val { font-size: 15px; font-weight: 700; color: var(--text); }
+.dash-flow-stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; margin-top: 2px; }
+.dash-flow-chart { height: 220px; }
 
-/* ── WEEKLY DIGEST ── */
-.weekly-digest { padding: 0; overflow: hidden; }
-.weekly-digest-summary {
+@media (max-width: 600px) {
+  .dash-flow-head { flex-direction: column; align-items: stretch; gap: 12px; }
+  .dash-flow-stats { gap: 8px; }
+  .dash-flow-stat { flex: 1; align-items: flex-start; min-width: 0; padding: 7px 10px; }
+  .dash-flow-chart { height: 200px; }
+}
+
+/* ── MONTH-OVER-MONTH ── */
+.mom-list { display: flex; flex-direction: column; gap: 4px; }
+.mom-row {
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.mom-row:last-child { border-bottom: none; }
+.mom-label { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.mom-values { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.mom-curr { font-size: 17px; font-weight: 700; color: var(--text); }
+.mom-delta { font-size: 12px; font-weight: 700; padding: 2px 7px; border-radius: 6px; white-space: nowrap; }
+.mom-good  { color: var(--success); background: rgba(52,211,153,0.12); }
+.mom-bad   { color: var(--danger);  background: rgba(248,113,113,0.12); }
+.mom-flat  { color: var(--text-muted); background: var(--surface2); }
+.mom-prev  { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+
+@media (max-width: 480px) {
+  .mom-row { grid-template-columns: 1fr auto; row-gap: 4px; }
+  .mom-label { grid-column: 1 / -1; font-size: 11px; }
+  .mom-prev  { grid-column: 1 / -1; text-align: right; }
+}
+
+/* ── TOP MERCHANTS ── */
+.merchant-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.merchant-row:last-child { border-bottom: none; }
+.merchant-logo { flex-shrink: 0; }
+.merchant-body { flex: 1; min-width: 0; }
+.merchant-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.merchant-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.merchant-amt { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; }
+.merchant-bar { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+.merchant-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6c8ef5, #a78bfa);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+.merchant-meta { font-size: 10.5px; color: var(--text-muted); margin-top: 3px; font-weight: 500; }
+
+/* ── LARGEST TRANSACTIONS ── */
+.largest-list { display: flex; flex-direction: column; }
+.largest-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
 }
-.weekly-digest-summary::-webkit-details-marker { display: none; }
-.weekly-digest-summary::after {
-  content: '›';
-  font-size: 18px;
-  color: var(--text-muted);
-  transform: rotate(90deg);
-  display: inline-block;
-  transition: transform 0.2s;
-  flex-shrink: 0;
+.largest-row:last-child { border-bottom: none; }
+.largest-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.largest-body { min-width: 0; }
+.largest-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+.largest-meta { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.largest-amt { font-size: 14px; font-weight: 700; margin-left: 12px; white-space: nowrap; }
+
+/* ── DAY OF WEEK ── */
+.dow-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  height: 180px;
+  align-items: stretch;
 }
-.weekly-digest[open] .weekly-digest-summary::after { transform: rotate(270deg); }
-.weekly-digest-title {
+.dow-col {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  font-size: 16px;
-  font-weight: 700;
+  gap: 6px;
 }
-.weekly-digest-icon { font-size: 17px; }
-.weekly-digest-meta { display: flex; align-items: center; gap: 10px; margin-right: 10px; }
-.weekly-digest-total { font-size: 15px; font-weight: 700; color: var(--danger); }
-.weekly-digest-income { font-size: 13px; font-weight: 600; color: var(--success); }
-.weekly-digest-body { padding: 0 20px 18px; border-top: 1px solid var(--border); padding-top: 16px; }
-.weekly-digest-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.weekly-col-title { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
-.weekly-cat-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.weekly-cat-bar-wrap { flex: 1; min-width: 0; }
-.weekly-cat-name { font-size: 12px; font-weight: 500; color: var(--text); display: block; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.weekly-cat-bar { height: 4px; background: var(--surface2); border-radius: 2px; }
-.weekly-cat-amt { font-size: 12px; font-weight: 600; color: var(--text-muted); flex-shrink: 0; white-space: nowrap; }
-.weekly-bill-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
-.weekly-bill-row:last-child { border-bottom: none; }
-
-@media (max-width: 600px) {
-  .weekly-digest-cols { grid-template-columns: 1fr; gap: 16px; }
+.dow-amt { font-size: 10px; color: var(--text-muted); font-weight: 600; min-height: 14px; white-space: nowrap; }
+.dow-bar-wrap {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: linear-gradient(180deg, transparent, rgba(108,142,245,0.03));
+  border-radius: 6px;
 }
+.dow-bar {
+  width: 72%;
+  background: linear-gradient(180deg, #6c8ef5, #4a6cd4);
+  border-radius: 6px 6px 2px 2px;
+  transition: height 0.5s ease;
+  min-height: 4px;
+}
+.dow-col--peak .dow-bar { background: linear-gradient(180deg, #a78bfa, #7c5cf0); box-shadow: 0 0 12px rgba(167,139,250,0.45); }
+.dow-col--peak .dow-amt { color: var(--accent2); }
+.dow-label { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+.dow-col--peak .dow-label { color: var(--text); }
 
-/* When the weekly digest sits in the side-by-side insights row, stack its inner cols */
-.dash-grid--insights .weekly-digest-cols { grid-template-columns: 1fr; gap: 14px; }
-.dash-grid--insights { align-items: start; }
+@media (max-width: 480px) {
+  .dow-grid { height: 150px; gap: 4px; }
+  .dow-amt { font-size: 9px; }
+  .dow-label { font-size: 10px; }
+}
 
 /* ── RULES ENGINE ── */
 .rule-row {
