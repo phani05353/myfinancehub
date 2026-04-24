@@ -262,16 +262,15 @@ const dashboardModule = {
     const today = new Date();
     const currentMonth = today.toISOString().slice(0, 7);
     const todayStr = today.toISOString().slice(0, 10);
-    const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1).toISOString().slice(0, 7);
 
-    const [summary, prevSummary, reminders, subs, byCategory, allMonthTx, budgetStatus] = await Promise.all([
+    const [summary, reminders, subs, byCategory, allMonthTx, budgetStatus, trend] = await Promise.all([
       api(`/api/transactions/summary?month=${currentMonth}`),
-      api(`/api/transactions/summary?month=${prevMonth}`).catch(() => ({ income: 0, expenses: 0, net: 0 })),
       api('/api/reminders?paid=0&upcoming_days=30'),
       api('/api/subscriptions?active=1'),
       api(`/api/charts/category-breakdown?month=${currentMonth}`),
       api(`/api/transactions?limit=500&month=${currentMonth}`),
-      api(`/api/budgets/status?month=${currentMonth}`).catch(() => [])
+      api(`/api/budgets/status?month=${currentMonth}`).catch(() => []),
+      api('/api/charts/spending-trend?months=6').catch(() => [])
     ]);
     const recentTx = { rows: (allMonthTx.rows || []).slice(0, 5) };
 
@@ -322,39 +321,210 @@ const dashboardModule = {
         </div>
       </div>` : '';
 
-    // Top categories — radial dials
+    // Expense Categories — donut + legend (top 5 + "N Others")
+    const CAT_PALETTE = ['#b45c32','#7fc68a','#f4a055','#ec85b5','#e26b6b','#8a6bd6','#5cb3f2','#d99b4a'];
     const catTotal = byCategory.reduce((s, c) => s + c.total, 0);
-    const CAT_PALETTE = ['#6c8ef5','#a78bfa','#34d399','#fbbf24','#f87171','#60a5fa'];
-    const R = 32, CIRC = 2 * Math.PI * R;
-    const catList = byCategory.length === 0
+    const catTop = byCategory.slice(0, 5);
+    const catOthers = byCategory.slice(5);
+    const othersSum = catOthers.reduce((s, c) => s + c.total, 0);
+    const donutSegments = catTop.map((c, i) => ({
+      name: c.category || 'Uncategorized',
+      total: c.total,
+      color: CAT_PALETTE[i % CAT_PALETTE.length]
+    }));
+    if (othersSum > 0) {
+      donutSegments.push({
+        name: `${catOthers.length} Other${catOthers.length > 1 ? 's' : ''}`,
+        total: othersSum,
+        color: CAT_PALETTE[5]
+      });
+    }
+    const donutLegendHtml = donutSegments.map(s => {
+      const pct = catTotal > 0 ? (s.total / catTotal * 100) : 0;
+      return `
+        <li class="donut-legend-row">
+          <span class="donut-legend-dot" style="background:${s.color}"></span>
+          <span class="donut-legend-name">${escHtml(s.name)}</span>
+          <span class="donut-legend-pct">${pct.toFixed(0)}%</span>
+        </li>`;
+    }).join('');
+    const catDonutBlock = byCategory.length === 0
       ? '<p style="color:var(--text-muted);font-size:13px">No expense data this month.</p>'
-      : `<div class="cat-dials">` + byCategory.slice(0, 6).map((c, i) => {
-          const pct     = catTotal > 0 ? (c.total / catTotal * 100) : 0;
-          const offset  = CIRC * (1 - pct / 100);
-          const color   = CAT_PALETTE[i % CAT_PALETTE.length];
-          const name    = (c.category || 'Uncategorized');
-          const short   = name.length > 11 ? name.slice(0, 10) + '…' : name;
-          return `
-            <div class="cat-dial-item">
-              <div class="cat-dial-ring">
-                <svg viewBox="0 0 80 80" width="80" height="80">
-                  <circle cx="40" cy="40" r="${R}" fill="none" stroke="var(--surface2)" stroke-width="7"/>
-                  <circle cx="40" cy="40" r="${R}" fill="none" stroke="${color}" stroke-width="7"
-                    stroke-linecap="round"
-                    stroke-dasharray="${CIRC.toFixed(2)}"
-                    stroke-dashoffset="${offset.toFixed(2)}"
-                    transform="rotate(-90 40 40)"
-                    style="transition:stroke-dashoffset 0.6s ease"/>
-                  <text x="40" y="44" text-anchor="middle"
-                    style="fill:${color};font-size:13px;font-weight:800;font-family:system-ui">
-                    ${pct.toFixed(0)}%
-                  </text>
-                </svg>
-              </div>
-              <div class="cat-dial-label" title="${escHtml(name)}">${escHtml(short)}</div>
-              <div class="cat-dial-amount" style="color:${color}">${fmtCur(c.total)}</div>
-            </div>`;
-        }).join('') + `</div>`;
+      : `
+        <div class="donut-wrap">
+          <div class="donut-canvas-wrap">
+            <canvas id="dash-category-donut"></canvas>
+            <div class="donut-center">
+              <div class="donut-center-amt">${fmtCur(catTotal).replace('.00', '')}</div>
+              <div class="donut-center-label">This Month</div>
+            </div>
+          </div>
+          <ul class="donut-legend">${donutLegendHtml}</ul>
+        </div>`;
+
+    // ── Sankey: income sources → Income → expense categories ───────────────
+    const sankeyData = (() => {
+      const incomeByPayee = {};
+      allMonthTx.rows?.forEach(r => {
+        if (r.amount > 0) {
+          const key = r.payee || 'Unknown';
+          incomeByPayee[key] = (incomeByPayee[key] || 0) + r.amount;
+        }
+      });
+      const incomeList = Object.entries(incomeByPayee)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value);
+
+      const expenseList = byCategory.slice().sort((a, b) => b.total - a.total)
+        .map(c => ({ name: c.category || 'Uncategorized', value: c.total }));
+
+      const totalIn  = incomeList.reduce((s, n) => s + n.value, 0);
+      const totalOut = expenseList.reduce((s, n) => s + n.value, 0);
+      return { incomeList, expenseList, totalIn, totalOut };
+    })();
+
+    const buildSankeySvg = () => {
+      const { incomeList, expenseList, totalIn, totalOut } = sankeyData;
+      if (totalIn === 0 && totalOut === 0) {
+        return '<div class="sankey-empty">No cash flow data this month.</div>';
+      }
+
+      const SOURCE_COLORS = ['#5cb3f2','#4a7dd4','#6c8ef5','#8a6bd6','#a78bfa','#7fc68a','#d99b4a'];
+      const MAX_SRC = 5, MAX_CAT = 8;
+      let sources = incomeList.slice(0, MAX_SRC);
+      if (incomeList.length > MAX_SRC) {
+        const rest = incomeList.slice(MAX_SRC).reduce((s, n) => s + n.value, 0);
+        if (rest > 0) sources.push({ name: `${incomeList.length - MAX_SRC} Other`, value: rest });
+      }
+      sources = sources.map((s, i) => ({ ...s, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }));
+
+      let cats = expenseList.slice(0, MAX_CAT).map((c, i) => ({
+        ...c, color: CAT_PALETTE[i % CAT_PALETTE.length]
+      }));
+      if (expenseList.length > MAX_CAT) {
+        const rest = expenseList.slice(MAX_CAT).reduce((s, n) => s + n.value, 0);
+        if (rest > 0) cats.push({ name: `${expenseList.length - MAX_CAT} Other`, value: rest, color: CAT_PALETTE[6] });
+      }
+
+      // Balance sides: add Savings on right if surplus, Deficit on left if shortfall
+      const savings = Math.max(0, totalIn - totalOut);
+      const deficit = Math.max(0, totalOut - totalIn);
+      const rightNodes = [
+        ...cats,
+        ...(savings > 0 ? [{ name: 'Savings', value: savings, color: '#7fc68a' }] : [])
+      ];
+      if (deficit > 0) sources.push({ name: 'Deficit', value: deficit, color: '#e26b6b' });
+
+      // Handle case where only one side has data
+      if (sources.length === 0) sources = [{ name: 'No income', value: rightNodes.reduce((s, n) => s + n.value, 0) || 1, color: '#6c8ef5' }];
+      if (rightNodes.length === 0) return '<div class="sankey-empty">No expenses this month.</div>';
+
+      const leftTotal  = sources.reduce((s, n) => s + n.value, 0);
+      const rightTotal = rightNodes.reduce((s, n) => s + n.value, 0);
+      const grandTotal = Math.max(leftTotal, rightTotal);
+
+      const W = 820, H = 440;
+      const padTop = 18, padBot = 18;
+      const availH = H - padTop - padBot;
+      const gap = 4;
+      const nodeW = 12;
+
+      // Unified scale — nodes + ribbons on both columns use the same px-per-$
+      const gapsMax = Math.max((sources.length - 1), (rightNodes.length - 1)) * gap;
+      const scale = grandTotal > 0 ? (availH - gapsMax) / grandTotal : 0;
+
+      const leftX  = 150;
+      const midX   = W / 2 - nodeW / 2;
+      const rightX = W - 150 - nodeW;
+
+      let ly = padTop;
+      sources.forEach(n => { n.height = n.value * scale; n.y = ly; ly += n.height + gap; });
+
+      const midHeight = grandTotal * scale;
+      const midY = padTop;
+
+      let ry = padTop;
+      rightNodes.forEach(n => { n.height = n.value * scale; n.y = ry; ry += n.height + gap; });
+
+      // Stack sub-flows inside the middle node (no gaps on middle — flows pool together)
+      let mlc = midY;
+      sources.forEach(s => { s.midH = s.height; s.midY = mlc; mlc += s.midH; });
+      let mrc = midY;
+      rightNodes.forEach(n => { n.midH = n.height; n.midY = mrc; mrc += n.midH; });
+
+      const flowPath = (x1, yTop1, yBot1, x2, yTop2, yBot2) => {
+        const cx = (x1 + x2) / 2;
+        return `M ${x1} ${yTop1} C ${cx} ${yTop1} ${cx} ${yTop2} ${x2} ${yTop2} L ${x2} ${yBot2} C ${cx} ${yBot2} ${cx} ${yBot1} ${x1} ${yBot1} Z`;
+      };
+
+      const leftFlows = sources.map(s => `
+        <path class="sankey-flow" fill="${s.color}" d="${flowPath(leftX + nodeW, s.y, s.y + s.height, midX, s.midY, s.midY + s.midH)}">
+          <title>${escHtml(s.name)}: ${fmtCur(s.value)}</title>
+        </path>`).join('');
+
+      const rightFlows = rightNodes.map(n => `
+        <path class="sankey-flow" fill="${n.color}" d="${flowPath(midX + nodeW, n.midY, n.midY + n.midH, rightX, n.y, n.y + n.height)}">
+          <title>${escHtml(n.name)}: ${fmtCur(n.value)}</title>
+        </path>`).join('');
+
+      const labelFor = (node, side, total) => {
+        const pct = total > 0 ? (node.value / total * 100).toFixed(1) : '0';
+        const amt = fmtCur(node.value).replace('.00', '');
+        const cy  = node.y + node.height / 2;
+        const tx  = side === 'left' ? leftX - 10 : rightX + nodeW + 10;
+        const anchor = side === 'left' ? 'end' : 'start';
+        return `
+          <text class="sankey-node-label" x="${tx}" y="${(cy - 4).toFixed(1)}" text-anchor="${anchor}">${escHtml(node.name)}</text>
+          <text class="sankey-node-label sankey-node-label--amt" x="${tx}" y="${(cy + 10).toFixed(1)}" text-anchor="${anchor}">${amt} (${pct}%)</text>`;
+      };
+
+      const leftNodesSvg = sources.map(n => `
+        <rect class="sankey-node" x="${leftX}" y="${n.y}" width="${nodeW}" height="${n.height}" fill="${n.color}" rx="2"/>
+        ${labelFor(n, 'left', totalIn)}`).join('');
+
+      const midLabel = `
+        <text class="sankey-node-label" x="${midX + nodeW / 2}" y="${midY + midHeight / 2 - 4}" text-anchor="middle">Income</text>
+        <text class="sankey-node-label sankey-node-label--amt" x="${midX + nodeW / 2}" y="${midY + midHeight / 2 + 10}" text-anchor="middle">${fmtCur(totalIn).replace('.00', '')} (100%)</text>`;
+      const midNodeSvg = `
+        <rect class="sankey-node" x="${midX}" y="${midY}" width="${nodeW}" height="${midHeight}" fill="#5cb3f2" rx="2"/>
+        ${midLabel}`;
+
+      const rightNodesSvg = rightNodes.map(n => `
+        <rect class="sankey-node" x="${rightX}" y="${n.y}" width="${nodeW}" height="${n.height}" fill="${n.color}" rx="2"/>
+        ${labelFor(n, 'right', rightTotal)}`).join('');
+
+      return `<svg class="sankey-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <filter id="sankey-glow">
+            <feGaussianBlur stdDeviation="2"/>
+          </filter>
+        </defs>
+        ${leftFlows}
+        ${rightFlows}
+        ${leftNodesSvg}
+        ${midNodeSvg}
+        ${rightNodesSvg}
+      </svg>`;
+    };
+    const sankeySvgHtml = buildSankeySvg();
+    const sankeyRangeLabel = monthName.toUpperCase();
+
+    // Cash Flow (6-month trend)
+    const trendRows = Array.isArray(trend) ? trend : [];
+    const flowIncome  = trendRows.map(r => Number(r.income) || 0);
+    const flowExpense = trendRows.map(r => Number(r.expenses) || 0);
+    const flowNet     = flowIncome.map((v, i) => v - flowExpense[i]);
+    const totalIncome   = flowIncome.reduce((a, b) => a + b, 0);
+    const totalExpenses = flowExpense.reduce((a, b) => a + b, 0);
+    const netCashFlow   = totalIncome - totalExpenses;
+    const cashPerMonth  = trendRows.length > 0 ? netCashFlow / trendRows.length : 0;
+    const flowLabels = trendRows.map(r => {
+      const [y, m] = r.month.split('-');
+      return new Date(Number(y), Number(m) - 1, 1).toLocaleString('default', { month: 'short' });
+    });
+    const flowRangeLabel = trendRows.length > 0
+      ? `${flowLabels[0]} – Current`
+      : '—';
 
     // Recent transactions
     const txRows = (recentTx.rows || []);
@@ -372,42 +542,75 @@ const dashboardModule = {
             <div style="font-size:14px;white-space:nowrap;margin-left:12px">${fmt(r.amount)}</div>
           </div>`).join('');
 
-    // Budget overview section
+    // Budget overview — colored icon rows
+    const BUDGET_ICONS = {
+      food:         { emoji: '🍽', bg: '#f2994a' },
+      groceries:    { emoji: '🛒', bg: '#f2994a' },
+      dining:       { emoji: '🍽', bg: '#f2994a' },
+      transport:    { emoji: '🚗', bg: '#e26b6b' },
+      auto:         { emoji: '🚗', bg: '#e26b6b' },
+      gas:          { emoji: '⛽', bg: '#e26b6b' },
+      household:    { emoji: '🏠', bg: '#b45c32' },
+      home:         { emoji: '🏠', bg: '#b45c32' },
+      rent:         { emoji: '🏠', bg: '#b45c32' },
+      health:       { emoji: '⚕', bg: '#ec85b5' },
+      medical:      { emoji: '⚕', bg: '#ec85b5' },
+      entertainment:{ emoji: '🎬', bg: '#7fc68a' },
+      shopping:     { emoji: '🛍', bg: '#a78bfa' },
+      travel:       { emoji: '✈', bg: '#60a5fa' },
+      utilities:    { emoji: '⚡', bg: '#fbbf24' },
+      subscriptions:{ emoji: '🔁', bg: '#a78bfa' },
+      drinks:       { emoji: '🍺', bg: '#f2994a' }
+    };
+    const pickBudgetIcon = (name) => {
+      const lower = (name || '').toLowerCase();
+      for (const key of Object.keys(BUDGET_ICONS)) {
+        if (lower.includes(key)) return BUDGET_ICONS[key];
+      }
+      return { emoji: (name || '?').trim().charAt(0).toUpperCase(), bg: '#6c8ef5' };
+    };
     const budgetSection = budgetStatus.length === 0 ? '' : (() => {
       const sorted = [...budgetStatus].sort((a, b) => (b.spent / b.budget) - (a.spent / a.budget));
+      const totalBudget = budgetStatus.reduce((s, b) => s + b.budget, 0);
+      const totalSpent  = budgetStatus.reduce((s, b) => s + b.spent, 0);
+      const totalPct    = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
       const rows = sorted.slice(0, 6).map(b => {
-        const pct      = b.budget > 0 ? b.spent / b.budget * 100 : 0;
-        const barPct   = Math.min(100, pct);
-        const color    = pct > 100 ? 'var(--danger)' : pct >= 80 ? 'var(--warning)' : 'var(--success)';
-        const over     = b.spent > b.budget;
-        const label    = over ? `${fmtCur(b.spent - b.budget)} over` : `${fmtCur(b.budget - b.spent)} left`;
-        const labelCol = pct > 100 ? 'var(--danger)' : pct >= 80 ? 'var(--warning)' : 'var(--success)';
+        const pct    = b.budget > 0 ? b.spent / b.budget * 100 : 0;
+        const barPct = Math.min(100, pct);
+        const over   = b.spent > b.budget;
+        const icon   = pickBudgetIcon(b.category);
+        const fillColor = over ? '#e26b6b' : pct >= 80 ? '#f4a055' : icon.bg;
         return `
-          <div class="dash-budget-item">
-            <div class="dash-budget-item-top">
-              <span class="dash-budget-name">${escHtml(b.category)}</span>
-              <span class="dash-budget-amounts">${fmtCur(b.spent)} <span class="dash-budget-of">of ${fmtCur(b.budget)}</span></span>
-            </div>
-            <div class="dash-budget-bar-wrap">
-              <div class="dash-budget-bar-fill" style="width:${barPct.toFixed(1)}%;background:${color}"></div>
-            </div>
-            <div class="dash-budget-item-bot">
-              <span class="dash-budget-pct" style="color:${color}">${pct.toFixed(0)}%</span>
-              <span class="dash-budget-status" style="color:${labelCol}">${label}</span>
+          <div class="bdg-row">
+            <div class="bdg-icon" style="background:${icon.bg}">${icon.emoji}</div>
+            <div class="bdg-body">
+              <div class="bdg-top">
+                <span class="bdg-name">${escHtml(b.category)}</span>
+                <span class="bdg-pct" style="color:${over ? '#e26b6b' : 'var(--text-muted)'}">${pct.toFixed(1)}%</span>
+              </div>
+              <div class="bdg-bar"><div class="bdg-bar-fill" style="width:${barPct.toFixed(1)}%;background:${fillColor}"></div></div>
+              <div class="bdg-meta">${fmtCur(b.spent)} of ${fmtCur(b.budget)}</div>
             </div>
           </div>`;
       }).join('');
       const overCount = budgetStatus.filter(b => b.spent > b.budget).length;
       return `
-        <div class="card" style="margin-bottom:16px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-            <h2 style="margin-bottom:0">Budget Overview</h2>
-            <div style="display:flex;align-items:center;gap:12px">
-              ${overCount > 0 ? `<span class="badge badge-red">⚠ ${overCount} over limit</span>` : '<span style="font-size:12px;color:var(--success);font-weight:600">✓ All on track</span>'}
-              <a href="#/budget" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">Manage →</a>
-            </div>
+        <div class="card bdg-card" style="margin-bottom:16px">
+          <div class="bdg-head">
+            <h2 style="margin-bottom:0">Budget</h2>
+            ${overCount > 0
+              ? `<span class="badge badge-red">⚠ ${overCount} over limit</span>`
+              : '<a href="#/budget" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">Manage →</a>'}
           </div>
-          <div class="dash-budget-grid">${rows}</div>
+          <div class="bdg-total">
+            <div class="bdg-total-top">
+              <span class="bdg-total-label">Total Budget</span>
+              <span class="bdg-total-amounts">${fmtCur(totalSpent)} <span style="color:var(--text-muted)">of ${fmtCur(totalBudget)}</span></span>
+            </div>
+            <div class="bdg-bar bdg-bar--total"><div class="bdg-bar-fill" style="width:${Math.min(100, totalPct).toFixed(1)}%;background:linear-gradient(90deg,#8a6bd6,#a78bfa)"></div></div>
+            <div class="bdg-total-pct">${totalPct.toFixed(1)}%</div>
+          </div>
+          <div class="bdg-grid">${rows}</div>
           ${budgetStatus.length > 6 ? `<div style="margin-top:14px"><a href="#/budget" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">View all ${budgetStatus.length} →</a></div>` : ''}
         </div>`;
     })();
@@ -415,87 +618,6 @@ const dashboardModule = {
     const allRows    = allMonthTx.rows || [];
     const dayOfMonth = today.getDate();
     const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-
-    // ── Daily Spending Flow (for Chart.js bar chart) ─────────────────────────
-    const dailyExpense = new Array(daysInMonth).fill(0);
-    const dailyIncome  = new Array(daysInMonth).fill(0);
-    allRows.forEach(r => {
-      const day = parseInt(r.date.slice(8, 10), 10);
-      if (day >= 1 && day <= daysInMonth) {
-        if (r.amount < 0) dailyExpense[day - 1] += Math.abs(r.amount);
-        else              dailyIncome[day - 1]  += r.amount;
-      }
-    });
-    const peakDay = dailyExpense.indexOf(Math.max(...dailyExpense)) + 1;
-    const peakAmt = Math.max(...dailyExpense);
-    const spentMTD = dailyExpense.reduce((a, b) => a + b, 0);
-    const avgDaily = dayOfMonth > 0 ? spentMTD / dayOfMonth : 0;
-    const projMonthEnd = avgDaily * daysInMonth;
-
-    // ── Month-over-Month Comparison ──────────────────────────────────────────
-    const deltaPct = (curr, prev) => {
-      if (!prev || prev === 0) return null;
-      return ((curr - prev) / Math.abs(prev)) * 100;
-    };
-    const prevSavingsRate = prevSummary.income > 0
-      ? (prevSummary.net / prevSummary.income) * 100
-      : 0;
-    const momRows = [
-      { label: 'Income',   curr: summary.income,            prev: prevSummary.income,            goodUp: true  },
-      { label: 'Spending', curr: Math.abs(summary.expenses), prev: Math.abs(prevSummary.expenses), goodUp: false },
-      { label: 'Net',      curr: summary.net,               prev: prevSummary.net,               goodUp: true  },
-      { label: 'Savings',  curr: savingsRate,               prev: prevSavingsRate,               goodUp: true, isPct: true }
-    ];
-    const momHtml = momRows.map(r => {
-      const d = deltaPct(r.curr, r.prev);
-      const up = d !== null && d > 0;
-      const flat = d === null || Math.abs(d) < 1;
-      const good = flat ? null : (r.goodUp ? up : !up);
-      const deltaClass = flat ? 'mom-flat' : (good ? 'mom-good' : 'mom-bad');
-      const arrow = flat ? '→' : (up ? '↑' : '↓');
-      const deltaText = d === null ? '—' : `${arrow} ${Math.abs(d).toFixed(0)}%`;
-      const currText = r.isPct ? `${r.curr.toFixed(1)}%` : fmtCur(Math.abs(r.curr)) + (r.label === 'Net' && r.curr < 0 ? ' ▾' : '');
-      return `
-        <div class="mom-row">
-          <div class="mom-label">${r.label}</div>
-          <div class="mom-values">
-            <span class="mom-curr">${currText}</span>
-            <span class="mom-delta ${deltaClass}">${deltaText}</span>
-          </div>
-          <div class="mom-prev">prev ${r.isPct ? r.prev.toFixed(1) + '%' : fmtCur(Math.abs(r.prev))}</div>
-        </div>`;
-    }).join('');
-
-    // ── Top Merchants (by spend this month) ──────────────────────────────────
-    const merchantMap = {};
-    allRows.forEach(r => {
-      if (r.amount >= 0) return;
-      const key = (r.payee || 'Unknown').trim();
-      if (!merchantMap[key]) merchantMap[key] = { payee: key, total: 0, count: 0 };
-      merchantMap[key].total += Math.abs(r.amount);
-      merchantMap[key].count += 1;
-    });
-    const topMerchants = Object.values(merchantMap)
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 6);
-    const merchantMax = topMerchants[0]?.total || 1;
-    const merchantsHtml = topMerchants.length === 0
-      ? '<p style="color:var(--text-muted);font-size:13px">No expense data this month.</p>'
-      : topMerchants.map(m => {
-          const pct = (m.total / merchantMax) * 100;
-          return `
-            <div class="merchant-row">
-              <div class="merchant-logo">${typeof payeeLogoHtml === 'function' ? payeeLogoHtml(m.payee, -1) : ''}</div>
-              <div class="merchant-body">
-                <div class="merchant-top">
-                  <span class="merchant-name" title="${escHtml(m.payee)}">${escHtml(m.payee)}</span>
-                  <span class="merchant-amt">${fmtCur(m.total)}</span>
-                </div>
-                <div class="merchant-bar"><div class="merchant-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
-                <div class="merchant-meta">${m.count} transaction${m.count > 1 ? 's' : ''}</div>
-              </div>
-            </div>`;
-        }).join('');
 
     // ── Largest Transactions (top 5 expenses this month) ─────────────────────
     const largest = allRows
@@ -619,86 +741,83 @@ const dashboardModule = {
       <!-- Savings rate -->
       ${savingsBar}
 
-      <!-- Daily spending flow (full-width chart) -->
-      <div class="card dash-flow-card" style="margin-bottom:16px">
-        <div class="dash-flow-head">
-          <div>
-            <h2 style="margin-bottom:2px">Daily Spending Flow</h2>
-            <div class="dash-flow-sub">${monthName} · Peak ${peakAmt > 0 ? `${fmtCur(peakAmt)} on day ${peakDay}` : '—'}</div>
+      <!-- Expense Categories donut + Cash Flow -->
+      <div class="dash-grid dash-grid--analytics">
+        <div class="card dash-cat-card">
+          <div class="dash-card-head">
+            <h2>Expense Categories</h2>
           </div>
-          <div class="dash-flow-stats">
-            <div class="dash-flow-stat">
-              <span class="dash-flow-stat-val">${fmtCur(spentMTD)}</span>
-              <span class="dash-flow-stat-label">MTD</span>
-            </div>
-            <div class="dash-flow-stat">
-              <span class="dash-flow-stat-val">${fmtCur(avgDaily)}</span>
-              <span class="dash-flow-stat-label">Daily avg</span>
-            </div>
-            <div class="dash-flow-stat">
-              <span class="dash-flow-stat-val">${fmtCur(projMonthEnd)}</span>
-              <span class="dash-flow-stat-label">Projected</span>
-            </div>
-          </div>
-        </div>
-        <div class="dash-flow-chart"><canvas id="dash-daily-chart"></canvas></div>
-      </div>
-
-      <!-- Month-over-Month + Top Merchants -->
-      <div class="dash-grid">
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-            <h2 style="margin-bottom:0">vs Last Month</h2>
-            <span style="font-size:11px;color:var(--text-muted);font-weight:600">${monthName}</span>
-          </div>
-          <div class="mom-list">${momHtml}</div>
+          ${catDonutBlock}
         </div>
 
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-            <h2 style="margin-bottom:0">Top Merchants</h2>
-            <a href="#/charts" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">All →</a>
+        <div class="card dash-flow-card">
+          <div class="dash-card-head">
+            <h2>Cash Flow</h2>
+            <span class="dash-flow-range">${flowRangeLabel}</span>
           </div>
-          ${merchantsHtml}
-        </div>
-      </div>
-
-      <!-- Bills + Top Spending -->
-      <div class="dash-grid">
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-            <h2 style="margin-bottom:0">Upcoming Bills</h2>
-            ${overdueReminders.length > 0
-              ? `<span class="badge badge-red">⚠ ${overdueReminders.length} overdue</span>`
-              : '<span style="font-size:12px;color:var(--success);font-weight:600">✓ All clear</span>'}
-          </div>
-          ${reminders.length === 0
-            ? '<p style="color:var(--text-muted);font-size:13px">No upcoming bills in the next 30 days.</p>'
-            : reminders.slice(0, 6).map(r => {
-                const overdue = r.due_date < todayStr;
-                const daysUntil = Math.round((new Date(r.due_date) - new Date(todayStr)) / 86400000);
-                const dueLabel = overdue ? `${Math.abs(daysUntil)}d overdue` : daysUntil === 0 ? 'Due today' : `in ${daysUntil}d`;
-                return `
-                  <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-                    <div style="display:flex;align-items:center;gap:10px">
-                      <div style="width:8px;height:8px;border-radius:50%;background:${overdue ? 'var(--danger)' : daysUntil <= 3 ? 'var(--warning)' : 'var(--success)'};flex-shrink:0"></div>
-                      <div>
-                        <div style="font-size:13px;font-weight:600">${escHtml(r.title)}</div>
-                        <div style="font-size:11px;color:${overdue ? 'var(--danger)' : 'var(--text-muted)'};font-weight:${overdue ? '600' : '400'}">${dueLabel}</div>
-                      </div>
-                    </div>
-                    <div style="font-size:13px;font-weight:600;color:var(--text-muted)">${r.amount ? fmtCur(Math.abs(r.amount)) : '—'}</div>
-                  </div>`;
-              }).join('')
+          ${trendRows.length === 0
+            ? '<p style="color:var(--text-muted);font-size:13px">No trend data yet.</p>'
+            : `
+              <div class="flow-chart"><canvas id="dash-cash-flow"></canvas></div>
+              <div class="flow-stats">
+                <div class="flow-stat">
+                  <span class="flow-stat-label">Total income</span>
+                  <span class="flow-stat-val">${fmtCur(totalIncome).replace('.00','')}</span>
+                </div>
+                <div class="flow-stat">
+                  <span class="flow-stat-label">Total expenses</span>
+                  <span class="flow-stat-val">${fmtCur(totalExpenses).replace('.00','')}</span>
+                </div>
+                <div class="flow-stat">
+                  <span class="flow-stat-label">Net cash flow</span>
+                  <span class="flow-stat-val ${netCashFlow >= 0 ? 'flow-stat-pos' : 'flow-stat-neg'}">${fmtCur(netCashFlow).replace('.00','')}</span>
+                </div>
+                <div class="flow-stat">
+                  <span class="flow-stat-label">Cash flow / mo</span>
+                  <span class="flow-stat-val">${fmtCur(cashPerMonth).replace('.00','')}</span>
+                </div>
+              </div>`
           }
-          ${reminders.length > 6 ? `<div style="margin-top:12px"><a href="#/reminders" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">View all ${reminders.length} →</a></div>` : ''}
         </div>
+      </div>
 
-        <div class="card">
-          <h2 style="margin-bottom:16px">Top Spending This Month</h2>
-          ${catList}
-          ${byCategory.length > 0 ? `<div style="margin-top:14px"><a href="#/charts" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">Full breakdown →</a></div>` : ''}
+      <!-- Sankey cash flow -->
+      <div class="card sankey-card" style="margin-bottom:16px">
+        <div class="dash-card-head">
+          <h2>Where Money Flows</h2>
+          <span class="sankey-range">${sankeyRangeLabel}</span>
         </div>
+        <div class="sankey-wrap">${sankeySvgHtml}</div>
+      </div>
+
+      <!-- Bills -->
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h2 style="margin-bottom:0">Upcoming Bills</h2>
+          ${overdueReminders.length > 0
+            ? `<span class="badge badge-red">⚠ ${overdueReminders.length} overdue</span>`
+            : '<span style="font-size:12px;color:var(--success);font-weight:600">✓ All clear</span>'}
+        </div>
+        ${reminders.length === 0
+          ? '<p style="color:var(--text-muted);font-size:13px">No upcoming bills in the next 30 days.</p>'
+          : reminders.slice(0, 6).map(r => {
+              const overdue = r.due_date < todayStr;
+              const daysUntil = Math.round((new Date(r.due_date) - new Date(todayStr)) / 86400000);
+              const dueLabel = overdue ? `${Math.abs(daysUntil)}d overdue` : daysUntil === 0 ? 'Due today' : `in ${daysUntil}d`;
+              return `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <div style="width:8px;height:8px;border-radius:50%;background:${overdue ? 'var(--danger)' : daysUntil <= 3 ? 'var(--warning)' : 'var(--success)'};flex-shrink:0"></div>
+                    <div>
+                      <div style="font-size:13px;font-weight:600">${escHtml(r.title)}</div>
+                      <div style="font-size:11px;color:${overdue ? 'var(--danger)' : 'var(--text-muted)'};font-weight:${overdue ? '600' : '400'}">${dueLabel}</div>
+                    </div>
+                  </div>
+                  <div style="font-size:13px;font-weight:600;color:var(--text-muted)">${r.amount ? fmtCur(Math.abs(r.amount)) : '—'}</div>
+                </div>`;
+            }).join('')
+        }
+        ${reminders.length > 6 ? `<div style="margin-top:12px"><a href="#/reminders" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">View all ${reminders.length} →</a></div>` : ''}
       </div>
 
       <!-- Largest Transactions + Day of Week -->
@@ -736,26 +855,80 @@ const dashboardModule = {
     </div>
     `;
 
-    // Daily spending chart
-    const canvas = document.getElementById('dash-daily-chart');
-    if (canvas && typeof Chart !== 'undefined') {
-      if (this._dailyChart) this._dailyChart.destroy();
-      const labels = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-      const bg = labels.map(d => d === dayOfMonth ? '#a78bfa' : '#6c8ef5');
-      const border = labels.map(d => d === dayOfMonth ? '#c4b5fd' : 'rgba(108,142,245,0.9)');
-      this._dailyChart = new Chart(canvas, {
-        type: 'bar',
+    // Expense Categories donut
+    const donutCanvas = document.getElementById('dash-category-donut');
+    if (donutCanvas && typeof Chart !== 'undefined' && donutSegments.length > 0) {
+      if (this._donutChart) this._donutChart.destroy();
+      this._donutChart = new Chart(donutCanvas, {
+        type: 'doughnut',
         data: {
-          labels,
+          labels: donutSegments.map(s => s.name),
           datasets: [{
-            label: 'Spent',
-            data: dailyExpense.map(n => Number(n.toFixed(2))),
-            backgroundColor: bg,
-            borderColor: border,
+            data: donutSegments.map(s => s.total),
+            backgroundColor: donutSegments.map(s => s.color),
+            borderColor: 'rgba(0,0,0,0)',
             borderWidth: 0,
-            borderRadius: 4,
-            maxBarThickness: 22
+            hoverOffset: 6,
+            spacing: 2
           }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '72%',
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => ` ${ctx.label}: $${ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // Cash Flow chart — grouped income/expense bars + dashed net line
+    const flowCanvas = document.getElementById('dash-cash-flow');
+    if (flowCanvas && typeof Chart !== 'undefined' && trendRows.length > 0) {
+      if (this._flowChart) this._flowChart.destroy();
+      this._flowChart = new Chart(flowCanvas, {
+        data: {
+          labels: flowLabels,
+          datasets: [
+            {
+              type: 'bar',
+              label: 'Income',
+              data: flowIncome,
+              backgroundColor: 'rgba(136,178,240,0.92)',
+              borderRadius: 4,
+              maxBarThickness: 26,
+              order: 2
+            },
+            {
+              type: 'bar',
+              label: 'Expenses',
+              data: flowExpense,
+              backgroundColor: 'rgba(58,92,189,0.92)',
+              borderRadius: 4,
+              maxBarThickness: 26,
+              order: 2
+            },
+            {
+              type: 'line',
+              label: 'Net',
+              data: flowNet,
+              borderColor: '#e6eaff',
+              backgroundColor: 'rgba(230,234,255,0.1)',
+              borderDash: [6, 6],
+              borderWidth: 2,
+              tension: 0.35,
+              pointRadius: 3,
+              pointBackgroundColor: '#e6eaff',
+              pointBorderColor: '#e6eaff',
+              order: 1
+            }
+          ]
         },
         options: {
           responsive: true,
@@ -764,29 +937,22 @@ const dashboardModule = {
             legend: { display: false },
             tooltip: {
               callbacks: {
-                title: items => `Day ${items[0].label}`,
-                label: ctx => {
-                  const d = parseInt(ctx.label, 10) - 1;
-                  const inc = dailyIncome[d] || 0;
-                  const exp = ctx.raw;
-                  return [` Spent  $${exp.toLocaleString('en-US', { minimumFractionDigits: 2 })}`]
-                    .concat(inc > 0 ? [` Income $${inc.toLocaleString('en-US', { minimumFractionDigits: 2 })}`] : []);
-                }
+                label: ctx => ` ${ctx.dataset.label}: $${Number(ctx.raw).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
               }
             }
           },
           scales: {
             x: {
-              ticks: { color: '#8892a4', font: { size: 10 }, maxRotation: 0, autoSkip: true, autoSkipPadding: 8 },
+              ticks: { color: '#8892a4', font: { size: 11 } },
               grid: { display: false }
             },
             y: {
               beginAtZero: true,
               ticks: {
                 color: '#8892a4', font: { size: 10 },
-                callback: v => v === 0 ? '0' : '$' + (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v)
+                callback: v => v === 0 ? '0' : '$' + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'k' : v)
               },
-              grid: { color: 'rgba(46,51,80,0.5)' }
+              grid: { color: 'rgba(46,51,80,0.4)', drawTicks: false }
             }
           }
         }
