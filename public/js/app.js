@@ -494,11 +494,6 @@ const dashboardModule = {
         ${labelFor(n, 'right', rightTotal)}`).join('');
 
       return `<svg class="sankey-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
-        <defs>
-          <filter id="sankey-glow">
-            <feGaussianBlur stdDeviation="2"/>
-          </filter>
-        </defs>
         ${leftFlows}
         ${rightFlows}
         ${leftNodesSvg}
@@ -506,7 +501,124 @@ const dashboardModule = {
         ${rightNodesSvg}
       </svg>`;
     };
+
+    // ── Mobile (vertical) sankey: top=sources, middle=Income bar, bottom=categories
+    const buildSankeyMobile = () => {
+      const { incomeList, expenseList, totalIn, totalOut } = sankeyData;
+      if (totalIn === 0 && totalOut === 0) {
+        return '<div class="sankey-empty">No cash flow data this month.</div>';
+      }
+      const SOURCE_COLORS = ['#5cb3f2','#4a7dd4','#6c8ef5','#8a6bd6','#a78bfa','#7fc68a','#d99b4a'];
+      const MAX_SRC = 4, MAX_CAT = 6;
+      let sources = incomeList.slice(0, MAX_SRC);
+      if (incomeList.length > MAX_SRC) {
+        const rest = incomeList.slice(MAX_SRC).reduce((s, n) => s + n.value, 0);
+        if (rest > 0) sources.push({ name: `${incomeList.length - MAX_SRC} Other`, value: rest });
+      }
+      sources = sources.map((s, i) => ({ ...s, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }));
+
+      let cats = expenseList.slice(0, MAX_CAT).map((c, i) => ({ ...c, color: CAT_PALETTE[i % CAT_PALETTE.length] }));
+      if (expenseList.length > MAX_CAT) {
+        const rest = expenseList.slice(MAX_CAT).reduce((s, n) => s + n.value, 0);
+        if (rest > 0) cats.push({ name: `${expenseList.length - MAX_CAT} Other`, value: rest, color: CAT_PALETTE[6] });
+      }
+
+      const savings = Math.max(0, totalIn - totalOut);
+      const deficit = Math.max(0, totalOut - totalIn);
+      const rightNodes = [
+        ...cats,
+        ...(savings > 0 ? [{ name: 'Savings', value: savings, color: '#7fc68a' }] : [])
+      ];
+      if (deficit > 0) sources.push({ name: 'Deficit', value: deficit, color: '#e26b6b' });
+      if (sources.length === 0) sources = [{ name: 'No income', value: rightNodes.reduce((s, n) => s + n.value, 0) || 1, color: '#6c8ef5' }];
+      if (rightNodes.length === 0) return '<div class="sankey-empty">No expenses this month.</div>';
+
+      const leftTotal  = sources.reduce((s, n) => s + n.value, 0);
+      const rightTotal = rightNodes.reduce((s, n) => s + n.value, 0);
+      const grandTotal = Math.max(leftTotal, rightTotal);
+
+      const W = 360, H = 280;
+      const padX = 12;
+      const availW = W - 2 * padX;
+      const gap = 3;
+      const nodeH = 10;
+      const topY = 16;
+      const midY = H / 2 - nodeH / 2;
+      const botY = H - 16 - nodeH;
+
+      const gapsMax = Math.max(sources.length - 1, rightNodes.length - 1) * gap;
+      const scale = grandTotal > 0 ? (availW - gapsMax) / grandTotal : 0;
+
+      let lx = padX;
+      sources.forEach(n => { n.width = n.value * scale; n.x = lx; lx += n.width + gap; });
+      let rx = padX;
+      rightNodes.forEach(n => { n.width = n.value * scale; n.x = rx; rx += n.width + gap; });
+
+      const midWidth = grandTotal * scale;
+      const midX = padX;
+
+      let mlc = midX;
+      sources.forEach(s => { s.midW = s.width; s.midX = mlc; mlc += s.midW; });
+      let mrc = midX;
+      rightNodes.forEach(n => { n.midW = n.width; n.midX = mrc; mrc += n.midW; });
+
+      // Vertical flow ribbon: top edge from xL1→xL2, bottom edge from xR2→xR1
+      const flowPath = (xL1, xR1, y1, xL2, xR2, y2) => {
+        const cy = (y1 + y2) / 2;
+        return `M ${xL1} ${y1} C ${xL1} ${cy} ${xL2} ${cy} ${xL2} ${y2} L ${xR2} ${y2} C ${xR2} ${cy} ${xR1} ${cy} ${xR1} ${y1} Z`;
+      };
+
+      const topFlows = sources.map(s => `
+        <path class="sankey-flow" fill="${s.color}" d="${flowPath(s.x, s.x + s.width, topY + nodeH, s.midX, s.midX + s.midW, midY)}">
+          <title>${escHtml(s.name)}: ${fmtCur(s.value)}</title>
+        </path>`).join('');
+
+      const botFlows = rightNodes.map(n => `
+        <path class="sankey-flow" fill="${n.color}" d="${flowPath(n.midX, n.midX + n.midW, midY + nodeH, n.x, n.x + n.width, botY)}">
+          <title>${escHtml(n.name)}: ${fmtCur(n.value)}</title>
+        </path>`).join('');
+
+      const sourceBars = sources.map(s => `
+        <rect class="sankey-node" x="${s.x}" y="${topY}" width="${s.width}" height="${nodeH}" fill="${s.color}" rx="2"/>`).join('');
+      const middleBar  = `<rect class="sankey-node" x="${midX}" y="${midY}" width="${midWidth}" height="${nodeH}" fill="#5cb3f2" rx="2"/>
+        <text class="sankey-node-label" x="${W/2}" y="${midY - 4}" text-anchor="middle">Income · ${fmtCur(totalIn).replace('.00','')}</text>`;
+      const catBars   = rightNodes.map(n => `
+        <rect class="sankey-node" x="${n.x}" y="${botY}" width="${n.width}" height="${nodeH}" fill="${n.color}" rx="2"/>`).join('');
+
+      // Compact legend rows shown below the SVG
+      const legendItem = (n, total) => {
+        const pct = total > 0 ? (n.value / total * 100).toFixed(0) : '0';
+        return `<li class="sankey-leg-row">
+          <span class="sankey-leg-dot" style="background:${n.color}"></span>
+          <span class="sankey-leg-name">${escHtml(n.name)}</span>
+          <span class="sankey-leg-amt">${fmtCur(n.value).replace('.00','')}</span>
+          <span class="sankey-leg-pct">${pct}%</span>
+        </li>`;
+      };
+
+      const svg = `<svg class="sankey-svg sankey-svg--mobile" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+        ${topFlows}
+        ${botFlows}
+        ${sourceBars}
+        ${middleBar}
+        ${catBars}
+      </svg>`;
+
+      return `${svg}
+        <div class="sankey-legend-grid">
+          <div class="sankey-leg-col">
+            <div class="sankey-leg-head">Income</div>
+            <ul class="sankey-leg-list">${sources.map(n => legendItem(n, leftTotal)).join('')}</ul>
+          </div>
+          <div class="sankey-leg-col">
+            <div class="sankey-leg-head">Out</div>
+            <ul class="sankey-leg-list">${rightNodes.map(n => legendItem(n, rightTotal)).join('')}</ul>
+          </div>
+        </div>`;
+    };
+
     const sankeySvgHtml = buildSankeySvg();
+    const sankeyMobileHtml = buildSankeyMobile();
     const sankeyRangeLabel = monthName.toUpperCase();
 
     // Cash Flow (6-month trend)
@@ -787,7 +899,8 @@ const dashboardModule = {
           <h2>Where Money Flows</h2>
           <span class="sankey-range">${sankeyRangeLabel}</span>
         </div>
-        <div class="sankey-wrap">${sankeySvgHtml}</div>
+        <div class="sankey-wrap sankey-wrap--desktop">${sankeySvgHtml}</div>
+        <div class="sankey-wrap sankey-wrap--mobile">${sankeyMobileHtml}</div>
       </div>
 
       <!-- Bills -->
