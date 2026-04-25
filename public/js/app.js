@@ -876,11 +876,24 @@ const dashboardModule = {
           responsive: true,
           maintainAspectRatio: false,
           cutout: '72%',
+          layout: { padding: 4 },
           plugins: {
             legend: { display: false },
             tooltip: {
+              position: 'nearest',
+              caretSize: 0,
+              caretPadding: 10,
+              displayColors: false,
+              backgroundColor: 'rgba(20,24,40,0.96)',
+              borderColor: 'rgba(108,142,245,0.35)',
+              borderWidth: 1,
+              cornerRadius: 8,
+              padding: { top: 8, bottom: 8, left: 12, right: 12 },
+              titleFont: { size: 12, weight: '700' },
+              bodyFont: { size: 12, weight: '600' },
               callbacks: {
-                label: ctx => ` ${ctx.label}: $${ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                title: ctx => ctx[0].label,
+                label: ctx => `$${ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
               }
             }
           }
