@@ -767,6 +767,20 @@ app.get('/api/charts/category-breakdown', (req, res) => {
   res.json(rows);
 });
 
+app.get('/api/charts/category-monthly', (req, res) => {
+  const months = parseInt(req.query.months) || 6;
+  const rows = db.prepare(`
+    SELECT strftime('%Y-%m', date) as month,
+           COALESCE(category, 'Uncategorized') as category,
+           SUM(ABS(amount)) as total
+    FROM transactions
+    WHERE amount < 0 AND date >= date('now', ? || ' months')
+    GROUP BY month, category
+    ORDER BY month ASC
+  `).all(`-${months}`);
+  res.json(rows);
+});
+
 app.get('/api/charts/available-months', (req, res) => {
   const rows = db.prepare(
     'SELECT DISTINCT strftime(\'%Y-%m\', date) as month FROM transactions ORDER BY month DESC'

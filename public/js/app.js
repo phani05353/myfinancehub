@@ -263,14 +263,15 @@ const dashboardModule = {
     const currentMonth = today.toISOString().slice(0, 7);
     const todayStr = today.toISOString().slice(0, 10);
 
-    const [summary, reminders, subs, byCategory, allMonthTx, budgetStatus, trend] = await Promise.all([
+    const [summary, reminders, subs, byCategory, allMonthTx, budgetStatus, trend, catMonthly] = await Promise.all([
       api(`/api/transactions/summary?month=${currentMonth}`),
       api('/api/reminders?paid=0&upcoming_days=30'),
       api('/api/subscriptions?active=1'),
       api(`/api/charts/category-breakdown?month=${currentMonth}`),
       api(`/api/transactions?limit=500&month=${currentMonth}`),
       api(`/api/budgets/status?month=${currentMonth}`).catch(() => []),
-      api('/api/charts/spending-trend?months=6').catch(() => [])
+      api('/api/charts/spending-trend?months=6').catch(() => []),
+      api('/api/charts/category-monthly?months=6').catch(() => [])
     ]);
     const recentTx = { rows: (allMonthTx.rows || []).slice(0, 5) };
 
@@ -339,12 +340,64 @@ const dashboardModule = {
         color: CAT_PALETTE[5]
       });
     }
+    // Build per-category 6-month series for sparklines
+    const monthsSeq = (() => {
+      const out = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      }
+      return out;
+    })();
+    const catSeries = {}; // { categoryName: [m0, m1, ..., m5] }
+    (Array.isArray(catMonthly) ? catMonthly : []).forEach(r => {
+      if (!catSeries[r.category]) catSeries[r.category] = new Array(6).fill(0);
+      const idx = monthsSeq.indexOf(r.month);
+      if (idx >= 0) catSeries[r.category][idx] = Number(r.total) || 0;
+    });
+
+    const sparklineSvg = (data, color) => {
+      if (!data || data.length < 2) return '';
+      const w = 56, h = 18, padY = 2;
+      const max = Math.max(...data, 1);
+      const min = Math.min(...data);
+      const range = max - min || 1;
+      const stepX = w / (data.length - 1);
+      const points = data.map((v, i) => {
+        const x = i * stepX;
+        const y = h - padY - ((v - min) / range) * (h - padY * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      });
+      const last = data[data.length - 1];
+      const prev = data[data.length - 2];
+      const trendColor = last > prev ? '#ff7a8a' : last < prev ? '#5be0a0' : color;
+      const areaPoints = `0,${h} ${points.join(' ')} ${w},${h}`;
+      return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">
+        <polygon points="${areaPoints}" fill="${color}" fill-opacity="0.12"/>
+        <polyline points="${points.join(' ')}" fill="none" stroke="${color}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="${(w).toFixed(1)}" cy="${points[points.length - 1].split(',')[1]}" r="2" fill="${trendColor}"/>
+      </svg>`;
+    };
+
     const donutLegendHtml = donutSegments.map(s => {
       const pct = catTotal > 0 ? (s.total / catTotal * 100) : 0;
+      // For aggregated "N Others" row, sum the underlying series
+      let series;
+      if (s.name.endsWith(' Others') || s.name.endsWith(' Other')) {
+        series = new Array(6).fill(0);
+        catOthers.forEach(c => {
+          const sr = catSeries[c.category || 'Uncategorized'];
+          if (sr) sr.forEach((v, i) => series[i] += v);
+        });
+      } else {
+        series = catSeries[s.name] || [];
+      }
       return `
         <li class="donut-legend-row">
           <span class="donut-legend-dot" style="background:${s.color}"></span>
           <span class="donut-legend-name">${escHtml(s.name)}</span>
+          <span class="donut-legend-spark">${sparklineSvg(series, s.color)}</span>
+          <span class="donut-legend-amt">${fmtCur(s.total).replace('.00', '')}</span>
           <span class="donut-legend-pct">${pct.toFixed(0)}%</span>
         </li>`;
     }).join('');
@@ -992,23 +1045,7 @@ const dashboardModule = {
           layout: { padding: 4 },
           plugins: {
             legend: { display: false },
-            tooltip: {
-              position: 'nearest',
-              caretSize: 0,
-              caretPadding: 10,
-              displayColors: false,
-              backgroundColor: 'rgba(20,24,40,0.96)',
-              borderColor: 'rgba(108,142,245,0.35)',
-              borderWidth: 1,
-              cornerRadius: 8,
-              padding: { top: 8, bottom: 8, left: 12, right: 12 },
-              titleFont: { size: 12, weight: '700' },
-              bodyFont: { size: 12, weight: '600' },
-              callbacks: {
-                title: ctx => ctx[0].label,
-                label: ctx => `$${ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
-              }
-            }
+            tooltip: { enabled: false }
           }
         }
       });
