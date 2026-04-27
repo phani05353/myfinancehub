@@ -345,13 +345,83 @@ function escHtml(s) {
 
 // Payee logo helpers
 const LOGO_COLORS = ['#6c8ef5','#a78bfa','#34d399','#fbbf24','#f87171','#60a5fa','#f472b6','#fb923c','#4ade80','#c084fc'];
+
+// Curated payee → domain map. `null` means skip the favicon lookup and use the initial badge.
+const PAYEE_ALIASES = {
+  'send india': 'remitly.com',
+  'irs refund': null,
+  'income': null,
+  'paycheck': null,
+  'salary': null,
+  'jimmy johns': 'jimmyjohns.com',
+  'jimmyjohns': 'jimmyjohns.com',
+  'five guys': 'fiveguys.com',
+  'fiveguys': 'fiveguys.com',
+  'remitly': 'remitly.com',
+  'ollies': 'ollies.us',
+  "ollie's": 'ollies.us',
+  'meijer': 'meijer.com',
+  'costco': 'costco.com',
+  'dominos': 'dominos.com',
+  "domino's": 'dominos.com',
+  'grand indian cuisine': null,
+  'amazon': 'amazon.com',
+  'walmart': 'walmart.com',
+  'target': 'target.com',
+  'kroger': 'kroger.com',
+  'aldi': 'aldi.us',
+  'trader joes': 'traderjoes.com',
+  "trader joe's": 'traderjoes.com',
+  'whole foods': 'wholefoodsmarket.com',
+  'starbucks': 'starbucks.com',
+  'mcdonalds': 'mcdonalds.com',
+  "mcdonald's": 'mcdonalds.com',
+  'chick fil a': 'chick-fil-a.com',
+  'chickfila': 'chick-fil-a.com',
+  'chipotle': 'chipotle.com',
+  'taco bell': 'tacobell.com',
+  'subway': 'subway.com',
+  'wendys': 'wendys.com',
+  "wendy's": 'wendys.com',
+  'panera': 'panerabread.com',
+  'shell': 'shell.us',
+  'bp': 'bp.com',
+  'speedway': 'speedway.com',
+  'exxon': 'exxon.com',
+  'chevron': 'chevron.com',
+  'netflix': 'netflix.com',
+  'spotify': 'spotify.com',
+  'disney plus': 'disneyplus.com',
+  'disney+': 'disneyplus.com',
+  'hulu': 'hulu.com',
+  'youtube': 'youtube.com',
+  'apple': 'apple.com',
+  'apple.com/bill': 'apple.com',
+  'icloud': 'icloud.com',
+  'google': 'google.com',
+  'uber': 'uber.com',
+  'uber eats': 'ubereats.com',
+  'lyft': 'lyft.com',
+  'doordash': 'doordash.com',
+  'grubhub': 'grubhub.com',
+  'instacart': 'instacart.com',
+  'venmo': 'venmo.com',
+  'paypal': 'paypal.com',
+  'cash app': 'cash.app',
+  'zelle': 'zellepay.com'
+};
+
 function payeeColor(name) {
   let h = 0;
   for (const c of String(name)) h = (Math.imul(h, 31) + c.charCodeAt(0)) | 0;
   return LOGO_COLORS[Math.abs(h) % LOGO_COLORS.length];
 }
 function payeeDomain(name) {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com';
+  const lower = name.toLowerCase().trim();
+  if (Object.prototype.hasOwnProperty.call(PAYEE_ALIASES, lower)) {
+    return PAYEE_ALIASES[lower];
+  }
+  return lower.replace(/[^a-z0-9]/g, '') + '.com';
 }
 function payeeLogoHtml(payee, amount) {
   if (!payee) return '';
@@ -365,10 +435,22 @@ function payeeLogoHtml(payee, amount) {
   const initial = payee.trim()[0].toUpperCase();
   const color   = payeeColor(payee);
   const uid     = Math.random().toString(36).slice(2);
+
+  // Aliased to null OR no domain inferable → render initial directly
+  if (!domain) {
+    return `<span class="payee-logo-wrap">
+      <span class="payee-initial" style="background:${color};display:flex">${initial}</span>
+    </span>`;
+  }
+
+  // Google's favicon service has wider merchant coverage than DDG's ip3.
+  // naturalWidth check catches the generic globe placeholder Google serves for unknown domains.
   return `<span class="payee-logo-wrap">
-    <img class="payee-logo" src="https://icons.duckduckgo.com/ip3/${domain}.ico" alt=""
-      loading="lazy"
-      onerror="this.style.display='none';document.getElementById('pi-${uid}').style.display='flex'">
+    <img class="payee-logo"
+      src="https://www.google.com/s2/favicons?domain=${domain}&sz=64"
+      alt="" loading="lazy" referrerpolicy="no-referrer"
+      onload="if(this.naturalWidth&lt;=16){this.onerror=null;this.src='https://icons.duckduckgo.com/ip3/${domain}.ico'}"
+      onerror="this.style.display='none';var f=document.getElementById('pi-${uid}');if(f)f.style.display='flex'">
     <span class="payee-initial" id="pi-${uid}" style="background:${color}">${initial}</span>
   </span>`;
 }

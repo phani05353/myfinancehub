@@ -1332,12 +1332,6 @@ tr.due-soon td:first-child { color: var(--warning); }
   grid-row: 2;
   justify-self: end;
 }
-@media (max-width: 760px) {
-  .donut-legend-spark { display: none; }
-  .donut-legend-row { grid-template-columns: 10px auto minmax(0, 1fr); }
-  .donut-legend-name { grid-column: 2 / 4; }
-  .donut-legend-pct  { grid-column: 3; }
-}
 .donut-legend-dot {
   width: 10px;
   height: 10px;

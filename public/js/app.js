@@ -1051,7 +1051,7 @@ const dashboardModule = {
       });
     }
 
-    // Cash Flow chart — grouped income/expense bars + dashed net line
+    // Cash Flow chart — pill-shaped stacked bars (income above 0, expenses below) + dashed net line
     const flowCanvas = document.getElementById('dash-cash-flow');
     if (flowCanvas && typeof Chart !== 'undefined' && trendRows.length > 0) {
       if (this._flowChart) this._flowChart.destroy();
@@ -1064,31 +1064,37 @@ const dashboardModule = {
               label: 'Income',
               data: flowIncome,
               backgroundColor: 'rgba(136,178,240,0.92)',
-              borderRadius: 4,
+              borderRadius: { topLeft: 14, topRight: 14, bottomLeft: 0, bottomRight: 0 },
+              borderSkipped: false,
               maxBarThickness: 26,
+              stack: 'flow',
               order: 2
             },
             {
               type: 'bar',
               label: 'Expenses',
-              data: flowExpense,
+              data: flowExpense.map(e => -e),
               backgroundColor: 'rgba(58,92,189,0.92)',
-              borderRadius: 4,
+              borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 14, bottomRight: 14 },
+              borderSkipped: false,
               maxBarThickness: 26,
+              stack: 'flow',
               order: 2
             },
             {
               type: 'line',
               label: 'Net',
               data: flowNet,
-              borderColor: '#e6eaff',
-              backgroundColor: 'rgba(230,234,255,0.1)',
-              borderDash: [6, 6],
-              borderWidth: 2,
+              borderColor: 'rgba(234,242,255,0.7)',
+              backgroundColor: 'rgba(234,242,255,0.05)',
+              borderDash: [5, 5],
+              borderWidth: 1.5,
               tension: 0.35,
-              pointRadius: 3,
-              pointBackgroundColor: '#e6eaff',
-              pointBorderColor: '#e6eaff',
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              pointBackgroundColor: '#fff',
+              pointBorderColor: ctx => (ctx.raw >= 0 ? '#5be0a0' : '#ff7a8a'),
+              pointBorderWidth: 2,
               order: 1
             }
           ]
@@ -1100,22 +1106,26 @@ const dashboardModule = {
             legend: { display: false },
             tooltip: {
               callbacks: {
-                label: ctx => ` ${ctx.dataset.label}: $${Number(ctx.raw).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+                label: ctx => {
+                  const v = Math.abs(Number(ctx.raw));
+                  return ` ${ctx.dataset.label}: $${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+                }
               }
             }
           },
           scales: {
             x: {
-              ticks: { color: '#8892a4', font: { size: 11 } },
+              stacked: true,
+              ticks: { color: '#8aa0bf', font: { size: 11, weight: '600' } },
               grid: { display: false }
             },
             y: {
-              beginAtZero: true,
+              stacked: true,
               ticks: {
-                color: '#8892a4', font: { size: 10 },
-                callback: v => v === 0 ? '0' : '$' + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'k' : v)
+                color: '#8aa0bf', font: { size: 10 },
+                callback: v => v === 0 ? '0' : '$' + (Math.abs(v) >= 1000 ? (Math.abs(v) / 1000).toFixed(1) + 'k' : Math.abs(v))
               },
-              grid: { color: 'rgba(46,51,80,0.4)', drawTicks: false }
+              grid: { color: 'rgba(120,168,220,0.10)', drawTicks: false, borderDash: [3, 3] }
             }
           }
         }
