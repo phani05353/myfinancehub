@@ -2514,6 +2514,9 @@ tr.due-soon td:first-child { color: var(--warning); }
 .heatmap-table th {
   padding: 0;
   line-height: 1;
+  border-bottom: none !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
 }
 
 .heatmap-cell {

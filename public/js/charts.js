@@ -187,13 +187,21 @@ const chartsModule = {
     data.forEach(r => { dayMap[r.date] = +r.total; });
 
     const amounts = Object.values(dayMap);
-    const max = amounts.length ? Math.max(...amounts) : 1;
 
-    const palette = ['#7c2d12', '#c2410c', '#ea580c', '#fb923c', '#fed7aa'];
+    // Percentile thresholds so one big outlier doesn't compress all other days
+    const sorted = [...amounts].sort((a, b) => a - b);
+    const pct = p => sorted[Math.max(0, Math.floor(sorted.length * p) - 1)] ?? 0;
+    const thresholds = [pct(0.4), pct(0.6), pct(0.75), pct(0.9)];
+
+    // Muted amber → bright gold: more spending = more vivid
+    const palette = ['#92400e', '#b45309', '#d97706', '#f59e0b', '#fcd34d'];
     const getColor = amount => {
       if (!amount) return null;
-      const r = amount / max;
-      return r <= 0.2 ? palette[0] : r <= 0.4 ? palette[1] : r <= 0.6 ? palette[2] : r <= 0.8 ? palette[3] : palette[4];
+      if (amount <= thresholds[0]) return palette[0];
+      if (amount <= thresholds[1]) return palette[1];
+      if (amount <= thresholds[2]) return palette[2];
+      if (amount <= thresholds[3]) return palette[3];
+      return palette[4];
     };
 
     const pad2 = n => String(n).padStart(2, '0');
