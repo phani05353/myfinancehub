@@ -50,7 +50,7 @@ const chartsModule = {
       <div class="card" style="margin-top:20px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
           <h2 style="margin-bottom:0">Spending Heatmap</h2>
-          <select id="heatmap-year" class="tx-filter-select-panel">
+          <select id="heatmap-year" class="tx-filter-select-panel" style="width:auto">
             ${years.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('')}
           </select>
         </div>
@@ -189,7 +189,7 @@ const chartsModule = {
     const amounts = Object.values(dayMap);
     const max = amounts.length ? Math.max(...amounts) : 1;
 
-    const palette = ['#1b3560', '#1d5494', '#2b6ec4', '#5b8ef0', '#a5b4fc'];
+    const palette = ['#7c2d12', '#c2410c', '#ea580c', '#fb923c', '#fed7aa'];
     const getColor = amount => {
       if (!amount) return null;
       const r = amount / max;
