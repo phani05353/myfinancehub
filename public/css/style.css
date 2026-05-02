@@ -2370,10 +2370,7 @@ tr.due-soon td:first-child { color: var(--warning); }
 .dash-right-panel { min-width: 0; }
 
 @media (min-width: 769px) {
-  .dash-right-panel { position: sticky; top: 74px; max-height: calc(100vh - 90px); overflow-y: auto; }
-  .dash-right-panel::-webkit-scrollbar { width: 4px; }
-  .dash-right-panel::-webkit-scrollbar-track { background: transparent; }
-  .dash-right-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .dash-right-panel { position: sticky; top: 74px; }
 }
 
 @media (max-width: 1100px) {
