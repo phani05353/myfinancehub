@@ -409,7 +409,7 @@ const PAYEE_ALIASES = {
   'paypal': 'paypal.com',
   'cash app': 'cash.app',
   'zelle': 'zellepay.com',
-  'office cafe': 'avifoodsystems.com',
+  'office cafe': 'aviserves.com/meijer/',
   'water bill': 'gainestownship.org'
 };
 
