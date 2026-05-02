@@ -580,13 +580,17 @@ app.delete('/api/subscriptions/:id', (req, res) => {
 app.post('/api/subscriptions/:id/pay', (req, res) => {
   const sub = db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(req.params.id);
   if (!sub) return res.status(404).json({ error: 'Not found' });
+  const today = new Date().toISOString().split('T')[0];
   const d = new Date(sub.next_due_date + 'T00:00:00');
   if (sub.billing_cycle === 'monthly') d.setMonth(d.getMonth() + 1);
   else if (sub.billing_cycle === 'yearly') d.setFullYear(d.getFullYear() + 1);
   else if (sub.billing_cycle === 'weekly') d.setDate(d.getDate() + 7);
   const nextDate = d.toISOString().slice(0, 10);
   db.prepare('UPDATE subscriptions SET next_due_date = ? WHERE id = ?').run(nextDate, req.params.id);
-  res.json({ next_due_date: nextDate });
+  const txResult = db.prepare(
+    'INSERT INTO transactions (date, payee, category, amount, notes, source) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(today, sub.name, sub.category || 'Subscriptions', -Math.abs(sub.amount), `Subscription: ${sub.name}`, 'subscription');
+  res.json({ next_due_date: nextDate, transaction_id: txResult.lastInsertRowid });
 });
 
 // ─── REMINDERS ────────────────────────────────────────────────────────────────
@@ -707,6 +711,14 @@ app.post('/api/reminders/:id/pay', (req, res) => {
   const today = new Date().toISOString().split('T')[0];
   db.prepare('UPDATE reminders SET paid = 1, paid_date = ? WHERE id = ?').run(today, reminder.id);
 
+  let transaction_id = null;
+  if (reminder.amount) {
+    const txResult = db.prepare(
+      'INSERT INTO transactions (date, payee, category, amount, notes, source) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(today, reminder.title, reminder.category || 'Bills', -Math.abs(reminder.amount), `Bill: ${reminder.title}`, 'bill');
+    transaction_id = txResult.lastInsertRowid;
+  }
+
   let next = null;
   if (reminder.recurring && reminder.recur_days) {
     const nextDate = new Date(today);
@@ -721,7 +733,8 @@ app.post('/api/reminders/:id/pay', (req, res) => {
 
   res.json({
     paid: db.prepare('SELECT * FROM reminders WHERE id = ?').get(reminder.id),
-    next
+    next,
+    transaction_id
   });
 });
 

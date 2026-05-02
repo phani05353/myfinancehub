@@ -408,7 +408,9 @@ const PAYEE_ALIASES = {
   'venmo': 'venmo.com',
   'paypal': 'paypal.com',
   'cash app': 'cash.app',
-  'zelle': 'zellepay.com'
+  'zelle': 'zellepay.com',
+  'office cafe': 'avifoodsystems.com',
+  'water bill': 'gainestownship.org'
 };
 
 function payeeColor(name) {
