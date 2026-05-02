@@ -2497,3 +2497,89 @@ tr.due-soon td:first-child { color: var(--warning); }
   margin-bottom: 4px;
   line-height: 1.1;
 }
+
+/* ── Spending Heatmap ── */
+.heatmap-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.heatmap-table {
+  border-collapse: separate;
+  border-spacing: 3px;
+  min-width: max-content;
+}
+
+.heatmap-table td,
+.heatmap-table th {
+  padding: 0;
+  line-height: 1;
+}
+
+.heatmap-cell {
+  width: 13px;
+  height: 13px;
+  border-radius: 2px;
+  display: block;
+}
+
+.heatmap-cell--active {
+  cursor: default;
+  transition: opacity 0.1s;
+}
+
+.heatmap-cell--active:hover {
+  opacity: 0.75;
+  outline: 1px solid rgba(255, 255, 255, 0.25);
+  outline-offset: 1px;
+}
+
+.heatmap-day-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding-right: 6px;
+  text-align: right;
+  white-space: nowrap;
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+  height: 16px;
+}
+
+.heatmap-month-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: left;
+  padding-bottom: 4px;
+  white-space: nowrap;
+  vertical-align: bottom;
+  font-weight: 400;
+}
+
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.heatmap-legend-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0 4px;
+}
+
+.heatmap-tooltip-fixed {
+  display: none;
+  position: fixed;
+  background: var(--surface2, #252840);
+  color: var(--text, #e2e8f0);
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 9999;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}

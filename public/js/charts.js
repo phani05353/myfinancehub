@@ -10,6 +10,8 @@ const chartsModule = {
     this.destroyAll();
     const months = await api('/api/charts/available-months');
     const currentMonth = months[0] || new Date().toISOString().slice(0, 7);
+    const years = [...new Set(months.map(m => m.slice(0, 4)))];
+    const currentYear = years[0] || String(new Date().getFullYear());
 
     document.getElementById('view').innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
@@ -46,6 +48,16 @@ const chartsModule = {
       </div>
 
       <div class="card" style="margin-top:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+          <h2 style="margin-bottom:0">Spending Heatmap</h2>
+          <select id="heatmap-year" class="tx-filter-select-panel">
+            ${years.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('')}
+          </select>
+        </div>
+        <div id="heatmap-container"></div>
+      </div>
+
+      <div class="card" style="margin-top:20px">
         <h2>Top Payees — Details</h2>
         <div id="payee-table"></div>
       </div>
@@ -53,9 +65,11 @@ const chartsModule = {
 
     document.getElementById('chart-month').addEventListener('change', () => this.loadCharts());
     document.getElementById('trend-months').addEventListener('change', () => this.loadTrend());
+    document.getElementById('heatmap-year').addEventListener('change', () => this.loadHeatmap());
 
     await this.loadCharts();
     await this.loadTrend();
+    await this.loadHeatmap();
   },
 
   async loadCharts() {
@@ -113,8 +127,7 @@ const chartsModule = {
           datasets: [{
             data: byCategory.map(c => c.total),
             backgroundColor: byCategory.map((_, i) => palette[i % palette.length]),
-            borderColor: '#1a1d27',
-            borderWidth: 3
+            borderWidth: 0
           }]
         },
         options: {
@@ -162,6 +175,107 @@ const chartsModule = {
         `;
       }
     }
+  },
+
+  async loadHeatmap() {
+    const year = document.getElementById('heatmap-year')?.value || new Date().getFullYear();
+    const data = await api(`/api/charts/spending-heatmap?year=${year}`);
+    const container = document.getElementById('heatmap-container');
+    if (!container) return;
+
+    const dayMap = {};
+    data.forEach(r => { dayMap[r.date] = +r.total; });
+
+    const amounts = Object.values(dayMap);
+    const max = amounts.length ? Math.max(...amounts) : 1;
+
+    const palette = ['#1b3560', '#1d5494', '#2b6ec4', '#5b8ef0', '#a5b4fc'];
+    const getColor = amount => {
+      if (!amount) return null;
+      const r = amount / max;
+      return r <= 0.2 ? palette[0] : r <= 0.4 ? palette[1] : r <= 0.6 ? palette[2] : r <= 0.8 ? palette[3] : palette[4];
+    };
+
+    const pad2 = n => String(n).padStart(2, '0');
+    const toDateStr = d => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+
+    // Start grid from the Sunday on or before Jan 1
+    const jan1 = new Date(+year, 0, 1);
+    const dec31 = new Date(+year, 11, 31);
+    const gridStart = new Date(jan1);
+    gridStart.setDate(gridStart.getDate() - gridStart.getDay());
+
+    const weeks = [];
+    let cur = new Date(gridStart);
+    while (cur <= dec31) {
+      const week = [];
+      for (let d = 0; d < 7; d++) { week.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
+      weeks.push(week);
+    }
+
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+    const monthLabels = weeks.map((week, wi) => {
+      const inYear = week.find(d => d.getFullYear() === +year);
+      if (!inYear) return '';
+      if (wi === 0) return MONTHS[inYear.getMonth()];
+      const prev = weeks[wi-1].find(d => d.getFullYear() === +year);
+      return (!prev || inYear.getMonth() !== prev.getMonth()) ? MONTHS[inYear.getMonth()] : '';
+    });
+
+    let html = '<div class="heatmap-scroll"><table class="heatmap-table"><thead><tr><th style="width:28px"></th>';
+    weeks.forEach((_, wi) => { html += `<th class="heatmap-month-label">${monthLabels[wi]}</th>`; });
+    html += '</tr></thead><tbody>';
+
+    for (let di = 0; di < 7; di++) {
+      const showLabel = di === 1 || di === 3 || di === 5;
+      html += `<tr><td class="heatmap-day-label">${showLabel ? DAYS[di] : ''}</td>`;
+      weeks.forEach(week => {
+        const date = week[di];
+        const inYear = date.getFullYear() === +year;
+        const ds = toDateStr(date);
+        const amt = dayMap[ds] || 0;
+        const bg = inYear ? (getColor(amt) || 'var(--surface2)') : 'transparent';
+        const attrs = inYear ? `data-date="${ds}" data-amount="${amt.toFixed(2)}"` : '';
+        html += `<td><div class="heatmap-cell${inYear ? ' heatmap-cell--active' : ''}" style="background:${bg}" ${attrs}></div></td>`;
+      });
+      html += '</tr>';
+    }
+
+    html += '</tbody></table></div>';
+    html += `<div class="heatmap-legend">
+      <span class="heatmap-legend-label">Less</span>
+      <div class="heatmap-cell" style="background:var(--surface2)"></div>
+      ${palette.map(c => `<div class="heatmap-cell" style="background:${c}"></div>`).join('')}
+      <span class="heatmap-legend-label">More</span>
+    </div>`;
+
+    container.innerHTML = html;
+
+    // Floating tooltip
+    let tip = document.getElementById('heatmap-tip');
+    if (!tip) {
+      tip = document.createElement('div');
+      tip.id = 'heatmap-tip';
+      tip.className = 'heatmap-tooltip-fixed';
+      document.body.appendChild(tip);
+    }
+
+    container.addEventListener('mouseover', e => {
+      const cell = e.target.closest('.heatmap-cell--active');
+      if (!cell) { tip.style.display = 'none'; return; }
+      const amt = parseFloat(cell.dataset.amount);
+      const [yr, mo, dy] = cell.dataset.date.split('-').map(Number);
+      const label = new Date(yr, mo-1, dy).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      tip.textContent = `${label} — ${amt > 0 ? '$' + amt.toFixed(2) : 'No spending'}`;
+      tip.style.display = 'block';
+    });
+    container.addEventListener('mousemove', e => {
+      tip.style.left = (e.clientX + 14) + 'px';
+      tip.style.top  = (e.clientY - 38) + 'px';
+    });
+    container.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
   },
 
   async loadTrend() {

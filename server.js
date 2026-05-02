@@ -805,6 +805,18 @@ app.get('/api/charts/available-months', (req, res) => {
   res.json(rows.map(r => r.month));
 });
 
+app.get('/api/charts/spending-heatmap', (req, res) => {
+  const year = /^\d{4}$/.test(req.query.year) ? req.query.year : String(new Date().getFullYear());
+  const rows = db.prepare(`
+    SELECT date, SUM(ABS(amount)) as total
+    FROM transactions
+    WHERE amount < 0 AND strftime('%Y', date) = ?
+    GROUP BY date
+    ORDER BY date
+  `).all(year);
+  res.json(rows);
+});
+
 // ─── YEAR IN REVIEW ───────────────────────────────────────────────────────────
 
 app.get('/api/year-review/:year', (req, res) => {
