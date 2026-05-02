@@ -98,6 +98,22 @@ document.querySelectorAll('.nav-link').forEach(a => {
   });
 });
 
+// ── Top nav more dropdown ────────────────────────────────────────────────────
+
+function toggleTopNavMore() {
+  document.getElementById('top-nav-dropdown')?.classList.toggle('hidden');
+}
+
+document.addEventListener('click', e => {
+  const dd = document.getElementById('top-nav-dropdown');
+  const btn = document.getElementById('top-nav-more-btn');
+  if (dd && btn && !dd.classList.contains('hidden')) {
+    if (!btn.contains(e.target) && !dd.contains(e.target)) {
+      dd.classList.add('hidden');
+    }
+  }
+});
+
 // ── Router ───────────────────────────────────────────────────────────────────
 
 const routes = {
@@ -121,6 +137,12 @@ function route() {
   document.querySelectorAll('.bn-tab[data-route]').forEach(a => {
     a.classList.toggle('active', a.getAttribute('data-route') === hash);
   });
+  document.querySelectorAll('.nav-pill[data-route]').forEach(a => {
+    a.classList.toggle('active', a.getAttribute('data-route') === hash);
+  });
+  document.querySelectorAll('.top-nav-drop-item[data-route]').forEach(a => {
+    a.classList.toggle('active', a.getAttribute('data-route') === hash);
+  });
   // Scroll content to top on navigation
   window.scrollTo(0, 0);
   if (handler) handler();
@@ -141,9 +163,16 @@ window.addEventListener('load', async () => {
     const me = await api('/api/auth/me');
     const el = document.getElementById('sidebar-username');
     if (el && me.username) el.textContent = me.username;
+    const avatar = document.getElementById('top-nav-avatar');
+    if (avatar && me.username) {
+      avatar.textContent = me.username.slice(0, 2).toUpperCase();
+      avatar.title = `Signed in as ${me.username}`;
+    }
     if (me.role === 'admin') {
       const btn = document.getElementById('manage-users-btn');
       if (btn) btn.style.display = '';
+      const topBtn = document.getElementById('manage-users-top-btn');
+      if (topBtn) topBtn.style.display = '';
     }
   } catch (_) {}
 });
@@ -832,6 +861,87 @@ const dashboardModule = {
           }).join('')}
         </div>`;
 
+    // ── Cumulative spending for current month (from transaction list) ──────────
+    const dailyExpenseMap = {};
+    (allMonthTx.rows || []).forEach(r => {
+      if (r.amount < 0) {
+        const day = parseInt(r.date.slice(8, 10));
+        dailyExpenseMap[day] = (dailyExpenseMap[day] || 0) + Math.abs(r.amount);
+      }
+    });
+    const cumulData = [];
+    let runningCumul = 0;
+    for (let d = 1; d <= dayOfMonth; d++) {
+      runningCumul += dailyExpenseMap[d] || 0;
+      cumulData.push(parseFloat(runningCumul.toFixed(2)));
+    }
+    const lastMonthLabel = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+      .toLocaleString('default', { month: 'short' });
+    const prevMonthTrendRow = trendRows.length >= 2 ? trendRows[trendRows.length - 2] : null;
+    let prevPaceLine = null;
+    if (prevMonthTrendRow) {
+      const prevExp = prevMonthTrendRow.expenses || 0;
+      const prevDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const daysInPrevMonth = new Date(prevDate.getFullYear(), prevDate.getMonth() + 1, 0).getDate();
+      const dailyPace = prevExp / daysInPrevMonth;
+      prevPaceLine = Array.from({ length: dayOfMonth }, (_, i) =>
+        parseFloat(((i + 1) * dailyPace).toFixed(2))
+      );
+    }
+
+    // ── Bills list for duo grid ──────────────────────────────────────────────
+    const billsListHtml = reminders.length === 0
+      ? '<p style="color:var(--text-muted);font-size:13px">No upcoming bills.</p>'
+      : reminders.slice(0, 5).map(r => {
+          const overdue = r.due_date < todayStr;
+          const daysUntil = Math.round((new Date(r.due_date) - new Date(todayStr)) / 86400000);
+          const dueLabel = overdue
+            ? `${Math.abs(daysUntil)}d overdue`
+            : daysUntil === 0 ? 'Due today' : `in ${daysUntil}d`;
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
+              <div style="display:flex;align-items:center;gap:9px">
+                <div style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:${overdue ? 'var(--danger)' : daysUntil <= 3 ? 'var(--warning)' : 'var(--success)'}"></div>
+                <div>
+                  <div style="font-size:13px;font-weight:600">${escHtml(r.title)}</div>
+                  <div style="font-size:11px;color:${overdue ? 'var(--danger)' : 'var(--text-muted)'};font-weight:${overdue ? '600' : '400'}">${dueLabel}</div>
+                </div>
+              </div>
+              <div style="font-size:13px;font-weight:600;color:var(--text-muted)">${r.amount ? fmtCur(Math.abs(r.amount)) : '—'}</div>
+            </div>`;
+        }).join('');
+
+    // ── Stacked donut for right panel ────────────────────────────────────────
+    const catDonutBlockStack = byCategory.length === 0
+      ? '<p style="color:var(--text-muted);font-size:13px">No expense data this month.</p>'
+      : `<div class="donut-wrap--stacked">
+          <div class="donut-canvas-wrap" style="width:160px;height:160px">
+            <canvas id="dash-category-donut"></canvas>
+            <div class="donut-center">
+              <div class="donut-center-amt" style="font-size:19px">${fmtCur(catTotal).replace('.00', '')}</div>
+              <div class="donut-center-label">Total</div>
+            </div>
+          </div>
+          <ul class="donut-legend" style="width:100%">${donutLegendHtml}</ul>
+        </div>`;
+
+    // ── Savings bar inner (no card wrapper) ──────────────────────────────────
+    const savingsBarInner = summary.income > 0 ? `
+      <div style="margin-top:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+          <span style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Savings Rate</span>
+          <span style="font-weight:700;font-size:14px;color:${savingsColor}">${savingsRate.toFixed(1)}%</span>
+        </div>
+        <div style="height:7px;background:var(--surface2);border-radius:4px;overflow:hidden;position:relative">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:${spentPct.toFixed(1)}%;background:var(--danger);border-radius:4px 0 0 4px"></div>
+          <div style="position:absolute;left:${spentPct.toFixed(1)}%;top:0;bottom:0;width:${savedPct.toFixed(1)}%;background:var(--success);border-radius:0 4px 4px 0"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:11px;color:var(--text-muted)">
+          <span>Spent ${fmtCur(Math.abs(summary.expenses))}</span>
+          <span>Saved ${fmtCur(Math.max(0, summary.net))}</span>
+        </div>
+      </div>` : '';
+
     // Greeting
     const hour = today.getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -876,147 +986,126 @@ const dashboardModule = {
         </div>
       </div>
 
-      <!-- Hero net card -->
-      <div class="dash-hero">
-        <div class="dash-hero-blob dash-hero-blob--1"></div>
-        <div class="dash-hero-blob dash-hero-blob--2"></div>
-        <div class="dash-hero-left">
-          <div class="dash-hero-label">Net this month</div>
-          <div class="dash-hero-amount dash-hero-amount--${netClass}">${netPositive ? '+' : '−'}${fmtCur(Math.abs(summary.net))}</div>
-          <div class="dash-hero-sub">${netLabel} · ${monthName}</div>
-        </div>
-        <div class="dash-hero-right">
-          <div class="dash-hero-stat">
-            <span class="dash-hero-stat-label">Income</span>
-            <span class="dash-hero-stat-val income-text">${fmtCur(summary.income)}</span>
-          </div>
-          <div class="dash-hero-divider"></div>
-          <div class="dash-hero-stat">
-            <span class="dash-hero-stat-label">Spent</span>
-            <span class="dash-hero-stat-val expense-text">${fmtCur(Math.abs(summary.expenses))}</span>
-          </div>
-          <div class="dash-hero-divider"></div>
-          <div class="dash-hero-stat">
-            <span class="dash-hero-stat-label">Subscriptions</span>
-            <span class="dash-hero-stat-val">${fmtCur(subTotal)}<span style="font-size:11px;color:var(--text-muted)">/mo</span></span>
-          </div>
-        </div>
-      </div>
+      <!-- 2-column layout -->
+      <div class="dash-layout">
 
-      <!-- Savings rate -->
-      ${savingsBar}
+        <!-- ── MAIN COLUMN ── -->
+        <div class="dash-main-col">
 
-      <!-- Expense Categories donut + Cash Flow -->
-      <div class="dash-grid dash-grid--analytics">
-        <div class="card dash-cat-card">
-          <div class="dash-card-head">
-            <h2>Expense Categories</h2>
-          </div>
-          ${catDonutBlock}
-        </div>
-
-        <div class="card dash-flow-card">
-          <div class="dash-card-head">
-            <h2>Cash Flow</h2>
-            <span class="dash-flow-range">${flowRangeLabel}</span>
-          </div>
-          ${trendRows.length === 0
-            ? '<p style="color:var(--text-muted);font-size:13px">No trend data yet.</p>'
-            : `
-              <div class="flow-chart"><canvas id="dash-cash-flow"></canvas></div>
-              <div class="flow-stats">
-                <div class="flow-stat">
-                  <span class="flow-stat-label">Total income</span>
-                  <span class="flow-stat-val">${fmtCur(totalIncome).replace('.00','')}</span>
+          <!-- Spending chart -->
+          <div class="card dash-spend-card">
+            <div class="dash-spend-hdr">
+              <div>
+                <div class="dash-spend-label">Spent This Month</div>
+                <div class="dash-spend-amount">${fmtCur(Math.abs(summary.expenses))}</div>
+                <div class="dash-spend-sub">
+                  <span style="color:var(--accent)">•</span> ${monthName}
+                  ${prevPaceLine ? `<span class="dash-vs-label">— vs ${lastMonthLabel}</span>` : ''}
                 </div>
-                <div class="flow-stat">
-                  <span class="flow-stat-label">Total expenses</span>
-                  <span class="flow-stat-val">${fmtCur(totalExpenses).replace('.00','')}</span>
+              </div>
+              <div class="dash-spend-right-stats">
+                <div class="dash-mini-stat">
+                  <div class="dash-mini-stat-l">Income</div>
+                  <div class="dash-mini-stat-v income-text">${fmtCur(summary.income)}</div>
                 </div>
-                <div class="flow-stat">
-                  <span class="flow-stat-label">Net cash flow</span>
-                  <span class="flow-stat-val ${netCashFlow >= 0 ? 'flow-stat-pos' : 'flow-stat-neg'}">${fmtCur(netCashFlow).replace('.00','')}</span>
+                <div class="dash-mini-stat">
+                  <div class="dash-mini-stat-l">Net</div>
+                  <div class="dash-mini-stat-v ${netPositive ? 'income-text' : 'expense-text'}">${netPositive ? '+' : ''}${fmtCur(summary.net)}</div>
                 </div>
-                <div class="flow-stat">
-                  <span class="flow-stat-label">Cash flow / mo</span>
-                  <span class="flow-stat-val">${fmtCur(cashPerMonth).replace('.00','')}</span>
+                <div class="dash-mini-stat">
+                  <div class="dash-mini-stat-l">Subs</div>
+                  <div class="dash-mini-stat-v">${fmtCur(subTotal)}<span style="font-size:10px;color:var(--text-muted)">/mo</span></div>
                 </div>
-              </div>`
-          }
-        </div>
-      </div>
-
-      <!-- Sankey cash flow -->
-      <div class="card sankey-card" style="margin-bottom:16px">
-        <div class="dash-card-head">
-          <h2>Where Money Flows</h2>
-          <span class="sankey-range">${sankeyRangeLabel}</span>
-        </div>
-        <div class="sankey-wrap sankey-wrap--desktop">${sankeySvgHtml}</div>
-        <div class="sankey-wrap sankey-wrap--mobile">${sankeyMobileHtml}</div>
-      </div>
-
-      <!-- Bills -->
-      <div class="card" style="margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-          <h2 style="margin-bottom:0">Upcoming Bills</h2>
-          ${overdueReminders.length > 0
-            ? `<span class="badge badge-red">⚠ ${overdueReminders.length} overdue</span>`
-            : '<span style="font-size:12px;color:var(--success);font-weight:600">✓ All clear</span>'}
-        </div>
-        ${reminders.length === 0
-          ? '<p style="color:var(--text-muted);font-size:13px">No upcoming bills in the next 30 days.</p>'
-          : reminders.slice(0, 6).map(r => {
-              const overdue = r.due_date < todayStr;
-              const daysUntil = Math.round((new Date(r.due_date) - new Date(todayStr)) / 86400000);
-              const dueLabel = overdue ? `${Math.abs(daysUntil)}d overdue` : daysUntil === 0 ? 'Due today' : `in ${daysUntil}d`;
-              return `
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-                  <div style="display:flex;align-items:center;gap:10px">
-                    <div style="width:8px;height:8px;border-radius:50%;background:${overdue ? 'var(--danger)' : daysUntil <= 3 ? 'var(--warning)' : 'var(--success)'};flex-shrink:0"></div>
-                    <div>
-                      <div style="font-size:13px;font-weight:600">${escHtml(r.title)}</div>
-                      <div style="font-size:11px;color:${overdue ? 'var(--danger)' : 'var(--text-muted)'};font-weight:${overdue ? '600' : '400'}">${dueLabel}</div>
-                    </div>
-                  </div>
-                  <div style="font-size:13px;font-weight:600;color:var(--text-muted)">${r.amount ? fmtCur(Math.abs(r.amount)) : '—'}</div>
-                </div>`;
-            }).join('')
-        }
-        ${reminders.length > 6 ? `<div style="margin-top:12px"><a href="#/reminders" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">View all ${reminders.length} →</a></div>` : ''}
-      </div>
-
-      <!-- Largest Transactions + Day of Week -->
-      <div class="dash-grid">
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-            <h2 style="margin-bottom:0">Largest This Month</h2>
-            <a href="#/transactions" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">All →</a>
+              </div>
+            </div>
+            <div class="dash-spend-chart-wrap">
+              <canvas id="dash-cumulative-chart"></canvas>
+            </div>
           </div>
-          <div class="largest-list">${largestHtml}</div>
-        </div>
 
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-            <h2 style="margin-bottom:0">Day of the Week</h2>
-            ${dowPeakIdx >= 0 && dowTotals[dowPeakIdx] > 0
-              ? `<span style="font-size:11px;color:var(--text-muted);font-weight:600">Heaviest: <span style="color:var(--accent);font-weight:700">${dowNames[dowPeakIdx]}</span></span>`
-              : ''}
+          <!-- Latest Tx + Upcoming Bills -->
+          <div class="dash-duo-grid">
+            <div class="card">
+              <div class="dash-card-head">
+                <h2 style="margin-bottom:0">Latest Transactions</h2>
+                <a href="#/transactions" class="dash-see-more">See all →</a>
+              </div>
+              ${recentList}
+            </div>
+            <div class="card">
+              <div class="dash-card-head">
+                <h2 style="margin-bottom:0">Upcoming Bills</h2>
+                ${overdueReminders.length > 0
+                  ? `<span class="badge badge-red">⚠ ${overdueReminders.length} overdue</span>`
+                  : '<span style="font-size:12px;color:var(--success);font-weight:600">✓ All clear</span>'}
+              </div>
+              ${billsListHtml}
+              ${reminders.length > 5 ? `<div style="margin-top:10px"><a href="#/reminders" class="dash-see-more">View all ${reminders.length} →</a></div>` : ''}
+            </div>
           </div>
-          ${dowHtml}
-        </div>
-      </div>
 
-      <!-- Budget overview -->
-      ${budgetSection}
+          <!-- Cash Flow (pill bars) -->
+          <div class="card dash-flow-card">
+            <div class="dash-card-head">
+              <h2 style="margin-bottom:0">Cash Flow</h2>
+              <span class="dash-flow-range">${flowRangeLabel}</span>
+            </div>
+            ${trendRows.length === 0
+              ? '<p style="color:var(--text-muted);font-size:13px">No trend data yet.</p>'
+              : `<div class="flow-chart"><canvas id="dash-cash-flow"></canvas></div>
+                 <div class="flow-stats">
+                   <div class="flow-stat"><span class="flow-stat-label">Total Income</span><span class="flow-stat-val">${fmtCur(totalIncome).replace('.00','')}</span></div>
+                   <div class="flow-stat"><span class="flow-stat-label">Total Expenses</span><span class="flow-stat-val">${fmtCur(totalExpenses).replace('.00','')}</span></div>
+                   <div class="flow-stat"><span class="flow-stat-label">Net Cash Flow</span><span class="flow-stat-val ${netCashFlow >= 0 ? 'flow-stat-pos' : 'flow-stat-neg'}">${fmtCur(netCashFlow).replace('.00','')}</span></div>
+                   <div class="flow-stat"><span class="flow-stat-label">Cash Flow / Mo</span><span class="flow-stat-val">${fmtCur(cashPerMonth).replace('.00','')}</span></div>
+                 </div>`
+            }
+          </div>
 
-      <!-- Recent transactions -->
-      <div class="card" style="margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-          <h2 style="margin-bottom:0">Recent Transactions</h2>
-          <a href="#/transactions" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">View all →</a>
+          <!-- Where Money Flows (Sankey) -->
+          <div class="card sankey-card" style="margin-bottom:16px">
+            <div class="dash-card-head">
+              <h2 style="margin-bottom:0">Where Money Flows</h2>
+              <span class="sankey-range">${sankeyRangeLabel}</span>
+            </div>
+            <div class="sankey-wrap sankey-wrap--desktop">${sankeySvgHtml}</div>
+            <div class="sankey-wrap sankey-wrap--mobile">${sankeyMobileHtml}</div>
+          </div>
+
+          <!-- Budget -->
+          ${budgetSection}
+
         </div>
-        ${recentList}
+
+        <!-- ── RIGHT PANEL ── -->
+        <div class="dash-right-panel">
+
+          <!-- Category Breakdown -->
+          <div class="card" style="margin-bottom:16px">
+            <div class="dash-card-head">
+              <h2 style="margin-bottom:0">Category Breakdown</h2>
+            </div>
+            ${catDonutBlockStack}
+          </div>
+
+          <!-- Income + Savings Rate -->
+          <div class="card" style="margin-bottom:16px">
+            <h2>Income This Month</h2>
+            <div class="dash-income-big">${fmtCur(summary.income)}</div>
+            ${savingsBarInner}
+          </div>
+
+          <!-- Largest Expenses -->
+          <div class="card">
+            <div class="dash-card-head">
+              <h2 style="margin-bottom:0">Largest Expenses</h2>
+              <a href="#/transactions" class="dash-see-more">All →</a>
+            </div>
+            <div class="largest-list">${largestHtml}</div>
+          </div>
+
+        </div>
+
       </div>
     </div>
     `;
@@ -1046,6 +1135,79 @@ const dashboardModule = {
           plugins: {
             legend: { display: false },
             tooltip: { enabled: false }
+          }
+        }
+      });
+    }
+
+    // Cumulative spending chart (filled area + last month pace dashed line)
+    const cumulCanvas = document.getElementById('dash-cumulative-chart');
+    if (cumulCanvas && typeof Chart !== 'undefined' && cumulData.length > 0) {
+      if (this._cumulChart) this._cumulChart.destroy();
+      const dayLabels = Array.from({ length: dayOfMonth }, (_, i) => String(i + 1));
+      const datasets = [
+        {
+          label: `${monthName} (actual)`,
+          data: cumulData,
+          borderColor: 'rgba(93,155,235,0.95)',
+          backgroundColor: ctx => {
+            const { chart } = ctx;
+            const { ctx: c, chartArea } = chart;
+            if (!chartArea) return 'rgba(93,155,235,0.15)';
+            const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            g.addColorStop(0, 'rgba(93,155,235,0.40)');
+            g.addColorStop(1, 'rgba(93,155,235,0.00)');
+            return g;
+          },
+          borderWidth: 2.5,
+          tension: 0.4,
+          fill: true,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: '#5d9beb'
+        }
+      ];
+      if (prevPaceLine) {
+        datasets.push({
+          label: `${lastMonthLabel} (pace)`,
+          data: prevPaceLine,
+          borderColor: 'rgba(200,220,255,0.22)',
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          borderDash: [6, 4],
+          tension: 0.4,
+          fill: false,
+          pointRadius: 0
+        });
+      }
+      this._cumulChart = new Chart(cumulCanvas, {
+        type: 'line',
+        data: { labels: dayLabels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => ` ${ctx.dataset.label}: ${fmtCur(ctx.raw)}`
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#8aa0bf', font: { size: 10 }, maxTicksLimit: 10 },
+              grid: { display: false }
+            },
+            y: {
+              ticks: {
+                color: '#8aa0bf',
+                font: { size: 10 },
+                callback: v => '$' + (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : Math.round(v))
+              },
+              grid: { color: 'rgba(120,168,220,0.07)', drawTicks: false }
+            }
           }
         }
       });

@@ -129,6 +129,10 @@ app.use(session({
   }
 }));
 
+// ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
+
+app.get('/health', (req, res) => res.json({ status: 'healthy' }));
+
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 
 function requireAuth(req, res, next) {
