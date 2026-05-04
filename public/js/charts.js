@@ -193,8 +193,8 @@ const chartsModule = {
     const pct = p => sorted[Math.max(0, Math.floor(sorted.length * p) - 1)] ?? 0;
     const thresholds = [pct(0.4), pct(0.6), pct(0.75), pct(0.9)];
 
-    // Muted green → bright green: more spending = more vivid
-    const palette = ['#14532d', '#166534', '#16a34a', '#22c55e', '#86efac'];
+    // Light red → dark red: more spending = darker
+    const palette = ['#fecaca', '#f87171', '#ef4444', '#dc2626', '#7f1d1d'];
     const getColor = amount => {
       if (!amount) return null;
       if (amount <= thresholds[0]) return palette[0];
