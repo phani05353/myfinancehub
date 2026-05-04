@@ -364,8 +364,12 @@ app.put('/api/transactions/:id', (req, res) => {
 });
 
 app.delete('/api/transactions/:id', (req, res) => {
-  const result = db.prepare('DELETE FROM transactions WHERE id = ?').run(req.params.id);
-  if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+  const tx = db.prepare('SELECT receipt_path FROM transactions WHERE id = ?').get(req.params.id);
+  if (!tx) return res.status(404).json({ error: 'Not found' });
+  if (tx.receipt_path) {
+    fs.unlink(path.join(__dirname, 'uploads', 'receipts', tx.receipt_path), () => {});
+  }
+  db.prepare('DELETE FROM transactions WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
 

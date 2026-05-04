@@ -1,4 +1,4 @@
-const CACHE = 'finance-hub-v1';
+const CACHE = 'finance-hub-v3';
 
 const SHELL = [
   '/',
@@ -10,6 +10,8 @@ const SHELL = [
   '/js/reminders.js',
   '/js/charts.js',
   '/js/import.js',
+  '/js/yearreview.js',
+  '/js/rules.js',
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',

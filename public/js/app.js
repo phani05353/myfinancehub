@@ -1,5 +1,10 @@
 // ── Shared utilities ────────────────────────────────────────────────────────
 
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function fmt(amount) {
   if (amount === null || amount === undefined) return '—';
   const n = parseFloat(amount);
@@ -187,9 +192,9 @@ async function manageUsersModal() {
         <span style="font-weight:600">${escHtml(u.username)}</span>
         <span style="margin-left:8px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:20px;
           background:${u.role === 'admin' ? 'rgba(108,142,245,0.15)' : 'rgba(136,146,164,0.15)'};
-          color:${u.role === 'admin' ? 'var(--accent)' : 'var(--text-muted)'}">${u.role}</span>
+          color:${u.role === 'admin' ? 'var(--accent)' : 'var(--text-muted)'}">${escHtml(u.role)}</span>
       </div>
-      ${u.role !== 'admin' ? `<button class="btn btn-danger btn-sm" onclick="removeUser(${u.id},'${escHtml(u.username)}')">Remove</button>` : ''}
+      ${u.role !== 'admin' ? `<button class="btn btn-danger btn-sm" data-uid="${u.id}" data-uname="${escHtml(u.username)}">Remove</button>` : ''}
     </div>
   `).join('');
 
@@ -213,6 +218,10 @@ async function manageUsersModal() {
       </button>
     </div>
   `;
+
+  document.querySelectorAll('[data-uid]').forEach(btn => {
+    btn.addEventListener('click', () => removeUser(parseInt(btn.dataset.uid), btn.dataset.uname));
+  });
 }
 
 async function removeUser(id, username) {
