@@ -487,6 +487,26 @@ app.get('/api/payees', (req, res) => {
   res.json(rows.map(r => r.payee));
 });
 
+// Suggest the most-used category for a given payee (last 12 months)
+app.get('/api/payees/suggest-category', (req, res) => {
+  const payee = String(req.query.payee || '').trim();
+  if (!payee) return res.json({ category: null, count: 0 });
+
+  const row = db.prepare(`
+    SELECT category, COUNT(*) as cnt
+    FROM transactions
+    WHERE lower(payee) = lower(?)
+      AND category IS NOT NULL
+      AND category != ''
+      AND date >= date('now', '-12 months')
+    GROUP BY category
+    ORDER BY cnt DESC, MAX(date) DESC
+    LIMIT 1
+  `).get(payee);
+
+  res.json({ category: row?.category || null, count: row?.cnt || 0 });
+});
+
 // ─── SUBSCRIPTIONS ────────────────────────────────────────────────────────────
 
 app.get('/api/subscriptions', (req, res) => {
@@ -502,6 +522,55 @@ app.get('/api/subscriptions', (req, res) => {
 });
 
 // Detect subscriptions from transactions tagged with subscription-like categories
+// Detect price hikes — for each active subscription, compare the most recent
+// matching transaction amount to the stored expected amount.
+app.get('/api/subscriptions/price-alerts', (req, res) => {
+  const subs = db.prepare('SELECT * FROM subscriptions WHERE active = 1').all();
+  const alerts = [];
+
+  for (const s of subs) {
+    const matchName = (s.payee && s.payee.trim()) || s.name;
+    if (!matchName) continue;
+
+    // Find the two most recent matching expense transactions
+    const txs = db.prepare(`
+      SELECT amount, date FROM transactions
+      WHERE amount < 0
+        AND lower(payee) = lower(?)
+        AND date >= date('now', '-90 days')
+      ORDER BY date DESC
+      LIMIT 2
+    `).all(matchName);
+
+    if (!txs.length) continue;
+
+    const latest    = Math.abs(txs[0].amount);
+    const expected  = Math.abs(s.amount);
+    const previous  = txs[1] ? Math.abs(txs[1].amount) : expected;
+    const baseline  = Math.max(expected, previous);
+
+    // Flag if the latest charge is meaningfully higher than baseline
+    // (>$0.50 OR >2% — whichever is larger)
+    const minDelta = Math.max(0.50, baseline * 0.02);
+    if (latest > baseline + minDelta) {
+      alerts.push({
+        id: s.id,
+        name: s.name,
+        category: s.category,
+        previous_amount: baseline,
+        current_amount: latest,
+        last_charge_date: txs[0].date,
+        increase: latest - baseline,
+        pct_increase: baseline > 0 ? ((latest - baseline) / baseline) * 100 : 0
+      });
+    }
+  }
+
+  // Sort by largest dollar increase first
+  alerts.sort((a, b) => b.increase - a.increase);
+  res.json(alerts);
+});
+
 app.get('/api/subscriptions/detect', (req, res) => {
   // Find all unique payees from transactions where category contains 'subscription'
   const detected = db.prepare(`

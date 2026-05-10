@@ -381,7 +381,7 @@ const dashboardModule = {
     const currentMonth = today.toISOString().slice(0, 7);
     const todayStr = today.toISOString().slice(0, 10);
 
-    const [summary, reminders, subs, byCategory, allMonthTx, budgetStatus, trend, catMonthly] = await Promise.all([
+    const [summary, reminders, subs, byCategory, allMonthTx, budgetStatus, trend, catMonthly, priceAlerts] = await Promise.all([
       api(`/api/transactions/summary?month=${currentMonth}`),
       api('/api/reminders?paid=0&upcoming_days=30'),
       api('/api/subscriptions?active=1'),
@@ -389,7 +389,8 @@ const dashboardModule = {
       api(`/api/transactions?limit=500&month=${currentMonth}`),
       api(`/api/budgets/status?month=${currentMonth}`).catch(() => []),
       api('/api/charts/spending-trend?months=6').catch(() => []),
-      api('/api/charts/category-monthly?months=6').catch(() => [])
+      api('/api/charts/category-monthly?months=6').catch(() => []),
+      api('/api/subscriptions/price-alerts').catch(() => [])
     ]);
     const recentTx = { rows: (allMonthTx.rows || []).slice(0, 5) };
 
@@ -904,6 +905,30 @@ const dashboardModule = {
         </div>`;
     })();
 
+    // ── Subscription Price-Hike Alerts ───────────────────────────────────────
+    const priceAlertList = Array.isArray(priceAlerts) ? priceAlerts : [];
+    const priceAlertCard = priceAlertList.length === 0 ? '' : `
+      <div class="card price-alert-card" style="margin-bottom:16px;border:1px solid rgba(248,113,113,0.35)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <h2 style="margin-bottom:0;display:flex;align-items:center;gap:8px">⚠ Price Hike${priceAlertList.length > 1 ? 's' : ''} Detected</h2>
+          <span style="font-size:11px;color:var(--text-muted)">${priceAlertList.length} subscription${priceAlertList.length > 1 ? 's' : ''}</span>
+        </div>
+        <div>
+          ${priceAlertList.slice(0, 4).map(a => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+              <div style="min-width:0">
+                <div style="font-size:13px;font-weight:600">${escHtml(a.name)}</div>
+                <div style="font-size:11px;color:var(--text-muted)">Charged ${fmtDate(a.last_charge_date)}</div>
+              </div>
+              <div style="text-align:right;white-space:nowrap;margin-left:12px">
+                <div style="font-size:13px;font-weight:700">${fmtCur(a.previous_amount)} → ${fmtCur(a.current_amount)}</div>
+                <div style="font-size:11px;color:var(--danger);font-weight:600">+${fmtCur(a.increase)} (+${a.pct_increase.toFixed(1)}%)</div>
+              </div>
+            </div>`).join('')}
+          ${priceAlertList.length > 4 ? `<div style="margin-top:10px;font-size:12px;color:var(--text-muted)">+${priceAlertList.length - 4} more — <a href="#/subscriptions" style="color:var(--accent);text-decoration:none">manage subscriptions →</a></div>` : ''}
+        </div>
+      </div>`;
+
     const allRows    = allMonthTx.rows || [];
     const dayOfMonth = today.getDate();
     const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
@@ -1059,7 +1084,7 @@ const dashboardModule = {
       <div class="dash-greeting">
         <div>
           <div class="dash-greeting-text">${greeting} <span class="wave">👋</span></div>
-          <div class="dash-greeting-sub">${dateLabel} · ${monthName}</div>
+          <div class="dash-greeting-sub">${dateLabel}, ${today.getFullYear()}</div>
         </div>
         <div class="dash-month-ring" title="Day ${dayOfMonth} of ${daysInMonth}">
           <svg viewBox="0 0 48 48" width="48" height="48">
@@ -1086,6 +1111,8 @@ const dashboardModule = {
 
         <!-- ── MAIN COLUMN ── -->
         <div class="dash-main-col">
+
+          ${priceAlertCard}
 
           <!-- Spending chart -->
           <div class="card dash-spend-card">

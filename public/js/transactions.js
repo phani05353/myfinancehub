@@ -222,6 +222,27 @@ const transactionsModule = {
       </form>
     `);
     document.getElementById('tx-form').onsubmit = e => { e.preventDefault(); this.submitAdd(); };
+
+    // Smart category suggester: auto-fill on payee blur if category not yet picked
+    document.getElementById('tx-payee')?.addEventListener('blur', async e => {
+      const payee = e.target.value.trim();
+      if (!payee) return;
+      const sel = document.getElementById('tx-category');
+      if (!sel || sel.value) return; // user already picked one
+      try {
+        const { category } = await api(`/api/payees/suggest-category?payee=${encodeURIComponent(payee)}`);
+        if (!category) return;
+        // Match against existing options (case-insensitive)
+        const match = Array.from(sel.options).find(o => o.value.toLowerCase() === category.toLowerCase());
+        if (match && !sel.value) {
+          sel.value = match.value;
+          // Tiny visual cue that we filled it for them
+          sel.style.transition = 'box-shadow 0.4s';
+          sel.style.boxShadow = '0 0 0 2px var(--accent)';
+          setTimeout(() => { sel.style.boxShadow = ''; }, 800);
+        }
+      } catch (_) {}
+    });
   },
 
   async submitAdd() {
