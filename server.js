@@ -26,6 +26,8 @@ db.exec(schema);
 try { db.prepare('ALTER TABLE transactions ADD COLUMN receipt_path TEXT').run(); } catch (_) {}
 // Migrate: add role column to users (existing single user becomes admin)
 try { db.prepare("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'").run(); } catch (_) {}
+// Migrate: add display_name column to users
+try { db.prepare('ALTER TABLE users ADD COLUMN display_name TEXT').run(); } catch (_) {}
 
 // Persist session secret in DB so it survives container restarts
 let sessionSecret = db.prepare("SELECT value FROM app_settings WHERE key = 'session_secret'").get()?.value;
@@ -211,9 +213,21 @@ app.post('/auth/change-password', async (req, res) => {
 });
 
 app.get('/api/auth/me', (req, res) => {
-  if (!req.session?.user) return res.json({ username: null, role: null });
-  const user = db.prepare('SELECT username, role FROM users WHERE id = ?').get(req.session.user.id);
-  res.json({ username: user?.username || null, role: user?.role || null });
+  if (!req.session?.user) return res.json({ username: null, role: null, display_name: null });
+  const user = db.prepare('SELECT username, role, display_name FROM users WHERE id = ?').get(req.session.user.id);
+  res.json({
+    username: user?.username || null,
+    role: user?.role || null,
+    display_name: user?.display_name || null
+  });
+});
+
+app.post('/auth/profile', (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Unauthorized' });
+  const name = String(req.body.display_name || '').trim();
+  if (name.length > 60) return res.status(400).json({ error: 'Display name too long (max 60 chars)' });
+  db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(name || null, req.session.user.id);
+  res.json({ ok: true, display_name: name || null });
 });
 
 // ─── INVITE (public — before requireAuth) ─────────────────────────────────────

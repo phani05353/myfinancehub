@@ -66,7 +66,7 @@
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
           </svg>
         </a>
-        <div class="top-nav-avatar" id="top-nav-avatar" title="Signed in">?</div>
+        <button type="button" class="top-nav-avatar" id="top-nav-avatar" title="Edit profile" onclick="editProfileModal()" style="border:none;cursor:pointer">?</button>
       </div>
     </div>
   </header>
@@ -107,6 +107,7 @@
     <div class="sidebar-user">
       <div class="sidebar-username" id="sidebar-username">—</div>
       <div class="sidebar-user-actions">
+        <button class="btn btn-ghost btn-sm" onclick="editProfileModal()">✏ Edit Profile</button>
         <button class="btn btn-ghost btn-sm" id="manage-users-btn" style="display:none" onclick="manageUsersModal()">👥 Manage Users</button>
         <button class="btn btn-ghost btn-sm" onclick="changePasswordModal()">🔑 Change Password</button>
         <a href="/auth/logout" class="btn btn-ghost btn-sm">↩ Sign Out</a>

@@ -333,6 +333,39 @@ async function generateInvite() {
   }
 }
 
+async function editProfileModal() {
+  let me = { username: '', display_name: '' };
+  try { me = await api('/api/auth/me'); } catch (_) {}
+  openModal(`
+    <h2>Edit Profile</h2>
+    <form id="profile-form" style="margin-top:16px">
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Display Name</label>
+        <input type="text" id="profile-name" value="${escHtml(me.display_name || '')}"
+          placeholder="What should we call you?" maxlength="60" autocomplete="name">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:6px">
+          Shown in the greeting on the dashboard. Leave blank to use your username (${escHtml(me.username || '')}).
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('profile-form').onsubmit = async e => {
+    e.preventDefault();
+    const name = document.getElementById('profile-name').value.trim();
+    try {
+      await api('/auth/profile', { method: 'POST', body: { display_name: name } });
+      closeModal();
+      toast('Profile updated');
+      // Refresh dashboard greeting if currently shown
+      if ((location.hash || '#/dashboard') === '#/dashboard') refreshCurrentView();
+    } catch (e) { toast(e.message, 'error'); }
+  };
+}
+
 function changePasswordModal() {
   openModal(`
     <h2>Change Password</h2>
@@ -381,7 +414,7 @@ const dashboardModule = {
     const currentMonth = today.toISOString().slice(0, 7);
     const todayStr = today.toISOString().slice(0, 10);
 
-    const [summary, reminders, subs, byCategory, allMonthTx, budgetStatus, trend, catMonthly, priceAlerts] = await Promise.all([
+    const [summary, reminders, subs, byCategory, allMonthTx, budgetStatus, trend, catMonthly, priceAlerts, me] = await Promise.all([
       api(`/api/transactions/summary?month=${currentMonth}`),
       api('/api/reminders?paid=0&upcoming_days=30'),
       api('/api/subscriptions?active=1'),
@@ -390,7 +423,8 @@ const dashboardModule = {
       api(`/api/budgets/status?month=${currentMonth}`).catch(() => []),
       api('/api/charts/spending-trend?months=6').catch(() => []),
       api('/api/charts/category-monthly?months=6').catch(() => []),
-      api('/api/subscriptions/price-alerts').catch(() => [])
+      api('/api/subscriptions/price-alerts').catch(() => []),
+      api('/api/auth/me').catch(() => ({ username: null, display_name: null }))
     ]);
     const recentTx = { rows: (allMonthTx.rows || []).slice(0, 5) };
 
@@ -1083,7 +1117,7 @@ const dashboardModule = {
       <!-- Greeting bar -->
       <div class="dash-greeting">
         <div>
-          <div class="dash-greeting-text">${greeting} <span class="wave">👋</span></div>
+          <div class="dash-greeting-text">${greeting}${(me?.display_name || me?.username) ? ', ' + escHtml(me.display_name || me.username) : ''} <span class="wave">👋</span></div>
           <div class="dash-greeting-sub">${dateLabel}, ${today.getFullYear()}</div>
         </div>
         <div class="dash-month-ring" title="Day ${dayOfMonth} of ${daysInMonth}">
