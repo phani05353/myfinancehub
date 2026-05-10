@@ -115,6 +115,7 @@ function openModal(html) {
 function closeModal() {
   document.getElementById('modal-overlay').classList.add('hidden');
   document.getElementById('modal-content').innerHTML = '';
+  document.getElementById('modal-box')?.classList.remove('modal-box--receipt');
   document.body.style.overflow = '';
 }
 

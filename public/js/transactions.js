@@ -594,19 +594,15 @@ function viewReceipt(filename) {
   const isPdf = /\.pdf$/i.test(filename);
 
   if (isPdf) {
-    openModal(`
-      <div style="display:flex;flex-direction:column;height:80vh">
-        <iframe src="${src}#toolbar=0&navpanes=0" style="flex:1;width:100%;border:none;border-radius:8px;background:#fff" title="Receipt PDF"></iframe>
-      </div>
-    `);
+    openModal(`<div class="receipt-modal receipt-modal--pdf">
+      <iframe src="${src}#toolbar=0&navpanes=0" title="Receipt PDF"></iframe>
+    </div>`);
   } else {
-    openModal(`
-      <div style="text-align:center">
-        <img src="${src}" alt="Receipt"
-          style="max-width:100%;max-height:80vh;border-radius:8px;object-fit:contain">
-      </div>
-    `);
+    openModal(`<div class="receipt-modal receipt-modal--img">
+      <img src="${src}" alt="Receipt">
+    </div>`);
   }
+  document.getElementById('modal-box')?.classList.add('modal-box--receipt');
 }
 
 async function deleteCategory(name) {
