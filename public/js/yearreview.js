@@ -232,6 +232,7 @@ const yearReviewModule = {
     const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const ctx = document.getElementById('yr-monthly-chart');
     if (!ctx) return;
+    const year = this.currentYear;
     const chart = new Chart(ctx, {
       type: 'bar',
       data: {
@@ -258,6 +259,16 @@ const yearReviewModule = {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        onClick: (evt, els) => {
+          if (!els.length) return;
+          const idx = els[0].index;
+          const month = `${year}-${String(idx + 1).padStart(2, '0')}`;
+          showFilteredTransactions({
+            month,
+            title: `${MONTH_NAMES[idx]} ${year}`,
+            subtitle: 'All transactions this month'
+          });
+        },
         plugins: {
           legend: { labels: { color: '#8892a4' } },
           tooltip: {
@@ -272,12 +283,14 @@ const yearReviewModule = {
         }
       }
     });
+    ctx.style.cursor = 'pointer';
     this.charts.push(chart);
   },
 
   renderCategoryChart(categories) {
     const ctx = document.getElementById('yr-cat-chart');
     if (!ctx || !categories.length) return;
+    const year = this.currentYear;
     const palette = ['#6c8ef5','#a78bfa','#34d399','#fbbf24','#f87171','#60a5fa','#f472b6','#4ade80','#fb923c','#c084fc'];
     const chart = new Chart(ctx, {
       type: 'doughnut',
@@ -286,13 +299,21 @@ const yearReviewModule = {
         datasets: [{
           data: categories.map(c => c.total),
           backgroundColor: categories.map((_, i) => palette[i % palette.length]),
-          borderColor: '#1a1d27',
-          borderWidth: 3
+          borderWidth: 0
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        onClick: (evt, els) => {
+          if (!els.length) return;
+          const c = categories[els[0].index];
+          showFilteredTransactions({
+            category: c.category, year,
+            title: c.category || 'Uncategorized',
+            subtitle: `Transactions in ${year}`
+          });
+        },
         plugins: {
           legend: { position: 'right', labels: { color: '#8892a4', font: { size: 11 }, padding: 12 } },
           tooltip: {
@@ -303,6 +324,7 @@ const yearReviewModule = {
         }
       }
     });
+    ctx.style.cursor = 'pointer';
     this.charts.push(chart);
   }
 };

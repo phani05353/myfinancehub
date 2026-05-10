@@ -100,6 +100,15 @@ const chartsModule = {
         options: {
           indexAxis: 'y',
           responsive: true, maintainAspectRatio: false,
+          onClick: (evt, els) => {
+            if (!els.length) return;
+            const p = byPayee[els[0].index];
+            showFilteredTransactions({
+              payee: p.payee, month,
+              title: p.payee,
+              subtitle: `Transactions in ${month}`
+            });
+          },
           plugins: {
             legend: { display: false },
             tooltip: { callbacks: { label: ctx => ' $' + ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 }) } }
@@ -110,6 +119,7 @@ const chartsModule = {
           }
         }
       });
+      payeeCtx.style.cursor = 'pointer';
       this.charts.push(chart);
     }
 
@@ -132,12 +142,22 @@ const chartsModule = {
         },
         options: {
           responsive: true, maintainAspectRatio: false,
+          onClick: (evt, els) => {
+            if (!els.length) return;
+            const c = byCategory[els[0].index];
+            showFilteredTransactions({
+              category: c.category, month,
+              title: c.category || 'Uncategorized',
+              subtitle: `Transactions in ${month}`
+            });
+          },
           plugins: {
             legend: { position: 'right', labels: { color: '#8892a4', font: { size: 11 }, padding: 12 } },
             tooltip: { callbacks: { label: ctx => ` ${ctx.label}: $${ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 })}` } }
           }
         }
       });
+      catCtx.style.cursor = 'pointer';
       this.charts.push(chart);
     }
 
@@ -284,6 +304,19 @@ const chartsModule = {
       tip.style.top  = (e.clientY - 38) + 'px';
     });
     container.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+
+    container.addEventListener('click', e => {
+      const cell = e.target.closest('.heatmap-cell--active');
+      if (!cell) return;
+      const ds = cell.dataset.date;
+      const [yr, mo, dy] = ds.split('-').map(Number);
+      const label = new Date(yr, mo-1, dy).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+      showFilteredTransactions({
+        date: ds,
+        title: label,
+        subtitle: 'Transactions on this day'
+      });
+    });
   },
 
   async loadTrend() {
@@ -306,6 +339,15 @@ const chartsModule = {
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        onClick: (evt, els) => {
+          if (!els.length) return;
+          const month = trend[els[0].index].month;
+          showFilteredTransactions({
+            month,
+            title: month,
+            subtitle: 'All transactions this month'
+          });
+        },
         plugins: {
           legend: { labels: { color: '#8892a4' } },
           tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: $${ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 })}` } }
@@ -316,6 +358,7 @@ const chartsModule = {
         }
       }
     });
+    trendCtx.style.cursor = 'pointer';
     this.charts.push(chart);
   }
 };

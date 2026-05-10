@@ -293,39 +293,27 @@ app.post('/api/invites', requireAdmin, (req, res) => {
 // ─── TRANSACTIONS ─────────────────────────────────────────────────────────────
 
 app.get('/api/transactions', (req, res) => {
-  const { month, payee, category, search, limit = 200, offset = 0 } = req.query;
-  let sql = 'SELECT * FROM transactions WHERE 1=1';
-  const params = [];
+  const { month, year, date, payee, category, search, limit = 200, offset = 0 } = req.query;
 
-  if (month) {
-    sql += ' AND strftime(\'%Y-%m\', date) = ?';
-    params.push(month);
-  }
-  if (payee) {
-    sql += ' AND lower(payee) LIKE ?';
-    params.push(`%${payee.toLowerCase()}%`);
-  }
-  if (category) {
-    sql += ' AND lower(category) LIKE ?';
-    params.push(`%${category.toLowerCase()}%`);
-  }
-  if (search) {
-    sql += ' AND (lower(payee) LIKE ? OR lower(notes) LIKE ? OR lower(category) LIKE ?)';
+  // Build WHERE clause once, reuse for SELECT and COUNT
+  const conditions = [];
+  const whereParams = [];
+  if (date)     { conditions.push("date = ?");                   whereParams.push(date); }
+  if (month)    { conditions.push("strftime('%Y-%m', date) = ?"); whereParams.push(month); }
+  if (year)     { conditions.push("strftime('%Y', date) = ?");    whereParams.push(year);  }
+  if (payee)    { conditions.push("lower(payee) LIKE ?");          whereParams.push(`%${payee.toLowerCase()}%`); }
+  if (category) { conditions.push("lower(category) LIKE ?");       whereParams.push(`%${category.toLowerCase()}%`); }
+  if (search)   {
+    conditions.push("(lower(payee) LIKE ? OR lower(notes) LIKE ? OR lower(category) LIKE ?)");
     const s = `%${search.toLowerCase()}%`;
-    params.push(s, s, s);
+    whereParams.push(s, s, s);
   }
+  const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
 
-  sql += ' ORDER BY date DESC, id DESC LIMIT ? OFFSET ?';
-  params.push(parseInt(limit), parseInt(offset));
-
-  const rows = db.prepare(sql).all(...params);
-  const total = db.prepare(
-    'SELECT COUNT(*) as cnt FROM transactions WHERE 1=1' +
-    (month ? ' AND strftime(\'%Y-%m\', date) = ?' : '') +
-    (payee ? ' AND lower(payee) LIKE ?' : '') +
-    (category ? ' AND lower(category) LIKE ?' : '') +
-    (search ? ' AND (lower(payee) LIKE ? OR lower(notes) LIKE ? OR lower(category) LIKE ?)' : '')
-  ).get(...params.slice(0, -2));
+  const rows = db.prepare(
+    'SELECT * FROM transactions' + where + ' ORDER BY date DESC, id DESC LIMIT ? OFFSET ?'
+  ).all(...whereParams, parseInt(limit), parseInt(offset));
+  const total = db.prepare('SELECT COUNT(*) as cnt FROM transactions' + where).get(...whereParams);
 
   res.json({ rows, total: total.cnt });
 });

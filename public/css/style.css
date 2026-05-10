@@ -1459,6 +1459,7 @@ tr.due-soon td:first-child { color: var(--warning); }
   height: auto;
   aspect-ratio: 360 / 280;
   max-width: 100%;
+  max-height: 360px;
 }
 .sankey-empty {
   text-align: center;
@@ -2527,7 +2528,7 @@ tr.due-soon td:first-child { color: var(--warning); }
 }
 
 .heatmap-cell--active {
-  cursor: default;
+  cursor: pointer;
   transition: opacity 0.1s;
 }
 

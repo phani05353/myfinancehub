@@ -5,6 +5,66 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// Open a modal listing transactions filtered by category/payee/month/year
+async function showFilteredTransactions({ category, payee, month, year, date, title, subtitle }) {
+  openModal(`
+    <h2 style="margin-bottom:2px">${escHtml(title || 'Transactions')}</h2>
+    ${subtitle ? `<p style="color:var(--text-muted);font-size:13px;margin-bottom:8px">${escHtml(subtitle)}</p>` : ''}
+    <div id="filtered-tx-list" style="color:var(--text-muted);margin-top:12px">Loading…</div>
+  `);
+
+  const params = new URLSearchParams({ limit: '300' });
+  if (category) params.set('category', category);
+  if (payee)    params.set('payee', payee);
+  if (month)    params.set('month', month);
+  if (year)     params.set('year', year);
+  if (date)     params.set('date', date);
+
+  try {
+    const { rows } = await api(`/api/transactions?${params}`);
+    const list = document.getElementById('filtered-tx-list');
+    if (!list) return;
+
+    if (!rows || rows.length === 0) {
+      list.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:24px 0">No transactions found.</p>';
+      return;
+    }
+
+    const total = rows.reduce((s, t) => s + t.amount, 0);
+    list.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface2);border-radius:8px;margin-bottom:14px;font-size:12px">
+        <span style="color:var(--text-muted)">${rows.length} transaction${rows.length > 1 ? 's' : ''}</span>
+        <span style="font-weight:700;font-size:14px">${fmt(total)}</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Payee</th>
+              <th>Category</th>
+              <th style="text-align:right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(t => `
+              <tr>
+                <td style="white-space:nowrap;color:var(--text-muted)">${fmtDate(t.date)}</td>
+                <td>${escHtml(t.payee)}</td>
+                <td style="color:var(--text-muted)">${t.category ? escHtml(t.category) : '—'}</td>
+                <td style="text-align:right">${fmt(t.amount)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    const list = document.getElementById('filtered-tx-list');
+    if (list) list.innerHTML = `<p style="color:var(--danger)">Failed to load: ${escHtml(e.message)}</p>`;
+  }
+}
+
 function fmt(amount) {
   if (amount === null || amount === undefined) return '—';
   const n = parseFloat(amount);
@@ -1077,8 +1137,7 @@ const dashboardModule = {
               <h2 style="margin-bottom:0">Where Money Flows</h2>
               <span class="sankey-range">${sankeyRangeLabel}</span>
             </div>
-            <div class="sankey-wrap sankey-wrap--desktop">${sankeySvgHtml}</div>
-            <div class="sankey-wrap sankey-wrap--mobile">${sankeyMobileHtml}</div>
+            <div class="sankey-wrap">${sankeyMobileHtml}</div>
           </div>
 
           <!-- Budget -->
