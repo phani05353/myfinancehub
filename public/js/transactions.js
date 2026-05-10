@@ -594,29 +594,13 @@ function viewReceipt(filename) {
   const isPdf = /\.pdf$/i.test(filename);
 
   if (isPdf) {
-    // <object> handles PDFs natively on most platforms with iframe fallback.
-    // iOS Safari can't render PDFs inline reliably — give it an obvious "Open PDF" button.
     openModal(`<div class="receipt-modal receipt-modal--pdf">
-      <object data="${src}#toolbar=0&navpanes=0" type="application/pdf" aria-label="Receipt PDF">
-        <iframe src="${src}#toolbar=0&navpanes=0" title="Receipt PDF"></iframe>
-      </object>
-      <div class="receipt-modal__fallback">
-        <a href="${src}" download class="btn btn-primary">📄 Open / download PDF</a>
-      </div>
+      <iframe src="${src}#toolbar=0&navpanes=0" title="Receipt PDF"></iframe>
     </div>`);
   } else {
-    // Image: scrollable container so users can pan; double-tap toggles zoom.
-    openModal(`<div class="receipt-modal receipt-modal--img" id="receipt-img-wrap">
-      <img src="${src}" alt="Receipt" id="receipt-img">
+    openModal(`<div class="receipt-modal receipt-modal--img">
+      <img src="${src}" alt="Receipt">
     </div>`);
-    const wrap = document.getElementById('receipt-img-wrap');
-    const img  = document.getElementById('receipt-img');
-    let zoomed = false;
-    img?.addEventListener('dblclick', () => {
-      zoomed = !zoomed;
-      img.classList.toggle('receipt-img--zoomed', zoomed);
-      wrap?.scrollTo(0, 0);
-    });
   }
   document.getElementById('modal-box')?.classList.add('modal-box--receipt');
 }

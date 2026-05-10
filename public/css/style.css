@@ -781,124 +781,50 @@ input[type="checkbox"] {
 }
 #modal-close:hover, #modal-close:active { background: var(--surface2); color: var(--text); }
 
-/* Receipt modal — desktop: wider box, mobile: edge-to-edge full screen */
+/* Receipt modal — wider box, minimal padding so image/PDF can fill */
 #modal-box.modal-box--receipt {
-  max-width: 880px;
+  max-width: 820px;
   padding: 12px;
-  background: rgba(8, 12, 24, 0.96);
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
-}
-#modal-box.modal-box--receipt #modal-close {
-  top: 10px;
-  right: 10px;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  border-radius: 50%;
-  padding: 0;
-  z-index: 10;
 }
 .receipt-modal {
   display: flex;
-  flex-direction: column;
   justify-content: center;
   align-items: center;
   width: 100%;
-  gap: 12px;
-}
-.receipt-modal--img {
-  overflow: auto;
-  max-height: 80vh;
-  max-height: 80dvh;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-x pan-y pinch-zoom;
 }
 .receipt-modal--img img {
   display: block;
   max-width: 100%;
-  height: auto;
-  border-radius: 6px;
+  max-height: 78vh;
+  max-height: 78dvh;
+  border-radius: 8px;
   object-fit: contain;
-  transition: transform 0.2s ease;
-  cursor: zoom-in;
-}
-.receipt-modal--img img.receipt-img--zoomed {
-  max-width: none;
-  width: 200%;
-  cursor: zoom-out;
 }
 .receipt-modal--pdf {
   width: 100%;
   height: 78vh;
   height: 78dvh;
 }
-.receipt-modal--pdf > object,
 .receipt-modal--pdf iframe {
   width: 100%;
   height: 100%;
   border: none;
   border-radius: 8px;
   background: #fff;
-  display: block;
 }
-.receipt-modal__fallback {
-  width: 100%;
-  text-align: center;
-  padding: 4px 0 2px;
-}
-
 @media (max-width: 760px) {
-  #modal-overlay:has(.receipt-modal) { padding: 0; align-items: stretch; }
   #modal-box.modal-box--receipt {
-    max-width: 100%;
-    width: 100%;
-    max-height: 100vh;
-    max-height: 100dvh;
-    border-radius: 0;
-    padding: 0;
-    border: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.97);
-  }
-  #modal-box.modal-box--receipt #modal-close {
-    top: max(12px, env(safe-area-inset-top));
-    right: 12px;
-    width: 44px;
-    height: 44px;
-    font-size: 26px;
-  }
-  .receipt-modal {
-    height: 100%;
-    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
-    box-sizing: border-box;
-  }
-  .receipt-modal--img {
-    flex: 1;
-    max-height: none;
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: 8px;
+    max-height: 96vh;
+    max-height: 96dvh;
   }
   .receipt-modal--img img {
-    max-height: 100%;
-    max-width: 100%;
+    max-height: 88vh;
+    max-height: 88dvh;
   }
   .receipt-modal--pdf {
-    flex: 1;
-    height: auto;
-    padding: 0 8px;
-  }
-  .receipt-modal__fallback {
-    padding: 12px 0 max(12px, env(safe-area-inset-bottom));
+    height: 88vh;
+    height: 88dvh;
   }
 }
 
