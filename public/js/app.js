@@ -868,10 +868,10 @@ const dashboardModule = {
           <div class="bdg-total">
             <div class="bdg-total-top">
               <span class="bdg-total-label">Total Budget</span>
-              <span class="bdg-total-amounts">${fmtCur(totalSpent)} <span style="color:var(--text-muted)">of ${fmtCur(totalBudget)}</span></span>
+              <span class="bdg-total-amounts">${fmtCur(totalSpent)} <span class="bdg-total-of">of ${fmtCur(totalBudget)}</span></span>
             </div>
-            <div class="bdg-bar bdg-bar--total"><div class="bdg-bar-fill" style="width:${Math.min(100, totalPct).toFixed(1)}%;background:linear-gradient(90deg,#8a6bd6,#a78bfa)"></div></div>
-            <div class="bdg-total-pct">${totalPct.toFixed(1)}%</div>
+            <div class="bdg-bar bdg-bar--total"><div class="bdg-bar-fill" style="width:${Math.min(100, totalPct).toFixed(1)}%;background:rgba(255,255,255,0.9)"></div></div>
+            <div class="bdg-total-pct-wrap"><span class="bdg-total-pct">${totalPct.toFixed(1)}%</span></div>
           </div>
           <div class="bdg-grid">${rows}</div>
           ${budgetStatus.length > 6 ? `<div style="margin-top:14px"><a href="#/budget" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600">View all ${budgetStatus.length} →</a></div>` : ''}

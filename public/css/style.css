@@ -1901,25 +1901,28 @@ tr.due-soon td:first-child { color: var(--warning); }
   opacity: 0.75;
   margin-left: 4px;
 }
-.bdg-total-pct {
-  font-size: 12px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 8px;
-  background: rgba(255,255,255,0.18);
+.bdg-total-pct-wrap {
+  margin-top: 8px;
+  text-align: right;
 }
-.bdg-bar--total {
-  height: 7px;
+.bdg-total-pct {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 10px;
   background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+.bdg-bar.bdg-bar--total {
+  height: 8px;
+  background: rgba(255,255,255,0.22);
   border-radius: 4px;
   overflow: hidden;
 }
-.bdg-bar--total > span {
-  display: block;
-  height: 100%;
-  background: rgba(255,255,255,0.9);
+.bdg-bar.bdg-bar--total > .bdg-bar-fill {
+  background: rgba(255,255,255,0.92);
   border-radius: 4px;
-  transition: width 0.6s ease;
 }
 
 .bdg-grid {
