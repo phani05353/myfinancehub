@@ -844,7 +844,7 @@ const dashboardModule = {
         const icon   = pickBudgetIcon(b.category);
         const fillColor = over ? '#e26b6b' : pct >= 80 ? '#f4a055' : icon.bg;
         return `
-          <div class="bdg-row">
+          <div class="bdg-row" data-bdg-cat="${escHtml(b.category)}" style="cursor:pointer">
             <div class="bdg-icon" style="background:${icon.bg}">${icon.emoji}</div>
             <div class="bdg-body">
               <div class="bdg-top">
@@ -1178,6 +1178,17 @@ const dashboardModule = {
     </div>
     `;
 
+    // Make dashboard budget rows clickable → filtered transactions
+    document.querySelectorAll('.bdg-row[data-bdg-cat]').forEach(row => {
+      row.addEventListener('click', () => {
+        const cat = row.dataset.bdgCat;
+        showFilteredTransactions({
+          category: cat, month: currentMonth,
+          title: cat, subtitle: `Transactions in ${monthName}`
+        });
+      });
+    });
+
     // Expense Categories donut
     const donutCanvas = document.getElementById('dash-category-donut');
     if (donutCanvas && typeof Chart !== 'undefined' && donutSegments.length > 0) {
@@ -1200,12 +1211,23 @@ const dashboardModule = {
           maintainAspectRatio: false,
           cutout: '72%',
           layout: { padding: 4 },
+          onClick: (evt, els) => {
+            if (!els.length) return;
+            const seg = donutSegments[els[0].index];
+            // Skip the aggregated "N Others" segment (no single category to drill into)
+            if (/\bOthers?$/.test(seg.name)) return;
+            showFilteredTransactions({
+              category: seg.name, month: currentMonth,
+              title: seg.name, subtitle: `Transactions in ${monthName}`
+            });
+          },
           plugins: {
             legend: { display: false },
             tooltip: { enabled: false }
           }
         }
       });
+      donutCanvas.style.cursor = 'pointer';
     }
 
     // Cumulative spending chart (filled area + last month pace dashed line)
