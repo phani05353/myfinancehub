@@ -47,18 +47,28 @@ async function showFilteredTransactions({ category, payee, month, year, date, ti
             </tr>
           </thead>
           <tbody>
-            ${rows.map(t => `
-              <tr>
-                <td style="white-space:nowrap;color:var(--text-muted)">${fmtDate(t.date)}</td>
-                <td>${escHtml(t.payee)}</td>
-                <td style="color:var(--text-muted)">${t.category ? escHtml(t.category) : '—'}</td>
-                <td style="text-align:right">${fmt(t.amount)}</td>
-              </tr>
-            `).join('')}
+            ${rows.map(t => {
+              const clickable = !!t.receipt_path;
+              const attrs = clickable
+                ? `data-receipt="${escHtml(t.receipt_path)}" style="cursor:pointer" title="Click to view receipt"`
+                : '';
+              return `
+                <tr ${attrs}>
+                  <td style="white-space:nowrap;color:var(--text-muted)">${fmtDate(t.date)}</td>
+                  <td>${escHtml(t.payee)}${clickable ? ' <span style="color:var(--accent);font-size:12px;margin-left:4px" aria-label="Has receipt">📎</span>' : ''}</td>
+                  <td style="color:var(--text-muted)">${t.category ? escHtml(t.category) : '—'}</td>
+                  <td style="text-align:right">${fmt(t.amount)}</td>
+                </tr>`;
+            }).join('')}
           </tbody>
         </table>
       </div>
     `;
+
+    list.addEventListener('click', e => {
+      const tr = e.target.closest('tr[data-receipt]');
+      if (tr && typeof viewReceipt === 'function') viewReceipt(tr.dataset.receipt);
+    });
   } catch (e) {
     const list = document.getElementById('filtered-tx-list');
     if (list) list.innerHTML = `<p style="color:var(--danger)">Failed to load: ${escHtml(e.message)}</p>`;
@@ -793,17 +803,23 @@ const dashboardModule = {
     const txRows = (recentTx.rows || []);
     const recentList = txRows.length === 0
       ? '<p style="color:var(--text-muted);font-size:13px">No transactions this month.</p>'
-      : txRows.map(r => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border)">
-            <div style="display:flex;align-items:center;gap:10px;min-width:0">
-              ${typeof payeeLogoHtml === 'function' ? payeeLogoHtml(r.payee, r.amount) : ''}
-              <div style="min-width:0">
-                <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(r.payee)}</div>
-                <div style="font-size:11px;color:var(--text-muted)">${fmtDate(r.date)}${r.category ? ' · ' + escHtml(r.category) : ''}</div>
+      : txRows.map(r => {
+          const clickable = !!r.receipt_path;
+          const attrs = clickable
+            ? `data-receipt="${escHtml(r.receipt_path)}" style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border);cursor:pointer" title="Click to view receipt"`
+            : `style="display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--border)"`;
+          return `
+            <div class="dash-recent-row" ${attrs}>
+              <div style="display:flex;align-items:center;gap:10px;min-width:0">
+                ${typeof payeeLogoHtml === 'function' ? payeeLogoHtml(r.payee, r.amount) : ''}
+                <div style="min-width:0">
+                  <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(r.payee)}${clickable ? ' <span style="color:var(--accent);font-size:12px;margin-left:2px">📎</span>' : ''}</div>
+                  <div style="font-size:11px;color:var(--text-muted)">${fmtDate(r.date)}${r.category ? ' · ' + escHtml(r.category) : ''}</div>
+                </div>
               </div>
-            </div>
-            <div style="font-size:14px;white-space:nowrap;margin-left:12px">${fmt(r.amount)}</div>
-          </div>`).join('');
+              <div style="font-size:14px;white-space:nowrap;margin-left:12px">${fmt(r.amount)}</div>
+            </div>`;
+        }).join('');
 
     // Budget overview — colored icon rows
     const BUDGET_ICONS = {
@@ -1186,6 +1202,13 @@ const dashboardModule = {
           category: cat, month: currentMonth,
           title: cat, subtitle: `Transactions in ${monthName}`
         });
+      });
+    });
+
+    // Make dashboard Recent rows with receipts clickable → view receipt
+    document.querySelectorAll('.dash-recent-row[data-receipt]').forEach(row => {
+      row.addEventListener('click', () => {
+        if (typeof viewReceipt === 'function') viewReceipt(row.dataset.receipt);
       });
     });
 
