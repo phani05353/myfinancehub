@@ -8,10 +8,15 @@ const chartsModule = {
 
   async init() {
     this.destroyAll();
-    const months = await api('/api/charts/available-months');
+    const [months, categories] = await Promise.all([
+      api('/api/charts/available-months'),
+      api('/api/categories').catch(() => [])
+    ]);
     const currentMonth = months[0] || new Date().toISOString().slice(0, 7);
     const years = [...new Set(months.map(m => m.slice(0, 4)))];
     const currentYear = years[0] || String(new Date().getFullYear());
+    const sortedCats = [...categories].sort((a, b) => a.localeCompare(b));
+    const defaultCat = sortedCats[0] || '';
 
     document.getElementById('view').innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
@@ -48,6 +53,24 @@ const chartsModule = {
       </div>
 
       <div class="card" style="margin-top:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+          <h2 style="margin-bottom:0">Category Trend</h2>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <select id="cat-trend-cat" class="tx-filter-select-panel" style="width:auto">
+              ${sortedCats.map(c => `<option value="${c}" ${c === defaultCat ? 'selected' : ''}>${c}</option>`).join('')}
+            </select>
+            <select id="cat-trend-months" class="tx-filter-select-panel" style="width:auto">
+              <option value="3">Last 3 months</option>
+              <option value="6" selected>Last 6 months</option>
+              <option value="12">Last 12 months</option>
+            </select>
+          </div>
+        </div>
+        <p style="color:var(--text-muted);font-size:12px;margin-bottom:14px">Cumulative spend by day of month — compare pace across months.</p>
+        <div class="chart-container chart-container--tall"><canvas id="cat-trend-chart"></canvas></div>
+      </div>
+
+      <div class="card" style="margin-top:20px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
           <h2 style="margin-bottom:0">Spending Heatmap</h2>
           <select id="heatmap-year" class="tx-filter-select-panel" style="width:auto">
@@ -66,10 +89,13 @@ const chartsModule = {
     document.getElementById('chart-month').addEventListener('change', () => this.loadCharts());
     document.getElementById('trend-months').addEventListener('change', () => this.loadTrend());
     document.getElementById('heatmap-year').addEventListener('change', () => this.loadHeatmap());
+    document.getElementById('cat-trend-cat')?.addEventListener('change', () => this.loadCategoryTrend());
+    document.getElementById('cat-trend-months')?.addEventListener('change', () => this.loadCategoryTrend());
 
     await this.loadCharts();
     await this.loadTrend();
     await this.loadHeatmap();
+    await this.loadCategoryTrend();
   },
 
   async loadCharts() {
@@ -317,6 +343,114 @@ const chartsModule = {
         subtitle: 'Transactions on this day'
       });
     });
+  },
+
+  async loadCategoryTrend() {
+    const category = document.getElementById('cat-trend-cat')?.value;
+    const monthsBack = parseInt(document.getElementById('cat-trend-months')?.value || 6);
+    const canvas = document.getElementById('cat-trend-chart');
+    if (!canvas) return;
+
+    const existing = this.charts.find(c => c.canvas.id === 'cat-trend-chart');
+    if (existing) { existing.destroy(); this.charts = this.charts.filter(c => c !== existing); }
+
+    if (!category) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    const rows = await api(`/api/charts/category-trend?category=${encodeURIComponent(category)}&months=${monthsBack}`);
+
+    // Group rows by month, then build a cumulative-by-day array for each month
+    const byMonth = {};
+    rows.forEach(r => {
+      if (!byMonth[r.month]) byMonth[r.month] = {};
+      byMonth[r.month][r.day] = (byMonth[r.month][r.day] || 0) + r.total;
+    });
+
+    // Always show the last N months even if empty, so user sees missing-data gaps
+    const monthList = [];
+    const now = new Date();
+    for (let i = monthsBack - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      monthList.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+
+    const colors = ['#94a3b8', '#a78bfa', '#34d399', '#fbbf24', '#f87171', '#60a5fa', '#f472b6', '#fb923c', '#22d3ee', '#c084fc', '#4ade80', '#e879f9'];
+    const datasets = monthList.map((m, idx) => {
+      const isCurrent = idx === monthList.length - 1;
+      const dayData = byMonth[m] || {};
+      const [yr, mo] = m.split('-').map(Number);
+      const daysInMonth = new Date(yr, mo, 0).getDate();
+      const cumulative = [];
+      let running = 0;
+      for (let d = 1; d <= daysInMonth; d++) {
+        running += dayData[d] || 0;
+        cumulative.push(running);
+      }
+      // pad to 31 with nulls so the X-axis is consistent
+      while (cumulative.length < 31) cumulative.push(null);
+
+      const color = isCurrent ? 'rgba(93,155,235,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
+      return {
+        label: new Date(yr, mo - 1, 1).toLocaleString('default', { month: 'short', year: '2-digit' }),
+        data: cumulative,
+        borderColor: color,
+        backgroundColor: 'transparent',
+        borderWidth: isCurrent ? 2.5 : 1.5,
+        borderDash: isCurrent ? [] : [4, 4],
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        _month: m
+      };
+    });
+
+    const chart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: Array.from({ length: 31 }, (_, i) => i + 1),
+        datasets
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        onClick: (evt, els) => {
+          if (!els.length) return;
+          const m = datasets[els[0].datasetIndex]._month;
+          showFilteredTransactions({
+            category, month: m,
+            title: `${category} — ${m}`,
+            subtitle: 'All transactions this month'
+          });
+        },
+        plugins: {
+          legend: { position: 'top', align: 'end', labels: { color: '#8892a4', font: { size: 11 }, boxWidth: 14, padding: 10 } },
+          tooltip: {
+            callbacks: {
+              title: ctx => `Day ${ctx[0].label}`,
+              label: ctx => ctx.raw == null ? '' : ` ${ctx.dataset.label}: $${ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#8892a4', maxTicksLimit: 10 },
+            grid: { color: '#2e3350' },
+            title: { display: true, text: 'Day of month', color: '#8892a4', font: { size: 11 } }
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() },
+            grid: { color: '#2e3350' }
+          }
+        }
+      }
+    });
+    canvas.style.cursor = 'pointer';
+    this.charts.push(chart);
   },
 
   async loadTrend() {

@@ -797,6 +797,27 @@ app.get('/api/charts/available-months', (req, res) => {
   res.json(rows.map(r => r.month));
 });
 
+app.get('/api/charts/category-trend', (req, res) => {
+  const category = String(req.query.category || '').trim();
+  if (!category) return res.status(400).json({ error: 'category required' });
+  const months = Math.max(2, Math.min(24, parseInt(req.query.months) || 6));
+
+  const rows = db.prepare(`
+    SELECT
+      strftime('%Y-%m', date) as month,
+      CAST(strftime('%d', date) AS INTEGER) as day,
+      SUM(ABS(amount)) as total
+    FROM transactions
+    WHERE amount < 0
+      AND lower(category) = lower(?)
+      AND date >= date('now', 'start of month', ?)
+    GROUP BY month, day
+    ORDER BY month ASC, day ASC
+  `).all(category, `-${months - 1} months`);
+
+  res.json(rows);
+});
+
 app.get('/api/charts/spending-heatmap', (req, res) => {
   const year = /^\d{4}$/.test(req.query.year) ? req.query.year : String(new Date().getFullYear());
   const rows = db.prepare(`
