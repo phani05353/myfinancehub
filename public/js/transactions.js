@@ -536,15 +536,14 @@ async function addCategory() {
 function buildReceiptSection(txId, receiptPath) {
   const isImage = receiptPath && /\.(jpg|jpeg|png|webp)$/i.test(receiptPath);
   const isPdf   = receiptPath && /\.pdf$/i.test(receiptPath);
+  const safePath = receiptPath ? escHtml(receiptPath) : '';
 
   const existing = receiptPath ? `
     <div class="receipt-preview" id="receipt-preview">
       ${isImage
-        ? `<a href="/receipts/${receiptPath}" target="_blank">
-             <img src="/receipts/${receiptPath}" alt="Receipt" style="max-width:100%;max-height:160px;border-radius:6px;border:1px solid var(--border)">
-           </a>`
+        ? `<img src="/receipts/${safePath}" alt="Receipt" data-receipt-preview="${safePath}" style="max-width:100%;max-height:160px;border-radius:6px;border:1px solid var(--border);cursor:zoom-in">`
         : isPdf
-          ? `<a href="/receipts/${receiptPath}" target="_blank" class="btn btn-ghost btn-sm">📄 View PDF Receipt</a>`
+          ? `<button type="button" class="btn btn-ghost btn-sm" data-receipt-preview="${safePath}">📄 View PDF Receipt</button>`
           : ''
       }
       <div style="margin-top:8px">
@@ -591,19 +590,22 @@ async function removeReceipt(txId) {
 }
 
 function viewReceipt(filename) {
-  const isImage = /\.(jpg|jpeg|png|webp)$/i.test(filename);
-  if (isImage) {
+  const src = '/receipts/' + encodeURIComponent(filename);
+  const isPdf = /\.pdf$/i.test(filename);
+
+  if (isPdf) {
     openModal(`
-      <div style="text-align:center">
-        <img src="/receipts/${filename}" alt="Receipt"
-          style="max-width:100%;max-height:70vh;border-radius:8px;object-fit:contain">
-        <div style="margin-top:12px">
-          <a href="/receipts/${filename}" target="_blank" class="btn btn-ghost btn-sm">Open full size ↗</a>
-        </div>
+      <div style="display:flex;flex-direction:column;height:80vh">
+        <iframe src="${src}#toolbar=0&navpanes=0" style="flex:1;width:100%;border:none;border-radius:8px;background:#fff" title="Receipt PDF"></iframe>
       </div>
     `);
   } else {
-    window.open(`/receipts/${filename}`, '_blank');
+    openModal(`
+      <div style="text-align:center">
+        <img src="${src}" alt="Receipt"
+          style="max-width:100%;max-height:80vh;border-radius:8px;object-fit:contain">
+      </div>
+    `);
   }
 }
 

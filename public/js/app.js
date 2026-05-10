@@ -125,6 +125,15 @@ document.getElementById('modal-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('modal-overlay')) closeModal();
 });
 
+// Any element with [data-receipt-preview="<filename>"] opens the receipt modal
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-receipt-preview]');
+  if (el && typeof viewReceipt === 'function') {
+    e.preventDefault();
+    viewReceipt(el.dataset.receiptPreview);
+  }
+});
+
 function toast(msg, type = 'success') {
   const el = document.createElement('div');
   const isMobile = window.innerWidth <= 768;
