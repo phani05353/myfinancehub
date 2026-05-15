@@ -371,7 +371,10 @@ const subscriptionsModule = {
   async markPaid(id) {
     try {
       const result = await api(`/api/subscriptions/${id}/pay`, { method: 'POST', body: {} });
-      toast(`Marked paid. Next due: ${fmtDate(result.next_due_date)}`);
+      const tail = result.skipped
+        ? ' (using existing transaction)'
+        : '';
+      toast(`Marked paid. Next due: ${fmtDate(result.next_due_date)}${tail}`);
       await this.render();
     } catch (e) { toast(e.message, 'error'); }
   },

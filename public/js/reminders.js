@@ -343,9 +343,10 @@ const remindersModule = {
   async markPaid(id) {
     try {
       const result = await api(`/api/reminders/${id}/pay`, { method: 'POST', body: {} });
+      const tail = result.skipped ? ' (using existing transaction)' : '';
       const msg = result.next
-        ? `Marked paid! Next due: ${fmtDate(result.next.due_date)}`
-        : 'Marked as paid';
+        ? `Marked paid! Next due: ${fmtDate(result.next.due_date)}${tail}`
+        : `Marked as paid${tail}`;
       toast(msg);
       await this.render();
     } catch (e) { toast(e.message, 'error'); }

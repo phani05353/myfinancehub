@@ -656,6 +656,24 @@ app.delete('/api/subscriptions/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// Look for a recent matching transaction so "Mark Paid" doesn't double-record
+// a bill the user already entered manually or imported via CSV.
+// Match window: ±5 days, amount tolerance = max($0.50, 2%).
+function findRecentMatchingExpense(payee, amount) {
+  if (!payee || !amount) return null;
+  const tolerance = Math.max(0.50, Math.abs(amount) * 0.02);
+  return db.prepare(`
+    SELECT id, date, payee, amount FROM transactions
+    WHERE lower(payee) = lower(?)
+      AND amount < 0
+      AND ABS(amount - ?) <= ?
+      AND date >= date('now', '-5 days')
+      AND date <= date('now', '+5 days')
+    ORDER BY date DESC, id DESC
+    LIMIT 1
+  `).get(payee, -Math.abs(amount), tolerance) || null;
+}
+
 app.post('/api/subscriptions/:id/pay', (req, res) => {
   const sub = db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(req.params.id);
   if (!sub) return res.status(404).json({ error: 'Not found' });
@@ -666,10 +684,23 @@ app.post('/api/subscriptions/:id/pay', (req, res) => {
   else if (sub.billing_cycle === 'weekly') d.setDate(d.getDate() + 7);
   const nextDate = d.toISOString().slice(0, 10);
   db.prepare('UPDATE subscriptions SET next_due_date = ? WHERE id = ?').run(nextDate, req.params.id);
+
+  // Skip inserting a transaction if one already exists for this charge.
+  const matchPayee = (sub.payee && sub.payee.trim()) || sub.name;
+  const existing = findRecentMatchingExpense(matchPayee, sub.amount);
+  if (existing) {
+    return res.json({
+      next_due_date: nextDate,
+      transaction_id: existing.id,
+      skipped: true,
+      matched: { id: existing.id, date: existing.date }
+    });
+  }
+
   const txResult = db.prepare(
     'INSERT INTO transactions (date, payee, category, amount, notes, source) VALUES (?, ?, ?, ?, ?, ?)'
   ).run(today, sub.name, sub.category || 'Subscriptions', -Math.abs(sub.amount), `Subscription: ${sub.name}`, 'subscription');
-  res.json({ next_due_date: nextDate, transaction_id: txResult.lastInsertRowid });
+  res.json({ next_due_date: nextDate, transaction_id: txResult.lastInsertRowid, skipped: false });
 });
 
 // ─── REMINDERS ────────────────────────────────────────────────────────────────
@@ -791,11 +822,18 @@ app.post('/api/reminders/:id/pay', (req, res) => {
   db.prepare('UPDATE reminders SET paid = 1, paid_date = ? WHERE id = ?').run(today, reminder.id);
 
   let transaction_id = null;
+  let skipped = false;
   if (reminder.amount) {
-    const txResult = db.prepare(
-      'INSERT INTO transactions (date, payee, category, amount, notes, source) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(today, reminder.title, reminder.category || 'Bills', -Math.abs(reminder.amount), `Bill: ${reminder.title}`, 'bill');
-    transaction_id = txResult.lastInsertRowid;
+    const existing = findRecentMatchingExpense(reminder.title, reminder.amount);
+    if (existing) {
+      transaction_id = existing.id;
+      skipped = true;
+    } else {
+      const txResult = db.prepare(
+        'INSERT INTO transactions (date, payee, category, amount, notes, source) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(today, reminder.title, reminder.category || 'Bills', -Math.abs(reminder.amount), `Bill: ${reminder.title}`, 'bill');
+      transaction_id = txResult.lastInsertRowid;
+    }
   }
 
   let next = null;
@@ -813,7 +851,8 @@ app.post('/api/reminders/:id/pay', (req, res) => {
   res.json({
     paid: db.prepare('SELECT * FROM reminders WHERE id = ?').get(reminder.id),
     next,
-    transaction_id
+    transaction_id,
+    skipped
   });
 });
 
