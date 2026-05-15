@@ -2640,20 +2640,30 @@ tr.due-soon td:first-child { color: var(--warning); }
 
 /* ── Smart Insights widget ── */
 .insights-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+@media (max-width: 760px) {
+  .insights-list { grid-template-columns: 1fr; }
 }
 .insight-row {
   display: grid;
-  grid-template-columns: 40px 1fr;
-  gap: 12px;
+  grid-template-columns: 32px 1fr;
+  gap: 10px;
   align-items: center;
-  padding: 12px 14px;
+  padding: 10px 12px;
   background: var(--surface2);
   border-radius: 10px;
   border-left: 3px solid transparent;
   transition: background 0.15s, transform 0.1s;
+  min-width: 0;
+}
+.insight-row .insight-headline,
+.insight-row .insight-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .insight-row--good { border-left-color: var(--success, #34d399); }
 .insight-row--warn { border-left-color: #f4a055; }
@@ -2664,7 +2674,7 @@ tr.due-soon td:first-child { color: var(--warning); }
   transform: translateX(2px);
 }
 .insight-icon {
-  font-size: 22px;
+  font-size: 18px;
   text-align: center;
   line-height: 1;
 }
