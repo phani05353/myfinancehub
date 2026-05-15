@@ -7,11 +7,18 @@ function escHtml(s) {
 
 // Open a modal listing transactions filtered by category/payee/month/year
 async function showFilteredTransactions({ category, payee, month, year, date, title, subtitle }) {
+  const trendBtn = payee
+    ? `<button class="btn btn-ghost btn-sm" id="ftx-payee-trend" data-payee="${escHtml(payee)}" style="margin-top:8px">📈 View trend</button>`
+    : '';
   openModal(`
     <h2 style="margin-bottom:2px">${escHtml(title || 'Transactions')}</h2>
     ${subtitle ? `<p style="color:var(--text-muted);font-size:13px;margin-bottom:8px">${escHtml(subtitle)}</p>` : ''}
+    ${trendBtn}
     <div id="filtered-tx-list" style="color:var(--text-muted);margin-top:12px">Loading…</div>
   `);
+  document.getElementById('ftx-payee-trend')?.addEventListener('click', e => {
+    showPayeeTrend(e.currentTarget.dataset.payee);
+  });
 
   const params = new URLSearchParams({ limit: '300' });
   if (category) params.set('category', category);
@@ -75,6 +82,142 @@ async function showFilteredTransactions({ category, payee, month, year, date, ti
   }
 }
 
+// Per-merchant cumulative trend modal — sibling to category trend, scoped to one payee
+let __payeeTrendChart = null;
+async function showPayeeTrend(payee, defaultMonths = 6) {
+  if (!payee) return;
+  openModal(`
+    <h2 style="margin-bottom:2px">📈 ${escHtml(payee)}</h2>
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px">Cumulative spend by day of month — compare pace across months.</p>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <select id="payee-trend-months" class="tx-filter-select-panel" style="width:auto">
+        <option value="3">Last 3 months</option>
+        <option value="6" selected>Last 6 months</option>
+        <option value="12">Last 12 months</option>
+      </select>
+    </div>
+    <div style="position:relative;height:340px"><canvas id="payee-trend-chart"></canvas></div>
+    <div id="payee-trend-summary" style="margin-top:14px;font-size:12px;color:var(--text-muted)"></div>
+  `);
+
+  const render = async (months) => {
+    if (__payeeTrendChart) { try { __payeeTrendChart.destroy(); } catch (_) {} __payeeTrendChart = null; }
+    const canvas = document.getElementById('payee-trend-chart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    const rows = await api(`/api/charts/payee-trend?payee=${encodeURIComponent(payee)}&months=${months}`).catch(() => []);
+
+    const byMonth = {};
+    rows.forEach(r => {
+      if (!byMonth[r.month]) byMonth[r.month] = {};
+      byMonth[r.month][r.day] = (byMonth[r.month][r.day] || 0) + r.total;
+    });
+
+    const today = new Date();
+    const monthList = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      monthList.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+
+    const colors = ['#94a3b8','#a78bfa','#34d399','#fbbf24','#f87171','#60a5fa','#f472b6','#fb923c','#22d3ee','#c084fc','#4ade80','#e879f9'];
+    const datasets = monthList.map((m, idx) => {
+      const isCurrent = idx === monthList.length - 1;
+      const dayData = byMonth[m] || {};
+      const [yr, mo] = m.split('-').map(Number);
+      const daysIn = new Date(yr, mo, 0).getDate();
+      const cumulative = [];
+      let running = 0;
+      for (let d = 1; d <= daysIn; d++) {
+        running += dayData[d] || 0;
+        cumulative.push(running);
+      }
+      while (cumulative.length < 31) cumulative.push(null);
+      const color = isCurrent ? 'rgba(93,155,235,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
+      return {
+        label: new Date(yr, mo - 1, 1).toLocaleString('default', { month: 'short', year: '2-digit' }),
+        data: cumulative,
+        borderColor: color,
+        backgroundColor: 'transparent',
+        borderWidth: isCurrent ? 2.5 : 1.5,
+        borderDash: isCurrent ? [] : [4, 4],
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        _month: m,
+        _total: running
+      };
+    });
+
+    __payeeTrendChart = new Chart(canvas, {
+      type: 'line',
+      data: { labels: Array.from({ length: 31 }, (_, i) => i + 1), datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        onClick: (evt, els) => {
+          if (!els.length) return;
+          const m = datasets[els[0].datasetIndex]._month;
+          showFilteredTransactions({
+            payee, month: m,
+            title: `${payee} — ${m}`,
+            subtitle: 'Transactions this month'
+          });
+        },
+        plugins: {
+          legend: { position: 'top', align: 'end', labels: { color: '#8892a4', font: { size: 11 }, boxWidth: 14, padding: 10 } },
+          tooltip: {
+            callbacks: {
+              title: ctx => `Day ${ctx[0].label}`,
+              label: ctx => ctx.raw == null ? '' : ` ${ctx.dataset.label}: $${ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#8892a4', maxTicksLimit: 10 },
+            grid: { color: '#2e3350' },
+            title: { display: true, text: 'Day of month', color: '#8892a4', font: { size: 11 } }
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() },
+            grid: { color: '#2e3350' }
+          }
+        }
+      }
+    });
+    canvas.style.cursor = 'pointer';
+
+    // Summary line: current MTD vs same-day last month
+    const summaryEl = document.getElementById('payee-trend-summary');
+    if (summaryEl) {
+      const curDs  = datasets[datasets.length - 1];
+      const prevDs = datasets[datasets.length - 2];
+      const dayOf  = today.getDate();
+      const curVal = curDs?.data?.[dayOf - 1] || 0;
+      const prevVal = prevDs?.data?.[dayOf - 1];
+      if (curVal === 0 && (prevVal || 0) === 0) {
+        summaryEl.textContent = 'No data for this merchant in the selected range.';
+      } else if (prevVal != null && prevVal > 0) {
+        const diff = curVal - prevVal;
+        const pct = (diff / prevVal) * 100;
+        summaryEl.innerHTML = `MTD: <strong style="color:var(--text)">${fmtCur(curVal)}</strong> · `
+          + `Same day last month: <strong style="color:var(--text)">${fmtCur(prevVal)}</strong> · `
+          + `<span style="color:${diff > 0 ? 'var(--danger)' : 'var(--success)'};font-weight:600">${diff > 0 ? '+' : ''}${pct.toFixed(1)}%</span>`;
+      } else {
+        summaryEl.textContent = `MTD: ${fmtCur(curVal)} (no comparable data last month)`;
+      }
+    }
+  };
+
+  document.getElementById('payee-trend-months').addEventListener('change', e => {
+    render(parseInt(e.target.value));
+  });
+
+  await render(defaultMonths);
+}
+
 function fmt(amount) {
   if (amount === null || amount === undefined) return '—';
   const n = parseFloat(amount);
@@ -117,6 +260,10 @@ function closeModal() {
   document.getElementById('modal-content').innerHTML = '';
   document.getElementById('modal-box')?.classList.remove('modal-box--receipt');
   document.body.style.overflow = '';
+  if (typeof __payeeTrendChart !== 'undefined' && __payeeTrendChart) {
+    try { __payeeTrendChart.destroy(); } catch (_) {}
+    __payeeTrendChart = null;
+  }
 }
 
 document.addEventListener('keydown', e => {

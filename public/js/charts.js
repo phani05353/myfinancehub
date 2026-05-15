@@ -201,8 +201,8 @@ const chartsModule = {
               <tbody>
                 ${byPayee.map(p => {
                   const pct = total > 0 ? (Math.abs(p.total) / total * 100).toFixed(1) : 0;
-                  return `<tr>
-                    <td data-label="Payee">${escHtml(p.payee)}</td>
+                  return `<tr data-payee-trend="${escHtml(p.payee)}" style="cursor:pointer" title="Click to view trend">
+                    <td data-label="Payee">${escHtml(p.payee)} <span style="color:var(--accent);font-size:11px;opacity:0.7">📈</span></td>
                     <td data-label="Txns" style="text-align:right;color:var(--text-muted)">${p.count}</td>
                     <td data-label="Total" style="text-align:right"><span class="amount-negative">$${Math.abs(p.total).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></td>
                     <td data-label="Share" class="hide-mobile">
@@ -219,6 +219,9 @@ const chartsModule = {
             </table>
           </div>
         `;
+        tbl.querySelectorAll('tr[data-payee-trend]').forEach(row => {
+          row.addEventListener('click', () => showPayeeTrend(row.dataset.payeeTrend));
+        });
       }
     }
   },
