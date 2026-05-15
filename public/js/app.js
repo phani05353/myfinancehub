@@ -714,14 +714,12 @@ const dashboardModule = {
       if (totalIn === 0 && totalOut === 0) {
         return '<div class="sankey-empty">No cash flow data this month.</div>';
       }
-      const SOURCE_COLORS = ['#5cb3f2','#4a7dd4','#6c8ef5','#8a6bd6','#a78bfa','#7fc68a','#d99b4a'];
-      const MAX_SRC = 4, MAX_CAT = 6;
-      let sources = incomeList.slice(0, MAX_SRC);
-      if (incomeList.length > MAX_SRC) {
-        const rest = incomeList.slice(MAX_SRC).reduce((s, n) => s + n.value, 0);
-        if (rest > 0) sources.push({ name: `${incomeList.length - MAX_SRC} Other`, value: rest });
-      }
-      sources = sources.map((s, i) => ({ ...s, color: SOURCE_COLORS[i % SOURCE_COLORS.length] }));
+      const MAX_CAT = 6;
+
+      // Income: collapse all sources into a single bar instead of per-payee
+      let sources = totalIn > 0
+        ? [{ name: 'Income', value: totalIn, color: '#5cb3f2' }]
+        : [];
 
       let cats = expenseList.slice(0, MAX_CAT).map((c, i) => ({ ...c, color: CAT_PALETTE[i % CAT_PALETTE.length] }));
       if (expenseList.length > MAX_CAT) {
