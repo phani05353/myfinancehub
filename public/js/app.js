@@ -939,6 +939,140 @@ const dashboardModule = {
         </div>`;
     })();
 
+    // ── Smart Insights ───────────────────────────────────────────────────────
+    const smartInsights = (() => {
+      const insights = [];
+      const mtdSpend  = Math.abs(summary.expenses || 0);
+      const daysIn    = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+      const dailyRate = today.getDate() > 0 ? mtdSpend / today.getDate() : 0;
+      const projected = dailyRate * daysIn;
+
+      const trendArr = Array.isArray(trend) ? trend : [];
+      const prevTrend = trendArr.length >= 2 ? trendArr[trendArr.length - 2] : null;
+      const prevExpense = prevTrend ? Math.abs(prevTrend.expenses) : 0;
+
+      // 1. Pace vs last month
+      if (prevExpense > 50 && projected > 0) {
+        const diffPct = ((projected - prevExpense) / prevExpense) * 100;
+        if (Math.abs(diffPct) >= 5) {
+          const faster = diffPct > 0;
+          insights.push({
+            icon: faster ? '📈' : '📉',
+            headline: `Spending ${Math.abs(diffPct).toFixed(0)}% ${faster ? 'faster' : 'slower'} than last month`,
+            detail: `${fmtCur(projected)} projected · ${fmtCur(prevExpense)} last month`,
+            tone: faster ? 'warn' : 'good'
+          });
+        }
+      }
+
+      // 2. Biggest category jump from last month
+      const curMonthIdx = monthsSeq.length - 1;
+      const prevMonthIdx = monthsSeq.length - 2;
+      const catChanges = Object.entries(catSeries).map(([cat, series]) => {
+        const cur = series[curMonthIdx] || 0;
+        const prev = series[prevMonthIdx] || 0;
+        if (prev < 50) return null; // ignore noise
+        const diff = cur - prev;
+        return { cat, cur, prev, diff, pct: (diff / prev) * 100 };
+      }).filter(Boolean);
+      const biggestUp = catChanges.filter(c => c.diff > 30).sort((a, b) => b.diff - a.diff)[0];
+      if (biggestUp) {
+        insights.push({
+          icon: '🚀',
+          headline: `${biggestUp.cat} up ${biggestUp.pct.toFixed(0)}% this month`,
+          detail: `${fmtCur(biggestUp.cur)} so far · was ${fmtCur(biggestUp.prev)} last month`,
+          drillCategory: biggestUp.cat,
+          tone: 'warn'
+        });
+      } else {
+        const biggestDown = catChanges.filter(c => c.diff < -30).sort((a, b) => a.diff - b.diff)[0];
+        if (biggestDown) {
+          insights.push({
+            icon: '✅',
+            headline: `${biggestDown.cat} down ${Math.abs(biggestDown.pct).toFixed(0)}% this month`,
+            detail: `${fmtCur(biggestDown.cur)} so far · was ${fmtCur(biggestDown.prev)} last month`,
+            drillCategory: biggestDown.cat,
+            tone: 'good'
+          });
+        }
+      }
+
+      // 3. Day-of-week pattern
+      const DOW = ['Sundays','Mondays','Tuesdays','Wednesdays','Thursdays','Fridays','Saturdays'];
+      const dowTotals = [0,0,0,0,0,0,0];
+      const dowCounts = [0,0,0,0,0,0,0];
+      (allMonthTx.rows || []).forEach(r => {
+        if (r.amount < 0) {
+          const d = new Date(r.date + 'T00:00:00');
+          const idx = d.getDay();
+          dowTotals[idx] += Math.abs(r.amount);
+          dowCounts[idx]++;
+        }
+      });
+      const maxDow = Math.max(...dowTotals);
+      const totalSpend = dowTotals.reduce((a, b) => a + b, 0);
+      if (maxDow > 0 && totalSpend > 0) {
+        const maxIdx = dowTotals.indexOf(maxDow);
+        const share = (maxDow / totalSpend) * 100;
+        if (share >= 25) {
+          insights.push({
+            icon: '📅',
+            headline: `${DOW[maxIdx]} are your biggest spending days`,
+            detail: `${fmtCur(maxDow)} this month · ${share.toFixed(0)}% of total`,
+            tone: 'neutral'
+          });
+        }
+      }
+
+      // 4. Top merchant
+      const merchantTotals = {};
+      (allMonthTx.rows || []).forEach(r => {
+        if (r.amount < 0 && r.payee) {
+          const k = r.payee.trim();
+          if (!merchantTotals[k]) merchantTotals[k] = { total: 0, count: 0 };
+          merchantTotals[k].total += Math.abs(r.amount);
+          merchantTotals[k].count += 1;
+        }
+      });
+      const topMerchant = Object.entries(merchantTotals)
+        .map(([k, v]) => ({ name: k, ...v }))
+        .sort((a, b) => b.total - a.total)[0];
+      if (topMerchant && topMerchant.count >= 2) {
+        insights.push({
+          icon: '🏆',
+          headline: `${topMerchant.name} is your top merchant`,
+          detail: `${fmtCur(topMerchant.total)} across ${topMerchant.count} visits`,
+          drillPayee: topMerchant.name,
+          tone: 'neutral'
+        });
+      }
+
+      return insights.slice(0, 4); // cap at 4 to keep card compact
+    })();
+
+    const insightsCard = smartInsights.length === 0 ? '' : `
+      <div class="card insights-card" style="margin-bottom:16px">
+        <div class="dash-card-head" style="margin-bottom:12px">
+          <h2 style="margin-bottom:0;display:flex;align-items:center;gap:8px">💡 Smart Insights</h2>
+        </div>
+        <div class="insights-list">
+          ${smartInsights.map(i => {
+            const attrs = i.drillCategory
+              ? `data-insight-cat="${escHtml(i.drillCategory)}"`
+              : i.drillPayee
+                ? `data-insight-payee="${escHtml(i.drillPayee)}"`
+                : '';
+            return `<div class="insight-row insight-row--${i.tone}" ${attrs}${attrs ? ' style="cursor:pointer"' : ''}>
+              <div class="insight-icon">${i.icon}</div>
+              <div class="insight-body">
+                <div class="insight-headline">${escHtml(i.headline)}</div>
+                <div class="insight-detail">${escHtml(i.detail)}</div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+
     // ── Subscription Price-Hike Alerts ───────────────────────────────────────
     const priceAlertList = Array.isArray(priceAlerts) ? priceAlerts : [];
     const priceAlertCard = priceAlertList.length === 0 ? '' : `
@@ -1179,6 +1313,8 @@ const dashboardModule = {
             </div>
           </div>
 
+          ${insightsCard}
+
           <!-- Latest Tx + Upcoming Bills -->
           <div class="dash-duo-grid">
             <div class="card">
@@ -1280,6 +1416,26 @@ const dashboardModule = {
     document.querySelectorAll('.dash-recent-row[data-receipt]').forEach(row => {
       row.addEventListener('click', () => {
         if (typeof viewReceipt === 'function') viewReceipt(row.dataset.receipt);
+      });
+    });
+
+    // Smart Insight rows: drill into transactions for the relevant slice
+    document.querySelectorAll('.insight-row[data-insight-cat]').forEach(row => {
+      row.addEventListener('click', () => {
+        const cat = row.dataset.insightCat;
+        showFilteredTransactions({
+          category: cat, month: currentMonth,
+          title: cat, subtitle: `Transactions in ${monthName}`
+        });
+      });
+    });
+    document.querySelectorAll('.insight-row[data-insight-payee]').forEach(row => {
+      row.addEventListener('click', () => {
+        const p = row.dataset.insightPayee;
+        showFilteredTransactions({
+          payee: p, month: currentMonth,
+          title: p, subtitle: `Transactions in ${monthName}`
+        });
       });
     });
 
