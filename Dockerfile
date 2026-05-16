@@ -14,12 +14,17 @@
 #
 # Then open http://your-homelab-ip:3000
 # All data lives in /your/data/path/finance.db — back that up.
+#
+# Base image is Debian slim (not Alpine) because @temporalio/worker ships
+# prebuilt binaries for glibc only.
 # ─────────────────────────────────────────────────────────────────────────────
 
-FROM node:20-alpine
+FROM node:20-slim
 
-# Build deps for better-sqlite3 native bindings
-RUN apk add --no-cache python3 make g++
+# Build deps for better-sqlite3 native bindings + ca-certs for outbound HTTPS
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 make g++ ca-certificates wget \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -27,8 +32,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# Remove build deps after native modules are compiled (keeps image slim)
-RUN apk del python3 make g++ && rm -rf /var/cache/apk/*
+# Drop the build toolchain to keep the runtime image leaner
+RUN apt-get purge -y python3 make g++ \
+ && apt-get autoremove -y \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY . .
 
@@ -43,6 +50,6 @@ ENV NODE_ENV=production
 ENV PORT=3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+  CMD wget -qO- http://localhost:3000/health >/dev/null 2>&1 || exit 1
 
 CMD ["node", "server.js"]

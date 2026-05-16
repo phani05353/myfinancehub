@@ -9,12 +9,17 @@
     "hash-password": "node scripts/hash-password.js"
   },
   "dependencies": {
+    "@temporalio/activity": "^1.10.3",
+    "@temporalio/client": "^1.10.3",
+    "@temporalio/worker": "^1.10.3",
+    "@temporalio/workflow": "^1.10.3",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^9.4.3",
     "csv-parse": "^5.5.6",
     "dotenv": "^16.4.5",
     "express": "^4.18.3",
     "express-session": "^1.18.0",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "web-push": "^3.6.7"
   }
 }

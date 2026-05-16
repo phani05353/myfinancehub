@@ -5,6 +5,41 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── Web Push subscribe / unsubscribe helpers ────────────────────────────────
+function urlBase64ToUint8Array(base64) {
+  const pad = '='.repeat((4 - base64.length % 4) % 4);
+  const b = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b);
+  return Uint8Array.from(raw, c => c.charCodeAt(0));
+}
+
+async function subscribePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    throw new Error('Push not supported by this browser. Install the PWA on your home screen.');
+  }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') throw new Error('Permission denied');
+
+  const reg = await navigator.serviceWorker.ready;
+  const { publicKey } = await fetch('/api/push/vapid-public-key').then(r => r.json());
+  if (!publicKey) throw new Error('Server did not return a VAPID key');
+
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKey)
+  });
+  await api('/api/push/subscribe', { method: 'POST', body: sub.toJSON() });
+}
+
+async function unsubscribePush() {
+  if (!('serviceWorker' in navigator)) return;
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  if (!sub) return;
+  await api('/api/push/unsubscribe', { method: 'POST', body: { endpoint: sub.endpoint } });
+  await sub.unsubscribe();
+}
+
 // Open a modal listing transactions filtered by category/payee/month/year
 async function showFilteredTransactions({ category, payee, month, year, date, title, subtitle }) {
   const trendBtn = payee
@@ -483,6 +518,17 @@ async function generateInvite() {
 async function editProfileModal() {
   let me = { username: '', display_name: '' };
   try { me = await api('/api/auth/me'); } catch (_) {}
+
+  const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  let pushEnabled = false;
+  if (pushSupported) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      pushEnabled = !!sub && Notification.permission === 'granted';
+    } catch (_) {}
+  }
+
   openModal(`
     <h2>Edit Profile</h2>
     <form id="profile-form" style="margin-top:16px">
@@ -494,12 +540,56 @@ async function editProfileModal() {
           Shown in the greeting on the dashboard. Leave blank to use your username (${escHtml(me.username || '')}).
         </div>
       </div>
+
+      <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:18px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+          <div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:2px">🔔 Push Notifications</div>
+            <div style="font-size:11px;color:var(--text-muted)">
+              ${pushSupported
+                ? (pushEnabled ? 'Enabled on this device.' : 'Get bill reminders, budget alerts, and weekly insights.')
+                : 'Not supported in this browser. Install the PWA on your home screen.'}
+            </div>
+          </div>
+          ${pushSupported
+            ? `<button type="button" class="btn ${pushEnabled ? 'btn-ghost' : 'btn-primary'} btn-sm" id="push-toggle" style="white-space:nowrap">
+                ${pushEnabled ? 'Disable' : 'Enable'}
+              </button>`
+            : ''}
+        </div>
+        ${pushSupported && pushEnabled ? `
+          <button type="button" class="btn btn-ghost btn-sm" id="push-test" style="margin-top:10px;font-size:11px">
+            Send test notification
+          </button>` : ''}
+      </div>
+
       <div style="display:flex;gap:10px;justify-content:flex-end">
         <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
   `);
+
+  document.getElementById('push-toggle')?.addEventListener('click', async () => {
+    try {
+      if (pushEnabled) {
+        await unsubscribePush();
+        toast('Notifications disabled on this device');
+      } else {
+        await subscribePush();
+        toast('Notifications enabled. You\'ll get alerts for bills, budgets, and insights.');
+      }
+      // refresh modal state
+      editProfileModal();
+    } catch (e) { toast(e.message, 'error'); }
+  });
+
+  document.getElementById('push-test')?.addEventListener('click', async () => {
+    try {
+      const r = await api('/api/push/test', { method: 'POST', body: {} });
+      toast(`Test sent to ${r.sent} device${r.sent === 1 ? '' : 's'}`);
+    } catch (e) { toast(e.message, 'error'); }
+  });
   document.getElementById('profile-form').onsubmit = async e => {
     e.preventDefault();
     const name = document.getElementById('profile-name').value.trim();

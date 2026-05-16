@@ -7,6 +7,7 @@ const multer = require('multer');
 const { parse } = require('csv-parse/sync');
 const path = require('path');
 const fs = require('fs');
+const webpush = require('web-push');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,6 +36,49 @@ if (!sessionSecret) {
   sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
   db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('session_secret', ?)").run(sessionSecret);
 }
+
+// ─── WEB PUSH (VAPID auto-generated and persisted on first boot) ──────────────
+let vapidPublic  = db.prepare("SELECT value FROM app_settings WHERE key = 'vapid_public'").get()?.value;
+let vapidPrivate = db.prepare("SELECT value FROM app_settings WHERE key = 'vapid_private'").get()?.value;
+if (!vapidPublic || !vapidPrivate) {
+  const keys = webpush.generateVAPIDKeys();
+  vapidPublic  = keys.publicKey;
+  vapidPrivate = keys.privateKey;
+  db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('vapid_public', ?)").run(vapidPublic);
+  db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('vapid_private', ?)").run(vapidPrivate);
+  console.log('Generated new VAPID keypair for Web Push.');
+}
+webpush.setVapidDetails(
+  process.env.VAPID_SUBJECT || 'mailto:admin@home-finance.local',
+  vapidPublic,
+  vapidPrivate
+);
+
+// Send a push payload to every saved subscription. Cleans up dead endpoints.
+async function sendPushToAll(payload) {
+  const subs = db.prepare('SELECT * FROM push_subscriptions').all();
+  if (subs.length === 0) return { sent: 0, failed: 0 };
+  let sent = 0, failed = 0;
+  await Promise.all(subs.map(async s => {
+    try {
+      await webpush.sendNotification(
+        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+        JSON.stringify(payload)
+      );
+      db.prepare('UPDATE push_subscriptions SET last_seen = datetime(\'now\') WHERE id = ?').run(s.id);
+      sent++;
+    } catch (err) {
+      // 404/410 = subscription dead, prune it
+      if (err.statusCode === 404 || err.statusCode === 410) {
+        db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(s.id);
+      }
+      failed++;
+    }
+  }));
+  return { sent, failed };
+}
+module.exports.sendPushToAll = sendPushToAll;
+module.exports.db = db;
 
 // Seed categories table from existing transaction data (runs once for existing DBs)
 db.prepare(`
@@ -220,6 +264,54 @@ app.get('/api/auth/me', (req, res) => {
     role: user?.role || null,
     display_name: user?.display_name || null
   });
+});
+
+// ─── PUSH NOTIFICATIONS ───────────────────────────────────────────────────────
+
+app.get('/api/push/vapid-public-key', (req, res) => {
+  res.json({ publicKey: vapidPublic });
+});
+
+app.post('/api/push/subscribe', (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Unauthorized' });
+  const { endpoint, keys } = req.body || {};
+  if (!endpoint || !keys?.p256dh || !keys?.auth) {
+    return res.status(400).json({ error: 'Invalid subscription payload' });
+  }
+  db.prepare(`
+    INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(endpoint) DO UPDATE SET
+      p256dh = excluded.p256dh,
+      auth = excluded.auth,
+      last_seen = datetime('now')
+  `).run(req.session.user.id, endpoint, keys.p256dh, keys.auth, req.headers['user-agent'] || null);
+  res.json({ ok: true });
+});
+
+app.post('/api/push/unsubscribe', (req, res) => {
+  const { endpoint } = req.body || {};
+  if (!endpoint) return res.status(400).json({ error: 'endpoint required' });
+  db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
+  res.json({ ok: true });
+});
+
+app.get('/api/push/status', (req, res) => {
+  if (!req.session?.user) return res.json({ count: 0 });
+  const row = db.prepare('SELECT COUNT(*) as cnt FROM push_subscriptions WHERE user_id = ?').get(req.session.user.id);
+  res.json({ count: row.cnt });
+});
+
+// Manual trigger for testing — sends a "ping" notification to all subscribers.
+app.post('/api/push/test', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Unauthorized' });
+  const result = await sendPushToAll({
+    title: '🔔 Test Notification',
+    body: 'Web Push is working. You\'ll get these for bills, insights, and alerts.',
+    tag: 'test',
+    data: { route: '#/dashboard' }
+  });
+  res.json(result);
 });
 
 app.post('/auth/profile', (req, res) => {
@@ -1259,3 +1351,20 @@ if (overdue.cnt > 0) {
 app.listen(PORT, () => {
   console.log(`Home Finance running at http://localhost:${PORT}`);
 });
+
+// ─── TEMPORAL WORKER (optional — skipped if server unreachable) ───────────────
+(async () => {
+  if (process.env.TEMPORAL_DISABLED === '1') {
+    console.log('Temporal worker disabled (TEMPORAL_DISABLED=1).');
+    return;
+  }
+  try {
+    const { startWorker } = require('./temporal/worker');
+    await startWorker({ db, sendPushToAll });
+    console.log('Temporal worker started and schedules registered.');
+  } catch (err) {
+    console.warn('Temporal worker not started — notifications will not fire.');
+    console.warn('Reason:', err?.message || err);
+    console.warn('To enable: start the temporal service (docker compose up temporal).');
+  }
+})();

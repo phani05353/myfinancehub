@@ -1,4 +1,4 @@
-const CACHE = 'finance-hub-v3';
+const CACHE = 'finance-hub-v4';
 
 const SHELL = [
   '/',
@@ -57,4 +57,39 @@ self.addEventListener('fetch', e => {
       return cached || networkFetch;
     })
   );
+});
+
+// ── Web Push: incoming notification ─────────────────────────────────────────
+self.addEventListener('push', e => {
+  let data = {};
+  try { data = e.data ? e.data.json() : {}; } catch (_) { data = { title: 'Home Finance', body: e.data?.text() || '' }; }
+  const title = data.title || 'Home Finance';
+  const options = {
+    body: data.body || '',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: data.tag || 'default',
+    renotify: !!data.tag,
+    data: data.data || {}
+  };
+  e.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Notification click — focus existing window or open one at the deep-link route
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const route = e.notification.data?.route || '#/dashboard';
+  const target = new URL(route.startsWith('#') ? '/' + route : route, self.location.origin).href;
+
+  e.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of all) {
+      if (c.url.startsWith(self.location.origin)) {
+        c.focus();
+        c.navigate(target).catch(() => {});
+        return;
+      }
+    }
+    await self.clients.openWindow(target);
+  })());
 });

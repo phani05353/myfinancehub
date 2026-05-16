@@ -14,9 +14,40 @@ services:
       - PORT=3000
       # Optional — auto-generated and persisted in the DB if not set
       - SESSION_SECRET=${SESSION_SECRET:-}
+      # Temporal server address — uses the docker network name below
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=default
+    depends_on:
+      temporal:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
       interval: 30s
       timeout: 5s
       retries: 3
+
+  # Temporal server (auto-setup bundles Postgres + schema bootstrap).
+  # Web UI for workflows, schedules, history → http://localhost:8233
+  temporal:
+    image: temporalio/auto-setup:1.24.2
+    container_name: home-finance-temporal
+    ports:
+      - "7233:7233"   # gRPC API for worker / client
+      - "8233:8233"   # Web UI
+    environment:
+      - DB=sqlite
+      - SQLITE_PRAGMA_journal_mode=WAL
+      - LOG_LEVEL=warn
+      # Bind the Web UI to all interfaces so you can hit it from your LAN
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CLI_ADDRESS=temporal:7233
+    volumes:
+      - ./data/temporal:/etc/temporal/dynamicconfig
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "temporal", "workflow", "list", "--namespace", "default", "--limit", "1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s

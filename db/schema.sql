@@ -72,6 +72,17 @@ CREATE TABLE IF NOT EXISTS invites (
     expires_at TEXT    NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER,
+    endpoint    TEXT    UNIQUE NOT NULL,
+    p256dh      TEXT    NOT NULL,
+    auth        TEXT    NOT NULL,
+    user_agent  TEXT,
+    created_at  TEXT    DEFAULT (datetime('now')),
+    last_seen   TEXT    DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS rules (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     name            TEXT    NOT NULL,
