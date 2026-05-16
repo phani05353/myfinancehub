@@ -21,7 +21,7 @@ REPO_DIR="myfinancehub"
 IMAGE_NAME="home-finance"
 APP_CONTAINER="home-finance"
 TEMPORAL_CONTAINER="home-finance-temporal"
-TEMPORAL_IMAGE="temporalio/auto-setup:1.24.2"
+TEMPORAL_IMAGE="temporalio/temporal:latest"
 NETWORK_NAME="home-finance-net"
 APP_PORT=3090            # host → 3000 in container
 TEMPORAL_UI_PORT=8233    # host → 8233 in container (change if already taken)
@@ -79,15 +79,22 @@ if command -v ss >/dev/null 2>&1; then
   fi
 fi
 
+# Named volume — Docker handles ownership/permissions automatically.
+# Workflow history persists across deploys; schedules re-register idempotently on each restart.
+sudo docker volume create home-finance-temporal-data >/dev/null 2>&1 || true
+
 sudo docker run -d \
   --name "$TEMPORAL_CONTAINER" \
   --network "$NETWORK_NAME" \
   --restart unless-stopped \
   -p "${TEMPORAL_UI_PORT}:8233" \
-  -e DB=sqlite \
-  -e SQLITE_PRAGMA_journal_mode=WAL \
-  -e LOG_LEVEL=warn \
-  "$TEMPORAL_IMAGE" >/dev/null
+  -v home-finance-temporal-data:/home/temporal/data \
+  "$TEMPORAL_IMAGE" \
+  server start-dev \
+    --ip 0.0.0.0 \
+    --ui-ip 0.0.0.0 \
+    --db-filename /home/temporal/data/temporal.db \
+    --log-level warn >/dev/null
 
 echo "  Waiting for Temporal to be ready..."
 READY=0
