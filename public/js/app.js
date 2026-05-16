@@ -594,7 +594,14 @@ async function editProfileModal() {
   document.getElementById('push-test')?.addEventListener('click', async () => {
     try {
       const r = await api('/api/push/test', { method: 'POST', body: {} });
-      toast(`Test sent to ${r.sent} device${r.sent === 1 ? '' : 's'}`);
+      if (r.sent > 0) {
+        toast(`Test sent to ${r.sent} device${r.sent === 1 ? '' : 's'}`);
+      } else if (r.errors && r.errors.length > 0) {
+        const e = r.errors[0];
+        toast(`Push failed (HTTP ${e.statusCode || '?'}): ${e.body || 'unknown'}`, 'error');
+      } else {
+        toast('No active subscriptions found on the server.', 'error');
+      }
     } catch (e) { toast(e.message, 'error'); }
   });
   document.getElementById('profile-form').onsubmit = async e => {

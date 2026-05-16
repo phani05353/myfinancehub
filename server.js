@@ -48,17 +48,22 @@ if (!vapidPublic || !vapidPrivate) {
   db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('vapid_private', ?)").run(vapidPrivate);
   console.log('Generated new VAPID keypair for Web Push.');
 }
+// Apple's APNs is strict about the VAPID `sub` claim — it rejects `.local`
+// TLDs and any obviously fake-looking subject. example.com is RFC-reserved
+// and universally accepted.
 webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT || 'mailto:admin@home-finance.local',
+  process.env.VAPID_SUBJECT || 'mailto:admin@example.com',
   vapidPublic,
   vapidPrivate
 );
 
-// Send a push payload to every saved subscription. Cleans up dead endpoints.
+// Send a push payload to every saved subscription. Cleans up dead endpoints
+// and returns per-endpoint error details so failures are debuggable.
 async function sendPushToAll(payload) {
   const subs = db.prepare('SELECT * FROM push_subscriptions').all();
-  if (subs.length === 0) return { sent: 0, failed: 0 };
+  if (subs.length === 0) return { sent: 0, failed: 0, errors: [] };
   let sent = 0, failed = 0;
+  const errors = [];
   await Promise.all(subs.map(async s => {
     try {
       await webpush.sendNotification(
@@ -68,14 +73,18 @@ async function sendPushToAll(payload) {
       db.prepare('UPDATE push_subscriptions SET last_seen = datetime(\'now\') WHERE id = ?').run(s.id);
       sent++;
     } catch (err) {
-      // 404/410 = subscription dead, prune it
-      if (err.statusCode === 404 || err.statusCode === 410) {
+      const code = err.statusCode;
+      const body = err.body || err.message || String(err);
+      const host = (() => { try { return new URL(s.endpoint).host; } catch (_) { return 'unknown'; } })();
+      console.error(`[web-push] FAIL host=${host} code=${code} body=${body}`);
+      if (code === 404 || code === 410) {
         db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(s.id);
       }
+      errors.push({ host, statusCode: code || null, body: String(body).slice(0, 300) });
       failed++;
     }
   }));
-  return { sent, failed };
+  return { sent, failed, errors };
 }
 module.exports.sendPushToAll = sendPushToAll;
 module.exports.db = db;
