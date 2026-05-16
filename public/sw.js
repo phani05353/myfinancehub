@@ -1,4 +1,5 @@
-const CACHE = 'finance-hub-v4';
+// Bumped on each release so stale clients pick up new assets.
+const CACHE = 'finance-hub-v5';
 
 const SHELL = [
   '/',
@@ -17,14 +18,16 @@ const SHELL = [
   '/icons/icon-512.png',
 ];
 
-// Install: cache the app shell
+// Install: pre-cache the shell, but never let a single failed fetch tank the whole SW.
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())
+    caches.open(CACHE)
+      .then(c => Promise.all(SHELL.map(url => c.add(url).catch(() => null))))
+      .then(() => self.skipWaiting())
   );
 });
 
-// Activate: remove old caches
+// Activate: drop any previous-version caches and take control immediately.
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
@@ -34,29 +37,39 @@ self.addEventListener('activate', e => {
 });
 
 // Fetch strategy:
-//   - API / auth routes → network only (never serve stale financial data)
-//   - Static assets    → cache first, fall back to network
+//   - API / auth routes → bypass SW entirely (always live network)
+//   - Everything else   → NETWORK-FIRST, cache only as offline fallback.
+//
+// Network-first means deploys are picked up on the very next request, no
+// stale assets after a redeploy. The cache exists purely so the app shell
+// still works when the homelab is unreachable.
 self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
+  if (url.origin !== self.location.origin) return;
 
-  // Skip non-GET and cross-origin
-  if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
-
-  // Network-only for API and auth
+  // Always network for live data
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')) return;
 
-  // Cache-first for everything else
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      const networkFetch = fetch(e.request).then(res => {
-        if (res.ok) {
-          caches.open(CACHE).then(c => c.put(e.request, res.clone()));
-        }
-        return res;
-      });
-      return cached || networkFetch;
-    })
-  );
+  e.respondWith((async () => {
+    try {
+      const fresh = await fetch(e.request);
+      if (fresh && fresh.ok) {
+        // Update the cache in the background for offline use
+        const clone = fresh.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone)).catch(() => {});
+      }
+      return fresh;
+    } catch (_) {
+      // Network unavailable — fall back to whatever's in cache
+      const cached = await caches.match(e.request);
+      if (cached) return cached;
+      // Last-ditch: serve the shell root so the SPA can boot
+      const shell = await caches.match('/');
+      if (shell) return shell;
+      return new Response('Offline', { status: 503, statusText: 'Offline' });
+    }
+  })());
 });
 
 // ── Web Push: incoming notification ─────────────────────────────────────────
