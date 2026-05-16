@@ -519,7 +519,11 @@ async function editProfileModal() {
   let me = { username: '', display_name: '' };
   try { me = await api('/api/auth/me'); } catch (_) {}
 
-  const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const isSecureContext = window.isSecureContext;
+  const pushSupported = isSecureContext
+    && 'serviceWorker' in navigator
+    && 'PushManager' in window
+    && 'Notification' in window;
   let pushEnabled = false;
   if (pushSupported) {
     try {
@@ -528,6 +532,9 @@ async function editProfileModal() {
       pushEnabled = !!sub && Notification.permission === 'granted';
     } catch (_) {}
   }
+  const pushUnsupportedReason = !isSecureContext
+    ? 'Push requires HTTPS. Serve the app over TLS to enable (see README).'
+    : 'Not supported in this browser. Install the PWA on your home screen.';
 
   openModal(`
     <h2>Edit Profile</h2>
@@ -548,7 +555,7 @@ async function editProfileModal() {
             <div style="font-size:11px;color:var(--text-muted)">
               ${pushSupported
                 ? (pushEnabled ? 'Enabled on this device.' : 'Get bill reminders, budget alerts, and weekly insights.')
-                : 'Not supported in this browser. Install the PWA on your home screen.'}
+                : pushUnsupportedReason}
             </div>
           </div>
           ${pushSupported
