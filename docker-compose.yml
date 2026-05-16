@@ -39,15 +39,11 @@ services:
       - 0.0.0.0
       - --ui-ip
       - 0.0.0.0
-      - --db-filename
-      - /home/temporal/data/temporal.db
       - --log-level
       - warn
     ports:
       - "7233:7233"   # gRPC API for worker / client
       - "8233:8233"   # Web UI
-    volumes:
-      - temporal-data:/home/temporal/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "temporal", "workflow", "list", "--namespace", "default", "--limit", "1"]
@@ -55,6 +51,3 @@ services:
       timeout: 5s
       retries: 20
       start_period: 60s
-
-volumes:
-  temporal-data:

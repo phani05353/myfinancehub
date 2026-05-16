@@ -79,21 +79,18 @@ if command -v ss >/dev/null 2>&1; then
   fi
 fi
 
-# Named volume — Docker handles ownership/permissions automatically.
-# Workflow history persists across deploys; schedules re-register idempotently on each restart.
-sudo docker volume create home-finance-temporal-data >/dev/null 2>&1 || true
-
+# In-memory state — workflow history is wiped on container restart, but our
+# worker re-registers all schedules idempotently on every boot, so notifications
+# resume automatically. Avoids the SQLite permission/path issues entirely.
 sudo docker run -d \
   --name "$TEMPORAL_CONTAINER" \
   --network "$NETWORK_NAME" \
   --restart unless-stopped \
   -p "${TEMPORAL_UI_PORT}:8233" \
-  -v home-finance-temporal-data:/home/temporal/data \
   "$TEMPORAL_IMAGE" \
   server start-dev \
     --ip 0.0.0.0 \
     --ui-ip 0.0.0.0 \
-    --db-filename /home/temporal/data/temporal.db \
     --log-level warn >/dev/null
 
 echo "  Waiting for Temporal to be ready..."
