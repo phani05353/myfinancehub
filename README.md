@@ -172,9 +172,35 @@ VAPID keys are generated and persisted in the SQLite DB on first boot — no man
 
 ---
 
+## Enabling HTTPS for Push
+
+Web Push is a **secure-context-only** browser API. Both iOS Safari and desktop browsers reject `pushManager.subscribe()` over plain HTTP unless the host is `localhost`. To make push work for your homelab from any device, you need HTTPS.
+
+**Recommended: Tailscale serve.** Free, real Let's Encrypt cert auto-managed, end-to-end encrypted between your devices, no router port forwards, no public exposure.
+
+```bash
+# On the homelab host
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up        # opens an auth URL — sign in
+
+# In the Tailscale admin console → DNS:
+#   1. Enable MagicDNS (if not already)
+#   2. Enable HTTPS Certificates
+
+# Expose the finance app over HTTPS on your tailnet (NOT publicly):
+sudo tailscale serve --bg --https=443 http://localhost:3090
+sudo tailscale serve status   # prints your https://<machine>.<tail-net>.ts.net URL
+```
+
+Install the **Tailscale iOS app** and sign in with the same account. Your iPhone joins your tailnet — open the HTTPS URL from above in Safari and you'll get a valid cert. Push notifications work after that.
+
+Alternatives if you don't want Tailscale: Cloudflare Tunnel with a domain, or `mkcert` with a self-signed root CA installed on every device.
+
+---
+
 ## How to Subscribe to Push Notifications
 
-Web Push works on **iOS 16.4+ and all modern Android / desktop browsers**, but **only when the app is installed as a PWA**.
+Web Push works on **iOS 16.4+ and all modern Android / desktop browsers**, but **only when the app is installed as a PWA and served over HTTPS** (see [Enabling HTTPS for Push](#enabling-https-for-push)).
 
 ### iOS / iPad (Safari)
 
@@ -320,6 +346,9 @@ All `/api/*` routes require an active session cookie. Admin-only routes are note
 | GET | `/api/transactions/summary` | `{ income, expenses, net }` for a month |
 | POST | `/api/transactions/:id/receipt` | Upload receipt (≤10 MB) |
 | DELETE | `/api/transactions/:id/receipt` | Remove attached receipt |
+| POST | `/api/receipts/ocr` | OCR a receipt image (in-memory, not stored) → `{ payee, amount, confidence }` |
+
+`POST /api/transactions` accepts an optional `X-Push-Endpoint` header — when present, the server excludes that endpoint from the cross-device transaction-added notification, so the originating device doesn't ding itself.
 
 ### Budgets & Categories
 
