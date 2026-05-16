@@ -8,6 +8,7 @@ const { parse } = require('csv-parse/sync');
 const path = require('path');
 const fs = require('fs');
 const webpush = require('web-push');
+const { createWorker } = require('tesseract.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -86,7 +87,37 @@ async function sendPushToAll(payload) {
   }));
   return { sent, failed, errors };
 }
+// Send a push to every subscription EXCEPT one (used to avoid notifying the
+// device that just performed the action). Pass null/undefined to send to all.
+async function sendPushExcept(excludeEndpoint, payload) {
+  const subs = excludeEndpoint
+    ? db.prepare('SELECT * FROM push_subscriptions WHERE endpoint != ?').all(excludeEndpoint)
+    : db.prepare('SELECT * FROM push_subscriptions').all();
+  if (subs.length === 0) return { sent: 0, failed: 0, errors: [] };
+  let sent = 0, failed = 0;
+  const errors = [];
+  await Promise.all(subs.map(async s => {
+    try {
+      await webpush.sendNotification(
+        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+        JSON.stringify(payload)
+      );
+      db.prepare('UPDATE push_subscriptions SET last_seen = datetime(\'now\') WHERE id = ?').run(s.id);
+      sent++;
+    } catch (err) {
+      const code = err.statusCode;
+      if (code === 404 || code === 410) {
+        db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(s.id);
+      }
+      errors.push({ statusCode: code, body: String(err.body || err.message).slice(0, 200) });
+      failed++;
+    }
+  }));
+  return { sent, failed, errors };
+}
+
 module.exports.sendPushToAll = sendPushToAll;
+module.exports.sendPushExcept = sendPushExcept;
 module.exports.db = db;
 
 // Seed categories table from existing transaction data (runs once for existing DBs)
@@ -438,11 +469,27 @@ app.post('/api/transactions', (req, res) => {
   if (!date || !payee || amount === undefined) {
     return res.status(400).json({ error: 'date, payee, and amount are required' });
   }
-  const resolved = applyRules({ payee, amount: parseFloat(amount), notes, category });
+  const amt = parseFloat(amount);
+  const resolved = applyRules({ payee, amount: amt, notes, category });
   const result = db.prepare(
     'INSERT INTO transactions (date, payee, category, amount, notes) VALUES (?, ?, ?, ?, ?)'
-  ).run(date, payee, resolved.category, parseFloat(amount), notes || null);
-  res.json(db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid));
+  ).run(date, payee, resolved.category, amt, notes || null);
+  const row = db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid);
+
+  // Notify other devices in the household (excluding the originator)
+  const myEndpoint = req.get('X-Push-Endpoint') || null;
+  const me = req.session?.user;
+  const actor = me ? (db.prepare('SELECT display_name, username FROM users WHERE id = ?').get(me.id) || {}) : {};
+  const actorName = (actor.display_name || actor.username || 'Someone');
+  const signedAmt = amt < 0 ? `-$${Math.abs(amt).toFixed(2)}` : `+$${amt.toFixed(2)}`;
+  sendPushExcept(myEndpoint, {
+    title: `💸 ${actorName} added a transaction`,
+    body: `${row.payee} · ${signedAmt}${row.category ? ` · ${row.category}` : ''}`,
+    tag: 'tx-added',
+    data: { route: '#/transactions' }
+  }).catch(err => console.error('[push] tx-added failed:', err));
+
+  res.json(row);
 });
 
 app.put('/api/transactions/:id', (req, res) => {
@@ -526,6 +573,78 @@ app.delete('/api/transactions/:id/receipt', (req, res) => {
     db.prepare('UPDATE transactions SET receipt_path = NULL WHERE id = ?').run(req.params.id);
   }
   res.json({ ok: true });
+});
+
+// ─── RECEIPT OCR (Tesseract.js — local, no cloud, no LLM) ─────────────────────
+// Lazily-warmed worker so the first request pays the ~10s init cost but
+// every subsequent call is fast.
+let __ocrWorker = null;
+let __ocrWorkerPromise = null;
+async function getOcrWorker() {
+  if (__ocrWorker) return __ocrWorker;
+  if (!__ocrWorkerPromise) {
+    __ocrWorkerPromise = createWorker('eng').then(w => { __ocrWorker = w; return w; });
+  }
+  return __ocrWorkerPromise;
+}
+
+// Extract a payee and amount from raw OCR text via simple heuristics.
+function parseReceiptText(text) {
+  if (!text) return { payee: null, amount: null };
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // Payee: first non-noisy line in the top of the receipt
+  let payee = null;
+  for (const line of lines.slice(0, 8)) {
+    if (/^\d+[\d\s\-()]+$/.test(line))    continue;   // phone numbers
+    if (/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(line)) continue;   // dates
+    if (line.length < 3 || line.length > 60) continue;
+    const cleaned = line.replace(/\s+/g, ' ').replace(/[^a-zA-Z0-9 &'.\-]/g, '').trim();
+    if (cleaned.length >= 3 && /[a-zA-Z]/.test(cleaned)) {
+      payee = cleaned.slice(0, 40);
+      break;
+    }
+  }
+
+  // Amount: prefer explicit TOTAL/BALANCE/AMOUNT DUE lines
+  let amount = null;
+  const patterns = [
+    /(?:GRAND\s+)?TOTAL[\s:]*\$?\s*(\d+\.\d{2})\b/im,
+    /(?:BALANCE\s+DUE|AMOUNT\s+DUE|AMT\s+DUE)[\s:]*\$?\s*(\d+\.\d{2})\b/im,
+    /(?:PAYMENT|CHARGED)[\s:]*\$?\s*(\d+\.\d{2})\b/im
+  ];
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (m) { amount = parseFloat(m[1]); break; }
+  }
+  // Fallback: largest reasonable dollar amount on the receipt
+  if (!amount) {
+    const candidates = (text.match(/\$?\s*\d+\.\d{2}/g) || [])
+      .map(s => parseFloat(s.replace(/[$,\s]/g, '')))
+      .filter(n => !isNaN(n) && n > 0 && n < 100000);
+    if (candidates.length) amount = Math.max(...candidates);
+  }
+  return { payee, amount };
+}
+
+const ocrUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^image\//.test(file.mimetype))
+});
+
+app.post('/api/receipts/ocr', ocrUpload.single('receipt'), async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Unauthorized' });
+  if (!req.file)          return res.status(400).json({ error: 'Send an image as multipart field "receipt"' });
+  try {
+    const worker = await getOcrWorker();
+    const { data } = await worker.recognize(req.file.buffer);
+    const { payee, amount } = parseReceiptText(data?.text || '');
+    res.json({ payee, amount, confidence: Math.round(data?.confidence || 0) });
+  } catch (err) {
+    console.error('[ocr] failed:', err);
+    res.status(500).json({ error: 'OCR failed: ' + (err.message || 'unknown') });
+  }
 });
 
 // ─── BUDGETS ──────────────────────────────────────────────────────────────────

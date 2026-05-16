@@ -24,6 +24,7 @@ Analytics-first home page with a Monarch Money-style layout — pill navigation 
 ### Transactions
 - Add / edit / delete with an **Expense vs Income toggle**
 - **Smart category suggester** — tab out of the payee field and the category auto-fills based on your history with that merchant
+- **Receipt OCR auto-fill** — attach an image receipt and Tesseract.js reads it locally (no cloud, no LLM, no network calls during inference). Payee and amount fields pre-fill from common patterns like `TOTAL $X.XX` headers. Editable before save.
 - Filter by month / category / payee / keyword
 - **Receipt attachments** — upload JPG / PNG / WEBP / PDF (≤10 MB)
 - **In-app receipt preview** — click any transaction with a receipt anywhere in the app → image or PDF renders inside the modal (no new tabs)
@@ -45,7 +46,9 @@ Analytics-first home page with a Monarch Money-style layout — pill navigation 
 - Overdue count badge in sidebar / mobile header dot
 
 ### Push Notifications (PWA)
-Powered by Temporal workflows running on a cron schedule, delivered via Web Push.
+Two sources fire pushes — **scheduled** alerts from Temporal workflows, and **event-driven** alerts triggered by user actions.
+
+**Scheduled (Temporal workflows, cron-driven):**
 
 | When | What |
 |---|---|
@@ -55,7 +58,15 @@ Powered by Temporal workflows running on a cron schedule, delivered via Web Push
 | Daily, 9 PM | 📊 Daily recap — what you spent today |
 | Sunday, 6 PM | 💡 Weekly insights digest |
 
+**Event-driven (real-time, fanned out via web-push):**
+
+| Trigger | Sent to | Body |
+|---|---|---|
+| Transaction added | All other subscribed devices in the household (originator excluded via `X-Push-Endpoint` header) | `💸 Maruthi added a transaction · Costco · -$87.34 · Groceries` |
+
 All notifications skip silently when there's nothing to say — no notification fatigue. Each notification deep-links to the relevant page when tapped.
+
+**Requires HTTPS.** Web Push is a secure-context-only API — iOS Safari, Chrome, and Firefox all refuse `pushManager.subscribe()` over plain HTTP except on `localhost`. The recommended path for a homelab is **Tailscale serve** (free, real Let's Encrypt cert, end-to-end encrypted, no router config). See [Enabling HTTPS for Push](#enabling-https-for-push).
 
 ### Year in Review
 - Year picker auto-populated from years with transaction data
@@ -101,6 +112,7 @@ All notifications skip silently when there's nothing to say — no notification 
 | CSV parsing | `csv-parse` |
 | **Workflows** | **Temporal** (`@temporalio/worker` + `@temporalio/client`) |
 | **Push** | **`web-push`** with auto-generated VAPID keys |
+| **OCR** | **`tesseract.js`** — WASM-bundled Tesseract LSTM, English model, runs locally |
 | Frontend | Vanilla HTML / CSS / JS (no framework) |
 
 ---

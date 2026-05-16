@@ -273,8 +273,8 @@ function fmtDate(d) {
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
     ...opts,
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
     body: opts.body && typeof opts.body === 'object' ? JSON.stringify(opts.body) : opts.body
   });
   if (!res.ok) {
@@ -282,6 +282,17 @@ async function api(path, opts = {}) {
     throw new Error(err.error || 'Request failed');
   }
   return res.json();
+}
+
+// Returns this device's push subscription endpoint, or null if not subscribed.
+// Used to tell the server "don't push the tx-added notification back at me."
+async function getCurrentPushEndpoint() {
+  try {
+    if (!('serviceWorker' in navigator)) return null;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    return sub?.endpoint || null;
+  } catch (_) { return null; }
 }
 
 function openModal(html) {

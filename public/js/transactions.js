@@ -223,6 +223,30 @@ const transactionsModule = {
     `);
     document.getElementById('tx-form').onsubmit = e => { e.preventDefault(); this.submitAdd(); };
 
+    // Receipt OCR: when an image is attached, try to pre-fill payee + amount
+    document.getElementById('tx-receipt')?.addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file || !file.type.startsWith('image/')) return; // skip PDFs
+      const payeeEl = document.getElementById('tx-payee');
+      const amountEl = document.getElementById('tx-amount');
+      // Don't overwrite anything the user already typed
+      if (payeeEl?.value && amountEl?.value) return;
+      toast('Reading receipt…');
+      try {
+        const fd = new FormData();
+        fd.append('receipt', file);
+        const r = await fetch('/api/receipts/ocr', { method: 'POST', body: fd });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'OCR failed');
+        const { payee, amount } = await r.json();
+        let filled = [];
+        if (payee && payeeEl && !payeeEl.value) { payeeEl.value = payee; filled.push('payee'); }
+        if (amount && amountEl && !amountEl.value) { amountEl.value = amount.toFixed(2); filled.push('amount'); }
+        toast(filled.length ? `Scanned: ${filled.join(' + ')} — review before saving` : 'Receipt scanned (nothing matched)');
+      } catch (err) {
+        toast('Receipt scan failed: ' + err.message, 'error');
+      }
+    });
+
     // Smart category suggester: auto-fill on payee blur if category not yet picked
     document.getElementById('tx-payee')?.addEventListener('blur', async e => {
       const payee = e.target.value.trim();
@@ -256,7 +280,10 @@ const transactionsModule = {
       notes: document.getElementById('tx-notes').value || null
     };
     try {
-      const newTx = await api('/api/transactions', { method: 'POST', body });
+      // Include this device's push endpoint so the server can skip notifying us
+      const myEndpoint = await getCurrentPushEndpoint();
+      const headers = myEndpoint ? { 'X-Push-Endpoint': myEndpoint } : {};
+      const newTx = await api('/api/transactions', { method: 'POST', body, headers });
 
       // Upload receipt if one was selected
       const receiptFile = document.getElementById('tx-receipt')?.files[0];
