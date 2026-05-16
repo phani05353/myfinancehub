@@ -24,7 +24,7 @@ TEMPORAL_CONTAINER="home-finance-temporal"
 TEMPORAL_IMAGE="temporalio/auto-setup:1.24.2"
 NETWORK_NAME="home-finance-net"
 APP_PORT=3090            # host → 3000 in container
-TEMPORAL_UI_PORT=8090    # host → 8233 in container
+TEMPORAL_UI_PORT=8233    # host → 8233 in container (change if already taken)
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo ""
@@ -67,6 +67,17 @@ echo ""
 echo "▶ Step 4/6 — Starting Temporal..."
 sudo docker stop "$TEMPORAL_CONTAINER" 2>/dev/null && echo "  Stopped old Temporal container" || true
 sudo docker rm   "$TEMPORAL_CONTAINER" 2>/dev/null || true
+
+# Precheck: warn if host port is already bound by something else
+if command -v ss >/dev/null 2>&1; then
+  if ss -tln 2>/dev/null | grep -q ":${TEMPORAL_UI_PORT} "; then
+    echo "  ⚠ Port ${TEMPORAL_UI_PORT} is already in use on the host."
+    echo "    Edit TEMPORAL_UI_PORT at the top of this script and re-run."
+    echo "    Currently bound by:"
+    sudo ss -tlnp 2>/dev/null | grep ":${TEMPORAL_UI_PORT} " || true
+    exit 1
+  fi
+fi
 
 sudo docker run -d \
   --name "$TEMPORAL_CONTAINER" \
