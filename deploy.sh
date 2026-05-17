@@ -7,8 +7,9 @@
 #   finance-hub/
 #   ├── deploy.sh             ← this script
 #   ├── myfinancehub/         ← git repo (auto-cloned if missing)
-#   ├── container-data/       ← SQLite DB        (never touched)
-#   └── container-receipts/   ← receipts         (never touched)
+#   ├── container-data/       ← finance SQLite DB           (preserved across deploys)
+#   ├── container-receipts/   ← receipt images / PDFs        (preserved across deploys)
+#   └── container-temporal/   ← Temporal workflow history    (preserved across deploys)
 #
 # Brings up two containers connected on a private docker network:
 #   • home-finance-temporal — Temporal workflow engine + Web UI on :8090
@@ -79,18 +80,24 @@ if command -v ss >/dev/null 2>&1; then
   fi
 fi
 
-# In-memory state — workflow history is wiped on container restart, but our
-# worker re-registers all schedules idempotently on every boot, so notifications
-# resume automatically. Avoids the SQLite permission/path issues entirely.
+# Persistent state via bind mount — workflow history, schedules, completed
+# runs all survive `docker rm`/redeploys. The host directory is created with
+# world-writable perms and the container runs as root so SQLite can write to it.
+mkdir -p "$BASE_DIR/container-temporal"
+chmod 777 "$BASE_DIR/container-temporal"
+
 sudo docker run -d \
   --name "$TEMPORAL_CONTAINER" \
   --network "$NETWORK_NAME" \
   --restart unless-stopped \
+  --user 0:0 \
   -p "${TEMPORAL_UI_PORT}:8233" \
+  -v "$BASE_DIR/container-temporal:/data" \
   "$TEMPORAL_IMAGE" \
   server start-dev \
     --ip 0.0.0.0 \
     --ui-ip 0.0.0.0 \
+    --db-filename /data/temporal.db \
     --log-level warn >/dev/null
 
 echo "  Waiting for Temporal to be ready..."
