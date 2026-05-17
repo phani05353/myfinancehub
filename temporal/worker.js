@@ -10,11 +10,13 @@ const NAMESPACE  = process.env.TEMPORAL_NAMESPACE || 'default';
 const ADDRESS    = process.env.TEMPORAL_ADDRESS   || 'localhost:7233';
 
 const SCHEDULES = [
-  { id: 'bills-daily',           workflow: 'dailyBillsWorkflow',         cron: '0 8 * * *',   note: '08:00 daily' },
-  { id: 'price-hikes-daily',     workflow: 'priceHikeWorkflow',          cron: '0 9 * * *',   note: '09:00 daily' },
-  { id: 'budget-threshold-daily',workflow: 'budgetThresholdWorkflow',    cron: '0 20 * * *',  note: '20:00 daily' },
-  { id: 'daily-recap',           workflow: 'dailyRecapWorkflow',         cron: '0 21 * * *',  note: '21:00 daily' },
-  { id: 'weekly-insights',       workflow: 'weeklyInsightsWorkflow',     cron: '0 18 * * 0',  note: 'Sun 18:00' }
+  { id: 'bills-daily',           workflow: 'dailyBillsWorkflow',           cron: '0 8 * * *',   note: '08:00 daily' },
+  { id: 'price-hikes-daily',     workflow: 'priceHikeWorkflow',            cron: '0 9 * * *',   note: '09:00 daily' },
+  { id: 'budget-threshold-daily',workflow: 'budgetThresholdWorkflow',      cron: '0 20 * * *',  note: '20:00 daily' },
+  { id: 'daily-recap',           workflow: 'dailyRecapWorkflow',           cron: '0 21 * * *',  note: '21:00 daily' },
+  { id: 'weekly-insights',       workflow: 'weeklyInsightsWorkflow',       cron: '0 18 * * 0',  note: 'Sun 18:00' },
+  { id: 'daily-backup',          workflow: 'dailyBackupWorkflow',          cron: '0 3 * * *',   note: '03:00 daily' },
+  { id: 'weekly-integrity-check',workflow: 'weeklyIntegrityCheckWorkflow', cron: '0 4 * * 0',   note: 'Sun 04:00' }
 ];
 
 async function ensureSchedule(client, def) {

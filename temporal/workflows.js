@@ -91,11 +91,52 @@ async function sendPushWorkflow({ excludeEndpoint, payload }) {
   return acts.sendPushExceptActivity(excludeEndpoint, payload);
 }
 
+// 3 AM daily — snapshot finance.db, verify the snapshot, prune old backups.
+// Silent on success; the workflow's own success/failure is the audit trail
+// (visible in Temporal UI). Sends a push only if the backup itself fails.
+async function dailyBackupWorkflow() {
+  let backup, pruned;
+  try {
+    backup = await acts.createDatabaseBackup();
+    pruned = await acts.pruneOldBackups(14);
+  } catch (err) {
+    await acts.sendPush({
+      title: '⚠ Daily backup FAILED',
+      body: String(err.message || err).slice(0, 150),
+      tag: 'backup-fail',
+      data: { route: '#/dashboard' }
+    });
+    throw err; // mark the workflow as failed so it's flagged in Temporal UI
+  }
+  return { backup, pruned };
+}
+
+// Sunday 4 AM — run PRAGMA integrity_check. On failure, push a CRITICAL
+// alert to every subscribed device with the diagnosis and the latest
+// available backup name so the admin knows what to restore from.
+async function weeklyIntegrityCheckWorkflow() {
+  const result = await acts.runIntegrityCheck();
+  if (result.ok) return { status: 'ok' };
+
+  const backups = await acts.listBackups();
+  const latest  = backups[0]?.name || 'NONE — restore not possible';
+
+  await acts.sendPush({
+    title: '🚨 Database integrity check FAILED',
+    body: `Corruption detected: ${result.details.slice(0, 100)}. Latest backup: ${latest}. Restore ASAP.`,
+    tag: 'db-integrity-fail',
+    data: { route: '#/dashboard' }
+  });
+  return { status: 'failed', details: result.details, latestBackup: latest };
+}
+
 module.exports = {
   dailyBillsWorkflow,
   priceHikeWorkflow,
   budgetThresholdWorkflow,
   dailyRecapWorkflow,
   weeklyInsightsWorkflow,
-  sendPushWorkflow
+  sendPushWorkflow,
+  dailyBackupWorkflow,
+  weeklyIntegrityCheckWorkflow
 };

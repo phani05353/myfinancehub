@@ -81,10 +81,10 @@ if command -v ss >/dev/null 2>&1; then
 fi
 
 # Persistent state via bind mount — workflow history, schedules, completed
-# runs all survive `docker rm`/redeploys. The host directory is created with
-# world-writable perms and the container runs as root so SQLite can write to it.
-mkdir -p "$BASE_DIR/container-temporal"
-chmod 777 "$BASE_DIR/container-temporal"
+# runs all survive `docker rm`/redeploys. Use sudo for the dir ops in case
+# the directory was previously created by a container running as root.
+sudo mkdir -p "$BASE_DIR/container-temporal"
+sudo chmod 777 "$BASE_DIR/container-temporal"
 
 sudo docker run -d \
   --name "$TEMPORAL_CONTAINER" \
