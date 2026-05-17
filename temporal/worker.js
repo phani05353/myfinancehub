@@ -16,7 +16,8 @@ const SCHEDULES = [
   { id: 'daily-recap',           workflow: 'dailyRecapWorkflow',           cron: '0 21 * * *',  note: '21:00 daily' },
   { id: 'weekly-insights',       workflow: 'weeklyInsightsWorkflow',       cron: '0 18 * * 0',  note: 'Sun 18:00' },
   { id: 'daily-backup',          workflow: 'dailyBackupWorkflow',          cron: '0 3 * * *',   note: '03:00 daily' },
-  { id: 'weekly-integrity-check',workflow: 'weeklyIntegrityCheckWorkflow', cron: '0 4 * * 0',   note: 'Sun 04:00' }
+  { id: 'weekly-integrity-check',workflow: 'weeklyIntegrityCheckWorkflow', cron: '0 4 * * 0',   note: 'Sun 04:00' },
+  { id: 'trip-detection',        workflow: 'detectTripsWorkflow',          cron: '0 6 * * *',   note: '06:00 daily' }
 ];
 
 async function ensureSchedule(client, def) {

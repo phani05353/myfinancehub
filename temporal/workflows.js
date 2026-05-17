@@ -1,7 +1,7 @@
 // Temporal workflows — orchestration only. No DB, no I/O. All work happens
 // inside the proxied activities. Code here must be deterministic.
 
-const { proxyActivities } = require('@temporalio/workflow');
+const { proxyActivities, sleep, startChild, ParentClosePolicy } = require('@temporalio/workflow');
 
 const acts = proxyActivities({
   startToCloseTimeout: '1 minute',
@@ -130,6 +130,68 @@ async function weeklyIntegrityCheckWorkflow() {
   return { status: 'failed', details: result.details, latestBackup: latest };
 }
 
+// ── Trip detection ──────────────────────────────────────────────────────────
+// Daily cron — scan for any new-payee cluster and spawn a per-trip tracker.
+// Uses startChild with ABANDON so the spawned workflow outlives this one.
+async function detectTripsWorkflow() {
+  const clusters = await acts.findNewPayeeClusters({});
+  if (clusters.length === 0) return { started: 0, candidates: 0 };
+
+  let started = 0;
+  for (const cluster of clusters) {
+    try {
+      // Deterministic workflow ID = if a trip is already being tracked from
+      // this start date, the duplicate start is rejected and we skip silently.
+      await startChild('tripDetectionWorkflow', {
+        workflowId: `trip-${cluster.tripStartDate}`,
+        parentClosePolicy: ParentClosePolicy.ABANDON,
+        args: [cluster]
+      });
+      started++;
+    } catch (_) {
+      // Already running for this trip start — fine.
+    }
+  }
+  return { started, candidates: clusters.length };
+}
+
+// Per-trip workflow — sleeps in 2-day chunks until "trip activity" dies
+// down, then sends a single summary push. Max iterations cap protects
+// against pathological data (someone who explores new merchants daily).
+async function tripDetectionWorkflow({ tripStartDate }) {
+  const MAX_ITERATIONS = 30;       // ~60 days of trip — safety cap
+  const QUIET_WINDOW   = 2;        // days of silence to declare the trip over
+
+  for (let i = 0; i < MAX_ITERATIONS; i++) {
+    await sleep('2 days');
+    const status = await acts.hasRecentTripActivity({
+      tripStartDate, withinDays: QUIET_WINDOW
+    });
+    if (!status.active) break;
+  }
+
+  const summary = await acts.summarizeTrip({ tripStartDate });
+  if (summary.count < 3 || summary.total < 50) {
+    return { ...summary, skipped: 'too-small' };
+  }
+
+  const [sy, sm, sd] = summary.startDate.split('-');
+  const [ey, em, ed] = summary.endDate.split('-');
+  const sameMonth = sm === em && sy === ey;
+  const dateLabel = sameMonth
+    ? `${sm}/${sd}–${ed}`
+    : `${sm}/${sd} – ${em}/${ed}`;
+
+  await acts.sendPush({
+    title: `✈️ Trip detected (${dateLabel})`,
+    body: `${summary.count} transactions · $${summary.total.toFixed(2)} total${summary.topCategory ? ` · top: ${summary.topCategory}` : ''}`,
+    tag: `trip-${tripStartDate}`,
+    data: { route: '#/transactions' }
+  });
+
+  return summary;
+}
+
 module.exports = {
   dailyBillsWorkflow,
   priceHikeWorkflow,
@@ -138,5 +200,7 @@ module.exports = {
   weeklyInsightsWorkflow,
   sendPushWorkflow,
   dailyBackupWorkflow,
-  weeklyIntegrityCheckWorkflow
+  weeklyIntegrityCheckWorkflow,
+  detectTripsWorkflow,
+  tripDetectionWorkflow
 };

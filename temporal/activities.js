@@ -212,5 +212,99 @@ module.exports = ({ db, sendPushToAll, sendPushExcept }) => ({
         return { name: f, size: s.size, mtime: s.mtime.toISOString() };
       })
       .sort((a, b) => b.mtime.localeCompare(a.mtime));
+  },
+
+  // ── Trip detection ─────────────────────────────────────────────────────────
+  //
+  // Heuristic: a "trip" is a window where ≥3 distinct payees appear that
+  // were never seen in transaction history before the window. No
+  // geolocation needed — new merchants are a strong proxy for travel.
+
+  async findNewPayeeClusters({ windowDays = 7, minNewPayees = 3 } = {}) {
+    const newPayees = db.prepare(`
+      SELECT lower(payee) as p, MIN(date) as first_seen
+      FROM transactions
+      WHERE amount < 0
+        AND payee IS NOT NULL
+        AND date >= date('now', '-' || ? || ' days')
+        AND lower(payee) NOT IN (
+          SELECT DISTINCT lower(payee) FROM transactions
+          WHERE date < date('now', '-' || ? || ' days') AND payee IS NOT NULL
+        )
+      GROUP BY lower(payee)
+      ORDER BY first_seen ASC
+    `).all(windowDays, windowDays);
+
+    if (newPayees.length < minNewPayees) return [];
+    return [{
+      tripStartDate: newPayees[0].first_seen,
+      initialPayeeCount: newPayees.length
+    }];
+  },
+
+  // Is the trip still active? Check for any expense transaction in the last
+  // `withinDays` whose payee was new at trip start. Returns count for
+  // logging visibility.
+  async hasRecentTripActivity({ tripStartDate, withinDays = 2 }) {
+    const newPayees = db.prepare(`
+      SELECT DISTINCT lower(payee) as p FROM transactions
+      WHERE amount < 0 AND payee IS NOT NULL AND date >= ?
+        AND lower(payee) NOT IN (
+          SELECT DISTINCT lower(payee) FROM transactions
+          WHERE date < ? AND payee IS NOT NULL
+        )
+    `).all(tripStartDate, tripStartDate);
+
+    if (newPayees.length === 0) return { active: false, count: 0 };
+
+    const placeholders = newPayees.map(() => '?').join(',');
+    const row = db.prepare(`
+      SELECT COUNT(*) as cnt FROM transactions
+      WHERE amount < 0
+        AND date >= date('now', '-' || ? || ' days')
+        AND lower(payee) IN (${placeholders})
+    `).get(withinDays, ...newPayees.map(p => p.p));
+    return { active: row.cnt > 0, count: row.cnt };
+  },
+
+  // Conclude a trip — totals + top category + date range, based on all
+  // expense transactions from tripStartDate with payees new at that time.
+  async summarizeTrip({ tripStartDate }) {
+    const newPayees = db.prepare(`
+      SELECT DISTINCT lower(payee) as p FROM transactions
+      WHERE amount < 0 AND payee IS NOT NULL AND date >= ?
+        AND lower(payee) NOT IN (
+          SELECT DISTINCT lower(payee) FROM transactions
+          WHERE date < ? AND payee IS NOT NULL
+        )
+    `).all(tripStartDate, tripStartDate);
+    if (newPayees.length === 0) return { count: 0, total: 0 };
+
+    const placeholders = newPayees.map(() => '?').join(',');
+    const txs = db.prepare(`
+      SELECT payee, category, ABS(amount) as amt, date
+      FROM transactions
+      WHERE amount < 0
+        AND date >= ?
+        AND lower(payee) IN (${placeholders})
+      ORDER BY date ASC
+    `).all(tripStartDate, ...newPayees.map(p => p.p));
+
+    if (txs.length === 0) return { count: 0, total: 0 };
+    const total = txs.reduce((s, t) => s + t.amt, 0);
+    const cats = {};
+    txs.forEach(t => {
+      const c = t.category || 'Uncategorized';
+      cats[c] = (cats[c] || 0) + t.amt;
+    });
+    const top = Object.entries(cats).sort((a, b) => b[1] - a[1])[0];
+    return {
+      startDate: tripStartDate,
+      endDate: txs[txs.length - 1].date,
+      count: txs.length,
+      total: Math.round(total * 100) / 100,
+      topCategory: top?.[0] || null,
+      payeeCount: newPayees.length
+    };
   }
 });
