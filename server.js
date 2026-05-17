@@ -485,8 +485,9 @@ app.post('/api/transactions', (req, res) => {
   sendPushExcept(myEndpoint, {
     title: `💸 ${actorName} added a transaction`,
     body: `${row.payee} · ${signedAmt}${row.category ? ` · ${row.category}` : ''}`,
-    tag: 'tx-added',
-    data: { route: '#/transactions' }
+    // Unique tag per transaction so multiple notifications don't silently replace each other
+    tag: `tx-added-${row.id}`,
+    data: { route: '#/transactions', txId: row.id }
   }).catch(err => console.error('[push] tx-added failed:', err));
 
   res.json(row);
