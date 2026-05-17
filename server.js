@@ -482,13 +482,16 @@ app.post('/api/transactions', (req, res) => {
   const actor = me ? (db.prepare('SELECT display_name, username FROM users WHERE id = ?').get(me.id) || {}) : {};
   const actorName = (actor.display_name || actor.username || 'Someone');
   const signedAmt = amt < 0 ? `-$${Math.abs(amt).toFixed(2)}` : `+$${amt.toFixed(2)}`;
+  console.log(`[push] tx-added id=${row.id} originator=${myEndpoint ? myEndpoint.slice(0, 60) + '…' : 'none'}`);
   sendPushExcept(myEndpoint, {
     title: `💸 ${actorName} added a transaction`,
     body: `${row.payee} · ${signedAmt}${row.category ? ` · ${row.category}` : ''}`,
     // Unique tag per transaction so multiple notifications don't silently replace each other
     tag: `tx-added-${row.id}`,
     data: { route: '#/transactions', txId: row.id }
-  }).catch(err => console.error('[push] tx-added failed:', err));
+  })
+    .then(r => console.log(`[push] tx-added id=${row.id} result sent=${r.sent} failed=${r.failed}${r.errors?.length ? ' errors=' + JSON.stringify(r.errors) : ''}`))
+    .catch(err => console.error('[push] tx-added failed:', err));
 
   res.json(row);
 });
