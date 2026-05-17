@@ -476,22 +476,43 @@ app.post('/api/transactions', (req, res) => {
   ).run(date, payee, resolved.category, amt, notes || null);
   const row = db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid);
 
-  // Notify other devices in the household (excluding the originator)
+  // Notify other devices in the household (excluding the originator).
+  // Routed through a Temporal workflow so every push attempt is visible in
+  // the Temporal UI (workflow type: sendPushWorkflow). Falls back to a
+  // direct call if Temporal isn't reachable.
   const myEndpoint = req.get('X-Push-Endpoint') || null;
   const me = req.session?.user;
   const actor = me ? (db.prepare('SELECT display_name, username FROM users WHERE id = ?').get(me.id) || {}) : {};
   const actorName = (actor.display_name || actor.username || 'Someone');
   const signedAmt = amt < 0 ? `-$${Math.abs(amt).toFixed(2)}` : `+$${amt.toFixed(2)}`;
-  console.log(`[push] tx-added id=${row.id} originator=${myEndpoint ? myEndpoint.slice(0, 60) + '…' : 'none'}`);
-  sendPushExcept(myEndpoint, {
+  const pushPayload = {
     title: `💸 ${actorName} added a transaction`,
     body: `${row.payee} · ${signedAmt}${row.category ? ` · ${row.category}` : ''}`,
-    // Unique tag per transaction so multiple notifications don't silently replace each other
     tag: `tx-added-${row.id}`,
     data: { route: '#/transactions', txId: row.id }
-  })
-    .then(r => console.log(`[push] tx-added id=${row.id} result sent=${r.sent} failed=${r.failed}${r.errors?.length ? ' errors=' + JSON.stringify(r.errors) : ''}`))
-    .catch(err => console.error('[push] tx-added failed:', err));
+  };
+
+  let temporalClient = null;
+  try { temporalClient = require('./temporal/worker').getClient(); } catch (_) {}
+
+  if (temporalClient) {
+    temporalClient.workflow.start('sendPushWorkflow', {
+      args: [{ excludeEndpoint: myEndpoint, payload: pushPayload }],
+      taskQueue: 'finance-tq',
+      workflowId: `push-tx-${row.id}-${Date.now()}`
+    })
+      .then(handle => console.log(`[push] tx-added id=${row.id} workflow=${handle.workflowId}`))
+      .catch(err => {
+        console.error('[push] tx-added workflow start failed:', err.message);
+        // Fall back to direct push so user still gets notified
+        sendPushExcept(myEndpoint, pushPayload).catch(e2 => console.error('[push] fallback failed:', e2));
+      });
+  } else {
+    console.log(`[push] tx-added id=${row.id} (direct — temporal unavailable)`);
+    sendPushExcept(myEndpoint, pushPayload)
+      .then(r => console.log(`[push] tx-added id=${row.id} direct sent=${r.sent} failed=${r.failed}`))
+      .catch(err => console.error('[push] tx-added direct failed:', err));
+  }
 
   res.json(row);
 });
@@ -1492,7 +1513,7 @@ app.listen(PORT, () => {
   }
   try {
     const { startWorker } = require('./temporal/worker');
-    await startWorker({ db, sendPushToAll });
+    await startWorker({ db, sendPushToAll, sendPushExcept });
     console.log('Temporal worker started and schedules registered.');
   } catch (err) {
     console.warn('Temporal worker not started — notifications will not fire.');

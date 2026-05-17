@@ -84,10 +84,18 @@ async function weeklyInsightsWorkflow() {
   });
 }
 
+// Event-driven (not scheduled): fired from the API handler whenever a
+// transaction is added, so every push attempt gets a workflow row in the
+// Temporal UI with full payload, retries, and timing.
+async function sendPushWorkflow({ excludeEndpoint, payload }) {
+  return acts.sendPushExceptActivity(excludeEndpoint, payload);
+}
+
 module.exports = {
   dailyBillsWorkflow,
   priceHikeWorkflow,
   budgetThresholdWorkflow,
   dailyRecapWorkflow,
-  weeklyInsightsWorkflow
+  weeklyInsightsWorkflow,
+  sendPushWorkflow
 };

@@ -1,7 +1,7 @@
 // Temporal activities — atomic, idempotent units of work. All I/O happens here.
 // The factory pattern injects `db` and the push helper so workflows stay pure.
 
-module.exports = ({ db, sendPushToAll }) => ({
+module.exports = ({ db, sendPushToAll, sendPushExcept }) => ({
 
   // ── Bills ──────────────────────────────────────────────────────────────────
   async findDueBills(daysAhead = 1) {
@@ -129,5 +129,11 @@ module.exports = ({ db, sendPushToAll }) => ({
   // ── Send push ──────────────────────────────────────────────────────────────
   async sendPush(payload) {
     return sendPushToAll(payload);
+  },
+
+  // Variant that excludes one endpoint (used by event-driven workflows
+  // like tx-added — the originating device is excluded so it doesn't ding itself)
+  async sendPushExceptActivity(excludeEndpoint, payload) {
+    return sendPushExcept(excludeEndpoint, payload);
   }
 });

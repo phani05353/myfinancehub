@@ -39,10 +39,14 @@ async function ensureSchedule(client, def) {
   return 'created';
 }
 
-async function startWorker({ db, sendPushToAll }) {
+// Module-level so route handlers can call getClient() to start event-driven workflows
+let __client = null;
+function getClient() { return __client; }
+
+async function startWorker({ db, sendPushToAll, sendPushExcept }) {
   // 1. Worker — runs activities + workflows
   const connection = await NativeConnection.connect({ address: ADDRESS });
-  const activities = require('./activities')({ db, sendPushToAll });
+  const activities = require('./activities')({ db, sendPushToAll, sendPushExcept });
   const worker = await Worker.create({
     connection,
     namespace: NAMESPACE,
@@ -52,15 +56,15 @@ async function startWorker({ db, sendPushToAll }) {
   });
   worker.run().catch(err => console.error('Worker exited with error:', err));
 
-  // 2. Schedules — idempotent registration
-  const client = new Client({
+  // 2. Client — for both schedule registration and on-demand workflow starts
+  __client = new Client({
     connection: await Connection.connect({ address: ADDRESS }),
     namespace: NAMESPACE
   });
   for (const def of SCHEDULES) {
-    const status = await ensureSchedule(client, def).catch(e => `error: ${e.message}`);
+    const status = await ensureSchedule(__client, def).catch(e => `error: ${e.message}`);
     console.log(`  schedule ${def.id} (${def.note}) → ${status}`);
   }
 }
 
-module.exports = { startWorker, TASK_QUEUE, NAMESPACE, SCHEDULES };
+module.exports = { startWorker, getClient, TASK_QUEUE, NAMESPACE, SCHEDULES };
