@@ -93,9 +93,11 @@ All notifications skip silently when there's nothing to say — no notification 
 ### Mobile / PWA
 - Installable on iOS / Android / desktop
 - Offline app shell (network-only for `/api/`)
+- Network-first service worker — deploys are picked up on the next page load, no stale-asset glitches
 - Bottom nav on mobile, hamburger sidebar for secondary pages
 - `env(safe-area-inset-*)` respect — notch & home-indicator safe on iPhone
 - Dark theme throughout
+- **Customizable home-screen icon** — edit constants in [scripts/generate-icons.py](scripts/generate-icons.py) (`ACCENT`, `FG`, `SYMBOL`) and re-run to regenerate all three sizes (192/512/180). Bump `CACHE` in [public/sw.js](public/sw.js) so installed PWAs refresh.
 
 ---
 
@@ -289,7 +291,8 @@ myfinancehub/
 │       ├── rules.js
 │       └── import.js
 ├── scripts/
-│   └── hash-password.js
+│   ├── hash-password.js
+│   └── generate-icons.py     # Regenerates PWA icons from the homepage logo design
 ├── data/                     # SQLite database (gitignored)
 ├── uploads/receipts/         # Receipt files (gitignored)
 ├── deploy.sh                 # Two-container homelab deploy
