@@ -139,6 +139,20 @@ module.exports = ({ db, sendPushToAll, sendPushExcept }) => ({
     return sendPushToAll(payload);
   },
 
+  // Prune push subscriptions that haven't been confirmed alive recently.
+  // `last_seen` is bumped on every successful webpush.sendNotification, so a
+  // stale value means the device is uninstalled, has revoked permission, or
+  // is otherwise unreachable. The live 404/410 cleanup in sendPushToAll
+  // catches outright-dead endpoints; this catches the silent rot.
+  async cleanupPushSubscriptions({ staleDays = 30 } = {}) {
+    const before = db.prepare('SELECT COUNT(*) AS cnt FROM push_subscriptions').get().cnt;
+    const result = db.prepare(
+      "DELETE FROM push_subscriptions WHERE last_seen IS NULL OR last_seen < datetime('now', '-' || ? || ' days')"
+    ).run(staleDays);
+    const after = db.prepare('SELECT COUNT(*) AS cnt FROM push_subscriptions').get().cnt;
+    return { staleDays, before, deleted: result.changes, remaining: after };
+  },
+
   // Variant that excludes one endpoint (used by event-driven workflows
   // like tx-added — the originating device is excluded so it doesn't ding itself)
   async sendPushExceptActivity(excludeEndpoint, payload) {

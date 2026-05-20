@@ -91,6 +91,14 @@ async function sendPushWorkflow({ excludeEndpoint, payload }) {
   return acts.sendPushExceptActivity(excludeEndpoint, payload);
 }
 
+// Every 3 days at 04:00 — prune push subscriptions that haven't received a
+// successful push in 30 days. Most dead endpoints are already removed live
+// (404/410 from the push service), so this is the long-tail safety net for
+// uninstalled PWAs, revoked permissions, and devices that simply went quiet.
+async function cleanupPushSubscriptionsWorkflow() {
+  return acts.cleanupPushSubscriptions({ staleDays: 30 });
+}
+
 // 3 AM daily — snapshot finance.db, verify the snapshot, prune old backups.
 // Silent on success; the workflow's own success/failure is the audit trail
 // (visible in Temporal UI). Sends a push only if the backup itself fails.
@@ -199,6 +207,7 @@ module.exports = {
   dailyRecapWorkflow,
   weeklyInsightsWorkflow,
   sendPushWorkflow,
+  cleanupPushSubscriptionsWorkflow,
   dailyBackupWorkflow,
   weeklyIntegrityCheckWorkflow,
   detectTripsWorkflow,

@@ -438,6 +438,82 @@ app.post('/api/invites', requireAdmin, (req, res) => {
 
 // ─── TRANSACTIONS ─────────────────────────────────────────────────────────────
 
+// Build a dynamic push payload for a freshly-inserted transaction. Picks the
+// most signal-rich context line (budget %, payee deviation, day running total,
+// or MTD net for income) so the lock-screen tells you something useful without
+// needing to open the app. Wrapped in try/catch so any enrichment failure
+// degrades to the simple static body rather than blocking the tx response.
+function buildTxNotification(row, actorName) {
+  const signedAmt = row.amount < 0
+    ? `-$${Math.abs(row.amount).toFixed(2)}`
+    : `+$${row.amount.toFixed(2)}`;
+  const baseLine = `${row.payee} · ${signedAmt}${row.category ? ` · ${row.category}` : ''}`;
+  const isIncome = row.amount > 0;
+  const titleEmoji = isIncome ? '💰' : '💸';
+  const titleVerb  = isIncome ? 'logged income' : 'added a transaction';
+  const fallback = {
+    title: `${titleEmoji} ${actorName} ${titleVerb}`,
+    body: baseLine,
+    tag: `tx-added-${row.id}`,
+    data: { route: '#/transactions', txId: row.id }
+  };
+
+  try {
+    const monthKey = row.date.slice(0, 7);
+    const monthLabel = new Date(row.date + 'T00:00:00').toLocaleString('en-US', { month: 'short' });
+    let contextLine = null;
+
+    if (isIncome) {
+      const mtd = db.prepare(
+        "SELECT COALESCE(SUM(amount), 0) AS net FROM transactions WHERE strftime('%Y-%m', date) = ?"
+      ).get(monthKey);
+      const net = mtd.net;
+      const sign = net >= 0 ? '+' : '-';
+      contextLine = `${monthLabel} net so far: ${sign}$${Math.abs(net).toFixed(2)}`;
+    } else if (row.category) {
+      const budget = db.prepare(
+        'SELECT amount FROM budgets WHERE category = ? COLLATE NOCASE'
+      ).get(row.category);
+      if (budget) {
+        const spent = db.prepare(
+          "SELECT COALESCE(SUM(ABS(amount)), 0) AS out FROM transactions WHERE lower(category) = lower(?) AND amount < 0 AND strftime('%Y-%m', date) = ?"
+        ).get(row.category, monthKey);
+        const pct = (spent.out / budget.amount) * 100;
+        contextLine = `${row.category}: ${pct.toFixed(0)}% of ${monthLabel} ($${spent.out.toFixed(0)} of $${budget.amount.toFixed(0)})`;
+      }
+    }
+
+    if (!contextLine && !isIncome) {
+      const payeeStats = db.prepare(
+        "SELECT COUNT(*) AS cnt, AVG(ABS(amount)) AS avg FROM transactions WHERE lower(payee) = lower(?) AND amount < 0 AND id != ? AND date >= date('now', '-180 days')"
+      ).get(row.payee, row.id);
+      if (payeeStats && payeeStats.cnt >= 3 && payeeStats.avg > 0) {
+        const thisAmt = Math.abs(row.amount);
+        const deltaPct = ((thisAmt - payeeStats.avg) / payeeStats.avg) * 100;
+        const sign = deltaPct >= 0 ? '+' : '';
+        contextLine = `Avg at ${row.payee}: $${payeeStats.avg.toFixed(0)} (this ${sign}${deltaPct.toFixed(0)}%)`;
+      }
+    }
+
+    if (!contextLine && !isIncome) {
+      const today = db.prepare(
+        "SELECT COUNT(*) AS cnt, COALESCE(SUM(ABS(amount)), 0) AS out FROM transactions WHERE date = ? AND amount < 0"
+      ).get(row.date);
+      if (today.cnt > 1) {
+        contextLine = `Today: -$${today.out.toFixed(2)} across ${today.cnt} txns`;
+      }
+    }
+
+    return {
+      ...fallback,
+      body: contextLine ? `${baseLine}\n${contextLine}` : baseLine
+    };
+  } catch (err) {
+    console.error('[push] buildTxNotification failed, using fallback:', err.message);
+    return fallback;
+  }
+}
+
 app.get('/api/transactions', (req, res) => {
   const { month, year, date, payee, category, search, limit = 200, offset = 0 } = req.query;
 
@@ -484,13 +560,7 @@ app.post('/api/transactions', (req, res) => {
   const me = req.session?.user;
   const actor = me ? (db.prepare('SELECT display_name, username FROM users WHERE id = ?').get(me.id) || {}) : {};
   const actorName = (actor.display_name || actor.username || 'Someone');
-  const signedAmt = amt < 0 ? `-$${Math.abs(amt).toFixed(2)}` : `+$${amt.toFixed(2)}`;
-  const pushPayload = {
-    title: `💸 ${actorName} added a transaction`,
-    body: `${row.payee} · ${signedAmt}${row.category ? ` · ${row.category}` : ''}`,
-    tag: `tx-added-${row.id}`,
-    data: { route: '#/transactions', txId: row.id }
-  };
+  const pushPayload = buildTxNotification(row, actorName);
 
   let temporalClient = null;
   try { temporalClient = require('./temporal/worker').getClient(); } catch (_) {}
