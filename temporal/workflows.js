@@ -84,6 +84,26 @@ async function weeklyInsightsWorkflow() {
   });
 }
 
+// 1st of month at 08:00 — single closing-summary push for the previous month.
+// The natural bookend to the weekly insights digest: spent, income, net, and
+// the top category, all from completed-month data so the numbers don't drift.
+async function monthEndCloseWorkflow() {
+  const s = await acts.computeMonthEndSummary();
+  if (s.txCount === 0) return { sent: false, reason: 'no-transactions', month: s.month };
+
+  const netSign = s.net >= 0 ? '+' : '-';
+  const topPart = s.topCategory
+    ? ` · top: ${s.topCategory} $${s.topCategoryTotal.toFixed(0)}`
+    : '';
+
+  return acts.sendPush({
+    title: `📅 ${s.monthLabel} closed`,
+    body: `Spent $${s.spent.toFixed(0)} · income $${s.income.toFixed(0)} · net ${netSign}$${Math.abs(s.net).toFixed(0)}${topPart}`,
+    tag: `month-close-${s.month}`,
+    data: { route: '#/dashboard' }
+  });
+}
+
 // Event-driven (not scheduled): fired from the API handler whenever a
 // transaction is added, so every push attempt gets a workflow row in the
 // Temporal UI with full payload, retries, and timing.
@@ -206,6 +226,7 @@ module.exports = {
   budgetThresholdWorkflow,
   dailyRecapWorkflow,
   weeklyInsightsWorkflow,
+  monthEndCloseWorkflow,
   sendPushWorkflow,
   cleanupPushSubscriptionsWorkflow,
   dailyBackupWorkflow,

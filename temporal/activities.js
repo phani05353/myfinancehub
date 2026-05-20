@@ -134,6 +134,48 @@ module.exports = ({ db, sendPushToAll, sendPushExcept }) => ({
     return insights;
   },
 
+  // ── Month-end close ────────────────────────────────────────────────────────
+  // Computes totals for the PREVIOUS calendar month. Resolves "previous month"
+  // via SQL (date('now', '-1 day')) so it stays correct regardless of when
+  // exactly on the 1st the schedule fires.
+  async computeMonthEndSummary() {
+    const prev = db.prepare(
+      "SELECT strftime('%Y-%m', date('now', '-1 day')) AS m"
+    ).get().m;
+
+    const totals = db.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS spent,
+        COALESCE(SUM(CASE WHEN amount > 0 THEN amount       ELSE 0 END), 0) AS income,
+        COUNT(*) AS txCount
+      FROM transactions
+      WHERE strftime('%Y-%m', date) = ?
+    `).get(prev);
+
+    const topCat = db.prepare(`
+      SELECT COALESCE(category, 'Uncategorized') AS cat, SUM(ABS(amount)) AS total
+      FROM transactions
+      WHERE amount < 0 AND strftime('%Y-%m', date) = ?
+      GROUP BY cat
+      ORDER BY total DESC
+      LIMIT 1
+    `).get(prev);
+
+    const monthLabel = new Date(prev + '-01T00:00:00')
+      .toLocaleString('en-US', { month: 'long' });
+
+    return {
+      month: prev,
+      monthLabel,
+      spent: totals.spent,
+      income: totals.income,
+      net: totals.income - totals.spent,
+      txCount: totals.txCount,
+      topCategory: topCat?.cat || null,
+      topCategoryTotal: topCat?.total || 0
+    };
+  },
+
   // ── Send push ──────────────────────────────────────────────────────────────
   async sendPush(payload) {
     return sendPushToAll(payload);

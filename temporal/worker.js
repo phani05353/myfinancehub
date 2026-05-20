@@ -15,6 +15,7 @@ const SCHEDULES = [
   { id: 'budget-threshold-daily',workflow: 'budgetThresholdWorkflow',      cron: '0 20 * * *',  note: '20:00 daily' },
   { id: 'daily-recap',           workflow: 'dailyRecapWorkflow',           cron: '0 21 * * *',  note: '21:00 daily' },
   { id: 'weekly-insights',       workflow: 'weeklyInsightsWorkflow',       cron: '0 18 * * 0',  note: 'Sun 18:00' },
+  { id: 'month-end-close',       workflow: 'monthEndCloseWorkflow',        cron: '0 8 1 * *',   note: '1st of month 08:00' },
   { id: 'daily-backup',          workflow: 'dailyBackupWorkflow',          cron: '0 3 * * *',   note: '03:00 daily' },
   { id: 'weekly-integrity-check',workflow: 'weeklyIntegrityCheckWorkflow', cron: '0 4 * * 0',   note: 'Sun 04:00' },
   { id: 'trip-detection',        workflow: 'detectTripsWorkflow',          cron: '0 6 * * *',   note: '06:00 daily' },
