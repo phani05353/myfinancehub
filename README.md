@@ -1,6 +1,6 @@
 # MyFinanceHub
 
-A self-hosted personal finance tracker for households. Import transactions via CSV, log income and expenses, track subscriptions, set bill reminders, attach receipts, auto-categorize with a rules engine, and explore spending through a rich analytics dashboard. Now with **real-time Web Push notifications** orchestrated by **Temporal** workflows — bill reminders, budget alerts, price-hike detection, and a weekly digest land on your phone's lock screen exactly when they should. All runs locally, no cloud dependency. Installable as a PWA on mobile and desktop.
+A self-hosted personal finance tracker for households. Import transactions via CSV, log income and expenses, track subscriptions, set bill reminders, attach receipts, auto-categorize with a rules engine, and explore spending through a rich analytics dashboard. Now with **real-time Web Push notifications** orchestrated by **Temporal** workflows — bill reminders, budget alerts, price-hike detection, daily recap, a weekly digest, monthly close summaries, and auto-detected **trip tracking** all land on your phone's lock screen exactly when they should. Reliability is baked in via **nightly verified SQLite backups** and a **weekly integrity check** that pages you on corruption. All runs locally, no cloud dependency. Installable as a PWA on mobile and desktop.
 
 ## Features
 
@@ -52,21 +52,44 @@ Two sources fire pushes — **scheduled** alerts from Temporal workflows, and **
 
 | When | What |
 |---|---|
+| Daily, 6 AM | ✈️ Trip detection scan — clusters of new payees spawn a per-trip tracker workflow that pushes a summary when activity dies down |
 | Daily, 8 AM | 🔔 Bills due tomorrow + any overdue bills |
 | Daily, 9 AM | 📈 Subscription price hikes detected |
 | Daily, 8 PM | 💰 Budget categories at ≥90% of limit |
 | Daily, 9 PM | 📊 Daily recap — what you spent today |
 | Sunday, 6 PM | 💡 Weekly insights digest |
+| 1st of month, 8 AM | 📅 Month-end close — spent, income, net, top category for the prior month |
+| Daily, 3 AM | 💾 Verified SQLite backup (silent on success; pushes only on failure) |
+| Sunday, 4 AM | 🚨 Database integrity check (pushes only on corruption) |
+| Every 3 days, 4 AM | 🧹 Prune push subscriptions stale > 30 days |
 
 **Event-driven (real-time, fanned out via web-push):**
 
 | Trigger | Sent to | Body |
 |---|---|---|
-| Transaction added | All other subscribed devices in the household (originator excluded via `X-Push-Endpoint` header) | `💸 Maruthi added a transaction · Costco · -$87.34 · Groceries` |
+| Transaction added | All other subscribed devices in the household (originator excluded via `X-Push-Endpoint` header) | `💸 Maruthi added a transaction · Costco · -$87.34 · Groceries`<br>`Groceries: 67% of May ($340 of $500)` |
+| Income added | All other subscribed devices | `💰 Maruthi logged income · Paycheck · +$2,400.00`<br>`May net so far: +$1,820.00` |
 
-All notifications skip silently when there's nothing to say — no notification fatigue. Each notification deep-links to the relevant page when tapped.
+The push body is **dynamic** — for expenses, the second line is whichever of these has the most signal: % of monthly budget if the category has one, deviation from the 180-day average at that merchant, or today's running expense total. For income, it's MTD net. Falls back to the bare payee + amount line if nothing meaningful is computable.
+
+All notifications skip silently when there's nothing to say — no notification fatigue. Each notification deep-links to the relevant page when tapped. Every push attempt — scheduled or event-driven — flows through a Temporal workflow, so retries, payloads, and timing are all visible in the Temporal UI.
 
 **Requires HTTPS.** Web Push is a secure-context-only API — iOS Safari, Chrome, and Firefox all refuse `pushManager.subscribe()` over plain HTTP except on `localhost`. The recommended path for a homelab is **Tailscale serve** (free, real Let's Encrypt cert, end-to-end encrypted, no router config). See [Enabling HTTPS for Push](#enabling-https-for-push).
+
+### Trip Detection
+- Fully automatic — no manual "I'm on a trip" toggle
+- Daily 6 AM scan looks for clusters of **new payees** (merchants never seen before in your history) appearing in the last 7 days
+- ≥3 new payees spawns a per-trip workflow that sleeps in 2-day chunks until the cluster goes quiet, then pushes a single summary: date range, transaction count, total, top category
+- Tiny clusters (<3 transactions or <$50 total) are skipped — no notification for a single weekend errand
+- Workflow IDs are derived from trip-start date, so duplicate detection is idempotent — the same trip never gets tracked twice
+
+### Reliability
+- **Online SQLite backups** every night at 3 AM using SQLite's `db.backup()` API — safe while the app keeps reading/writing
+- Each backup is **verified immediately** with `PRAGMA integrity_check` on the copy; corrupted backups are deleted and the workflow fails loudly so Temporal retries surface the issue
+- **14-day retention** — older backups pruned automatically
+- **Weekly integrity check** (Sunday 4 AM) runs `PRAGMA integrity_check` on the live DB and pushes a CRITICAL alert to every subscribed device with the diagnosis and the latest available backup name if corruption is detected
+- **Push subscription self-cleanup** — dead endpoints are removed live on 404/410; the every-3-days cleanup workflow handles the long-tail rot (uninstalled PWAs, revoked permissions, silent devices) by pruning subscriptions whose `last_seen` is older than 30 days
+- Backups live in `data/backups/` next to `finance.db` — same bind mount, preserved across deploys
 
 ### Year in Review
 - Year picker auto-populated from years with transaction data
@@ -250,16 +273,21 @@ To stop notifications on a device: open Edit Profile → tap **Disable**. The su
 
 Open **http://your-homelab-ip:8090** to see the Temporal Web UI.
 
-- **Workflows tab** — every run (succeeded / failed / running), full input/output, retry attempts, per-activity timing
-- **Schedules tab** — the five cron jobs registered automatically by the worker on startup:
+- **Workflows tab** — every run (succeeded / failed / running), full input/output, retry attempts, per-activity timing. This includes the event-driven `sendPushWorkflow` runs that fire on each transaction add and the per-trip `tripDetectionWorkflow` runs spawned by the daily scanner.
+- **Schedules tab** — ten cron jobs registered automatically by the worker on startup:
   - `bills-daily` (08:00 daily)
   - `price-hikes-daily` (09:00 daily)
   - `budget-threshold-daily` (20:00 daily)
   - `daily-recap` (21:00 daily)
   - `weekly-insights` (Sunday 18:00)
+  - `month-end-close` (1st of month, 08:00)
+  - `trip-detection` (06:00 daily)
+  - `daily-backup` (03:00 daily)
+  - `weekly-integrity-check` (Sunday 04:00)
+  - `push-cleanup` (every 3 days, 04:00)
 - **Trigger Immediately** — useful to test a workflow without waiting for its cron. Each schedule has a button on its detail page.
 
-Schedule definitions live in [temporal/worker.js](temporal/worker.js#L13). Edit cron expressions there and the worker re-registers on next start (idempotent via `ensureSchedule`).
+Schedule definitions live in [temporal/worker.js](temporal/worker.js#L12). Edit cron expressions there and the worker re-registers on next start (idempotent via `ensureSchedule`).
 
 ---
 
@@ -294,6 +322,7 @@ myfinancehub/
 │   ├── hash-password.js
 │   └── generate-icons.py     # Regenerates PWA icons from the homepage logo design
 ├── data/                     # SQLite database (gitignored)
+│   └── backups/              # Nightly verified backups (14-day retention)
 ├── uploads/receipts/         # Receipt files (gitignored)
 ├── deploy.sh                 # Two-container homelab deploy
 ├── Dockerfile                # Debian slim for Temporal SDK compatibility
