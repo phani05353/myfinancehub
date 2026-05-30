@@ -122,6 +122,21 @@ echo "▶ Step 5/6 — Replacing app container..."
 sudo docker stop "$APP_CONTAINER" 2>/dev/null && echo "  Stopped old app container" || echo "  No running app container found"
 sudo docker rm   "$APP_CONTAINER" 2>/dev/null || true
 
+# Host-only secrets (Resend API key, report recipient, etc.). This file lives
+# OUTSIDE the git repo and is never committed — it only ever exists on this
+# homelab box. Passed straight into the container env via --env-file. If it's
+# missing, the app still runs; the monthly-report email just no-ops (the
+# activity throws "RESEND_API_KEY is not set" and Temporal flags it).
+ENV_FILE="$BASE_DIR/finance.env"
+ENV_FILE_ARG=""
+if [ -f "$ENV_FILE" ]; then
+  ENV_FILE_ARG="--env-file $ENV_FILE"
+  echo "  ✓ Injecting host secrets from $ENV_FILE"
+else
+  echo "  ⚠ No secrets file at $ENV_FILE — monthly email report will be skipped"
+  echo "    Create it (chmod 600) with: RESEND_API_KEY=re_xxx"
+fi
+
 sudo docker run -d \
   --name "$APP_CONTAINER" \
   --network "$NETWORK_NAME" \
@@ -129,6 +144,7 @@ sudo docker run -d \
   -p "${APP_PORT}:3000" \
   -v "$BASE_DIR/container-data:/app/data" \
   -v "$BASE_DIR/container-receipts:/app/uploads/receipts" \
+  $ENV_FILE_ARG \
   -e TEMPORAL_ADDRESS="${TEMPORAL_CONTAINER}:7233" \
   -e TEMPORAL_NAMESPACE=default \
   "$IMAGE_NAME" >/dev/null

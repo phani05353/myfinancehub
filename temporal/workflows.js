@@ -104,6 +104,19 @@ async function monthEndCloseWorkflow() {
   });
 }
 
+// Month-end at 21:00 — email a full monthly report (nice HTML) via Resend.
+// Scheduled on a 28–31 cron because plain cron can't express "last day of
+// month"; the activity reports isLastDay so we only actually email on the
+// true final day (handles 28/29/30/31-day months correctly).
+async function monthlyReportEmailWorkflow() {
+  const report = await acts.computeMonthlyReport();
+  if (!report.isLastDay) return { sent: false, reason: 'not-month-end', date: report.today };
+  if (report.txCount === 0) return { sent: false, reason: 'no-transactions', month: report.month };
+
+  const result = await acts.sendMonthlyReportEmail(report);
+  return { sent: true, month: report.month, emailId: result.id, to: result.to };
+}
+
 // Event-driven (not scheduled): fired from the API handler whenever a
 // transaction is added, so every push attempt gets a workflow row in the
 // Temporal UI with full payload, retries, and timing.
@@ -227,6 +240,7 @@ module.exports = {
   dailyRecapWorkflow,
   weeklyInsightsWorkflow,
   monthEndCloseWorkflow,
+  monthlyReportEmailWorkflow,
   sendPushWorkflow,
   cleanupPushSubscriptionsWorkflow,
   dailyBackupWorkflow,

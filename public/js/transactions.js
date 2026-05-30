@@ -172,7 +172,10 @@ const transactionsModule = {
 
   async openAddModal() {
     const today = new Date().toISOString().slice(0, 10);
-    const categories = await api('/api/categories').catch(() => []);
+    const [categories, payees] = await Promise.all([
+      api('/api/categories').catch(() => []),
+      api('/api/payees').catch(() => [])
+    ]);
     openModal(`
       <h2>Add Transaction</h2>
       <form id="tx-form" style="margin-top:16px">
@@ -190,7 +193,9 @@ const transactionsModule = {
           </div>
           <div class="form-group">
             <label>Payee *</label>
-            <input type="text" id="tx-payee" placeholder="e.g. Grocery Store" required>
+            <input type="text" id="tx-payee" placeholder="e.g. Grocery Store" list="payee-list"
+              autocomplete="off" required>
+            ${buildPayeeDatalist(payees)}
           </div>
         </div>
         <div class="form-row">
@@ -301,9 +306,10 @@ const transactionsModule = {
   },
 
   async openEditModal(id) {
-    const [row, categories] = await Promise.all([
+    const [row, categories, payees] = await Promise.all([
       api(`/api/transactions/${id}`).catch(() => null),
-      api('/api/categories').catch(() => [])
+      api('/api/categories').catch(() => []),
+      api('/api/payees').catch(() => [])
     ]);
     if (!row) return;
 
@@ -325,7 +331,9 @@ const transactionsModule = {
           </div>
           <div class="form-group">
             <label>Payee *</label>
-            <input type="text" id="tx-payee" value="${escHtml(row.payee)}" required>
+            <input type="text" id="tx-payee" value="${escHtml(row.payee)}" list="payee-list"
+              autocomplete="off" required>
+            ${buildPayeeDatalist(payees)}
           </div>
         </div>
         <div class="form-row">
@@ -502,6 +510,14 @@ function payeeLogoHtml(payee, amount) {
 function setTxType(type) {
   document.getElementById('type-expense').classList.toggle('active', type === 'expense');
   document.getElementById('type-income').classList.toggle('active', type === 'income');
+}
+
+function buildPayeeDatalist(payees) {
+  const opts = (payees || [])
+    .filter(Boolean)
+    .map(p => `<option value="${escHtml(p)}"></option>`)
+    .join('');
+  return `<datalist id="payee-list">${opts}</datalist>`;
 }
 
 function buildCategorySelect(categories, selected) {

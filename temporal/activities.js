@@ -4,6 +4,7 @@
 const fs       = require('fs');
 const path     = require('path');
 const Database = require('better-sqlite3');
+const { monthlyReportHtml, monthlyReportSubject } = require('./email-template');
 
 const DATA_DIR    = path.join(__dirname, '..', 'data');
 const DB_PATH     = path.join(DATA_DIR, 'finance.db');
@@ -362,5 +363,131 @@ module.exports = ({ db, sendPushToAll, sendPushExcept }) => ({
       topCategory: top?.[0] || null,
       payeeCount: newPayees.length
     };
+  },
+
+  // ── Monthly report (emailed) ───────────────────────────────────────────────
+  // Builds a rich summary for the CURRENT (ending) calendar month. Also reports
+  // whether today is the last day of the month, so the workflow can fire on a
+  // 28–31 cron but only actually send on the true month-end.
+  async computeMonthlyReport() {
+    const cal = db.prepare(`
+      SELECT strftime('%Y-%m','now')                              AS month,
+             date('now')                                          AS today,
+             date('now','start of month','+1 month','-1 day')     AS lastDay,
+             CAST(strftime('%d','now') AS INTEGER)                AS dayOfMonth
+    `).get();
+    const month = cal.month;
+    const isLastDay = cal.today === cal.lastDay;
+
+    const totals = db.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END), 0) AS spent,
+        COALESCE(SUM(CASE WHEN amount > 0 THEN amount       ELSE 0 END), 0) AS income,
+        COUNT(*) AS txCount
+      FROM transactions WHERE strftime('%Y-%m', date) = ?
+    `).get(month);
+
+    const spent = totals.spent;
+    const income = totals.income;
+    const net = income - spent;
+
+    const topCategories = db.prepare(`
+      SELECT COALESCE(category, 'Uncategorized') AS cat, SUM(ABS(amount)) AS total
+      FROM transactions
+      WHERE amount < 0 AND strftime('%Y-%m', date) = ?
+      GROUP BY cat ORDER BY total DESC LIMIT 6
+    `).all(month).map(c => ({
+      cat: c.cat,
+      total: c.total,
+      pct: spent > 0 ? (c.total / spent) * 100 : 0
+    }));
+
+    const topMerchants = db.prepare(`
+      SELECT payee, COUNT(*) AS cnt, SUM(ABS(amount)) AS total
+      FROM transactions
+      WHERE amount < 0 AND strftime('%Y-%m', date) = ? AND payee IS NOT NULL AND payee != ''
+      GROUP BY lower(payee) ORDER BY total DESC LIMIT 5
+    `).all(month);
+
+    const biggestExpenses = db.prepare(`
+      SELECT payee, ABS(amount) AS amount, date, category
+      FROM transactions
+      WHERE amount < 0 AND strftime('%Y-%m', date) = ?
+      ORDER BY ABS(amount) DESC LIMIT 5
+    `).all(month);
+
+    const prevMonth = db.prepare(
+      "SELECT strftime('%Y-%m', date('now','start of month','-1 day')) AS m"
+    ).get().m;
+    const prevSpent = db.prepare(`
+      SELECT COALESCE(SUM(ABS(amount)), 0) AS total
+      FROM transactions WHERE amount < 0 AND strftime('%Y-%m', date) = ?
+    `).get(prevMonth).total;
+
+    const budgets = db.prepare(`
+      SELECT b.category, b.amount AS budget,
+             COALESCE(SUM(ABS(t.amount)), 0) AS spent
+      FROM budgets b
+      LEFT JOIN transactions t
+        ON lower(t.category) = lower(b.category)
+        AND strftime('%Y-%m', t.date) = ?
+        AND t.amount < 0
+      WHERE b.amount > 0
+      GROUP BY b.id
+      ORDER BY (COALESCE(SUM(ABS(t.amount)), 0) * 1.0 / b.amount) DESC
+      LIMIT 8
+    `).all(month)
+      .filter(b => b.spent > 0)
+      .map(b => ({ category: b.category, budget: b.budget, spent: b.spent, pct: (b.spent / b.budget) * 100 }));
+
+    const monthLabel = new Date(month + '-01T00:00:00')
+      .toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+    return {
+      month,
+      monthLabel,
+      today: cal.today,
+      isLastDay,
+      spent,
+      income,
+      net,
+      txCount: totals.txCount,
+      savingsRate: income > 0 ? (net / income) * 100 : null,
+      avgDaily: cal.dayOfMonth > 0 ? spent / cal.dayOfMonth : spent,
+      prevSpent,
+      spentDeltaPct: prevSpent > 0 ? ((spent - prevSpent) / prevSpent) * 100 : null,
+      topCategories,
+      topMerchants,
+      biggestExpenses,
+      budgets
+    };
+  },
+
+  // Render + send the monthly report via Resend. The API key is read from the
+  // environment (never committed) — see .env / GitHub Actions secrets. Throws
+  // on any non-2xx so Temporal retries and surfaces the failure in its UI.
+  async sendMonthlyReportEmail(report) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) throw new Error('RESEND_API_KEY is not set — add it to the environment');
+
+    const from = process.env.REPORT_EMAIL_FROM || 'onboarding@resend.dev';
+    const to   = process.env.REPORT_EMAIL_TO   || 'maruthi.phanikumar@yahoo.com';
+    const subject = monthlyReportSubject(report);
+    const html = monthlyReportHtml(report);
+
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ from, to, subject, html })
+    });
+
+    const text = await res.text();
+    if (!res.ok) throw new Error(`Resend ${res.status}: ${text.slice(0, 300)}`);
+    let id = null;
+    try { id = JSON.parse(text).id || null; } catch (_) {}
+    return { id, to, subject };
   }
 });
