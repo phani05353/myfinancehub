@@ -14,7 +14,7 @@ const RECEIPTS_DIR = path.join(__dirname, '..', 'uploads', 'receipts');
 // Local LLM (Ollama native /api/generate). Configurable via env so the homelab
 // box address / model can change without code edits. Never a cloud call.
 const LLM_URL   = process.env.LLM_URL   || 'http://192.168.50.34:11434/api/generate';
-const LLM_MODEL = process.env.LLM_MODEL || 'llama3.2-vision';
+const LLM_MODEL = process.env.LLM_MODEL || 'gemma3:4b';   // multimodal; override via env
 
 // Call the local model and coerce its reply to a JSON object. `images` is an
 // array of base64 strings (Ollama uses these for vision-capable models; non-
@@ -247,27 +247,49 @@ module.exports = ({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptTex
       '"items": [{"name": string, "price": number}]}. ' +
       'total is the final grand total actually paid.';
 
+    const usable = p => p && (p.merchant || p.total > 0);
+    let parsed = null;
+    let lastError = null;   // captured so the thrown message says WHY (network? 404? bad JSON?)
+
     // 1) Vision attempt — send the image bytes directly.
-    let parsed = await callOllamaJson({
-      model: LLM_MODEL,
-      prompt: `You are a receipt parser. Read this receipt image and extract the merchant, purchase date, grand total, and line items. ${schemaHint}`,
-      images: [buffer.toString('base64')]
-    }).catch(err => { console.error('[receipt-ai] vision attempt failed:', err.message); return null; });
+    try {
+      parsed = await callOllamaJson({
+        model: LLM_MODEL,
+        prompt: `You are a receipt parser. Read this receipt image and extract the merchant, purchase date, grand total, and line items. ${schemaHint}`,
+        images: [buffer.toString('base64')]
+      });
+      if (!usable(parsed)) { lastError = lastError || 'vision: model returned no usable fields (not vision-capable?)'; parsed = null; }
+    } catch (err) {
+      lastError = `vision: ${err.message}`;
+      console.error('[receipt-ai] vision attempt failed:', err.message);
+    }
 
     // 2) Fallback — OCR to text, then structure the text (works with text-only models).
-    if (!parsed || (!parsed.merchant && !(parsed.total > 0))) {
+    if (!parsed) {
       let text = '';
       try { text = (await ocrReceiptText(buffer)) || ''; }
-      catch (e) { console.error('[receipt-ai] ocr fallback failed:', e.message); }
+      catch (e) { lastError = `ocr: ${e.message}`; console.error('[receipt-ai] ocr fallback failed:', e.message); }
+
       if (text.trim()) {
-        parsed = await callOllamaJson({
-          model: LLM_MODEL,
-          prompt: `You are a receipt parser. Below is the raw OCR text of a receipt:\n"""\n${text.slice(0, 4000)}\n"""\nExtract the fields. ${schemaHint}`
-        }).catch(err => { console.error('[receipt-ai] text attempt failed:', err.message); return null; });
+        try {
+          const fromText = await callOllamaJson({
+            model: LLM_MODEL,
+            prompt: `You are a receipt parser. Below is the raw OCR text of a receipt:\n"""\n${text.slice(0, 4000)}\n"""\nExtract the fields. ${schemaHint}`
+          });
+          if (usable(fromText)) parsed = fromText;
+          else lastError = 'text: model returned no usable fields from OCR text';
+        } catch (err) {
+          lastError = `text: ${err.message}`;
+          console.error('[receipt-ai] text attempt failed:', err.message);
+        }
+      } else if (!lastError) {
+        lastError = 'ocr: produced no text (image unreadable or empty)';
       }
     }
 
-    if (!parsed) throw new Error('Could not extract any data from the receipt');
+    if (!parsed) {
+      throw new Error(`Receipt extraction failed [model=${LLM_MODEL} url=${LLM_URL}]: ${lastError || 'no data returned'}`);
+    }
     return parsed;
   },
 
