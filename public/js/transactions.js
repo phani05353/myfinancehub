@@ -22,7 +22,14 @@ const transactionsModule = {
     }
 
     document.getElementById('view').innerHTML = `
-      <h1 style="margin-bottom:16px">Transactions</h1>
+      <div class="tx-page-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px">
+        <h1 style="margin:0">Transactions</h1>
+        <button class="btn btn-ghost btn-sm" onclick="transactionsModule.scanReceiptAI()"
+          title="Photograph a receipt — the AI extracts it and adds a transaction for you to review">
+          📸 Scan &amp; auto-add
+        </button>
+      </div>
+      <input type="file" id="ingest-file" accept="image/*" capture="environment" style="display:none">
 
       <div class="card tx-search-card">
         <!-- Search + filter icon row -->
@@ -143,11 +150,12 @@ const transactionsModule = {
       tbody.innerHTML = rows.map(r => `
         <tr>
           <td data-label="Date" style="white-space:nowrap">${fmtDate(r.date)}</td>
-          <td data-label="Payee"><span class="payee-cell">${payeeLogoHtml(r.payee, r.amount)}${escHtml(r.payee)}</span></td>
+          <td data-label="Payee"><span class="payee-cell">${payeeLogoHtml(r.payee, r.amount)}${escHtml(r.payee)}${r.needs_review ? ' <span class="badge badge-yellow" title="AI-extracted from a receipt — confirm the details">Review</span>' : ''}</span></td>
           <td data-label="Category">${r.category ? `<span class="badge badge-blue">${escHtml(r.category)}</span>` : '<span class="badge badge-gray">—</span>'}</td>
           <td data-label="Amount" style="text-align:right">${fmt(r.amount)}</td>
           <td data-label="Notes" style="color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.notes || '')}</td>
           <td data-label="Actions" style="white-space:nowrap">
+            ${r.needs_review ? `<button class="btn btn-ghost btn-sm" onclick="transactionsModule.confirmReview(${r.id})" title="Confirm — looks right" style="color:var(--success)">✓</button>` : ''}
             ${r.receipt_path ? `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${escHtml(r.receipt_path)}')" title="View receipt">📎</button>` : ''}
             <button class="btn btn-ghost btn-sm" onclick="transactionsModule.openEditModal(${r.id})">Edit</button>
             <button class="btn btn-danger btn-sm" onclick="transactionsModule.deleteRow(${r.id})">Del</button>
@@ -302,6 +310,43 @@ const transactionsModule = {
       toast('Transaction added');
       if (document.getElementById('tx-body')) await this.loadRows();
       else refreshCurrentView();
+    } catch (e) { toast(e.message, 'error'); }
+  },
+
+  // 📸 Scan & auto-add: photograph/upload a receipt and hand it to the local-LLM
+  // ingest workflow. Fire-and-forget — the server returns 202 immediately and a
+  // push notification arrives once the (needs-review) transaction is created.
+  scanReceiptAI() {
+    const input = document.getElementById('ingest-file');
+    if (!input) return;
+    input.value = '';
+    input.onchange = async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) { toast('Pick an image (JPG, PNG or WebP)', 'error'); return; }
+      toast('Reading receipt with AI…');
+      try {
+        const fd = new FormData();
+        fd.append('receipt', file);
+        const r = await fetch('/api/receipts/ingest', { method: 'POST', body: fd });
+        if (r.status === 202) {
+          toast("Scanning — you'll get a notification when it's added for review");
+        } else {
+          throw new Error((await r.json().catch(() => ({}))).error || 'Upload failed');
+        }
+      } catch (err) {
+        toast('Receipt scan failed: ' + err.message, 'error');
+      }
+    };
+    input.click();
+  },
+
+  // One-tap confirm: clear the needs_review flag on an AI-extracted transaction.
+  async confirmReview(id) {
+    try {
+      await api(`/api/transactions/${id}/confirm`, { method: 'POST' });
+      toast('Confirmed');
+      await this.loadRows();
     } catch (e) { toast(e.message, 'error'); }
   },
 

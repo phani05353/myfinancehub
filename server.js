@@ -620,6 +620,14 @@ app.delete('/api/transactions/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// Clear the needs_review flag on an AI-extracted transaction (one-tap "confirm").
+app.post('/api/transactions/:id/confirm', (req, res) => {
+  const tx = db.prepare('SELECT id FROM transactions WHERE id = ?').get(req.params.id);
+  if (!tx) return res.status(404).json({ error: 'Not found' });
+  db.prepare("UPDATE transactions SET needs_review = 0, updated_at = datetime('now') WHERE id = ?").run(req.params.id);
+  res.json(db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id));
+});
+
 app.get('/api/transactions/summary', (req, res) => {
   const { month } = req.query;
   const where = month ? 'WHERE strftime(\'%Y-%m\', date) = ?' : '';
