@@ -26,6 +26,8 @@ db.exec(schema);
 
 // Migrate: add receipt_path column if it doesn't exist yet
 try { db.prepare('ALTER TABLE transactions ADD COLUMN receipt_path TEXT').run(); } catch (_) {}
+// Migrate: flag for AI-extracted transactions awaiting human confirmation
+try { db.prepare('ALTER TABLE transactions ADD COLUMN needs_review INTEGER DEFAULT 0').run(); } catch (_) {}
 // Migrate: add role column to users (existing single user becomes admin)
 try { db.prepare("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'").run(); } catch (_) {}
 // Migrate: add display_name column to users
@@ -740,6 +742,67 @@ app.post('/api/receipts/ocr', ocrUpload.single('receipt'), async (req, res) => {
     console.error('[ocr] failed:', err);
     res.status(500).json({ error: 'OCR failed: ' + (err.message || 'unknown') });
   }
+});
+
+// Shared OCR helper — used inline above and injected into the Temporal worker
+// so the receipt-ingest activity can fall back to OCR text when the local
+// model isn't vision-capable. Returns the raw recognised text.
+async function ocrReceiptText(buffer) {
+  const worker = await getOcrWorker();
+  const { data } = await worker.recognize(buffer);
+  return data?.text || '';
+}
+
+// ─── RECEIPT AI INGEST (local LLM via Temporal) ───────────────────────────────
+// Fire-and-forget: store the image, start a durable workflow that reads it with
+// the local model, creates a needs_review transaction, and pushes when done.
+const ingestStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, 'uploads', 'receipts');
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+    cb(null, `receipt-ai-${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
+  }
+});
+const ingestUpload = multer({
+  storage: ingestStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.jpg', '.jpeg', '.png', '.webp'];
+    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
+  }
+});
+
+app.post('/api/receipts/ingest', ingestUpload.single('receipt'), (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Unauthorized' });
+  if (!req.file) return res.status(400).json({ error: 'Send an image as multipart field "receipt" (jpg/png/webp, max 10 MB)' });
+
+  let temporalClient = null;
+  try { temporalClient = require('./temporal/worker').getClient(); } catch (_) {}
+  if (!temporalClient) {
+    fs.unlink(req.file.path, () => {});   // can't process async — don't orphan the file
+    return res.status(503).json({ error: 'Receipt AI is unavailable (Temporal worker not running).' });
+  }
+
+  const myEndpoint = req.get('X-Push-Endpoint') || null;
+  const actor = db.prepare('SELECT display_name, username FROM users WHERE id = ?').get(req.session.user.id) || {};
+  const actorName = actor.display_name || actor.username || 'Someone';
+
+  temporalClient.workflow.start('receiptIngestWorkflow', {
+    args: [{ receiptFile: req.file.filename, excludeEndpoint: myEndpoint, actorName }],
+    taskQueue: 'finance-tq',
+    workflowId: `receipt-ingest-${req.file.filename}`
+  })
+    .then(h => console.log(`[receipt-ai] started workflow=${h.workflowId}`))
+    .catch(err => {
+      console.error('[receipt-ai] workflow start failed:', err.message);
+      fs.unlink(req.file.path, () => {});
+    });
+
+  res.status(202).json({ status: 'processing', receipt_path: req.file.filename });
 });
 
 // ─── BUDGETS ──────────────────────────────────────────────────────────────────
@@ -1583,7 +1646,7 @@ app.listen(PORT, () => {
   }
   try {
     const { startWorker } = require('./temporal/worker');
-    await startWorker({ db, sendPushToAll, sendPushExcept });
+    await startWorker({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptText });
     console.log('Temporal worker started and schedules registered.');
   } catch (err) {
     console.warn('Temporal worker not started — notifications will not fire.');

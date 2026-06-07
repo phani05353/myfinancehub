@@ -49,10 +49,10 @@ async function ensureSchedule(client, def) {
 let __client = null;
 function getClient() { return __client; }
 
-async function startWorker({ db, sendPushToAll, sendPushExcept }) {
+async function startWorker({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptText }) {
   // 1. Worker — runs activities + workflows
   const connection = await NativeConnection.connect({ address: ADDRESS });
-  const activities = require('./activities')({ db, sendPushToAll, sendPushExcept });
+  const activities = require('./activities')({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptText });
   const worker = await Worker.create({
     connection,
     namespace: NAMESPACE,

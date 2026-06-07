@@ -6,11 +6,41 @@ const path     = require('path');
 const Database = require('better-sqlite3');
 const { monthlyReportHtml, monthlyReportSubject } = require('./email-template');
 
-const DATA_DIR    = path.join(__dirname, '..', 'data');
-const DB_PATH     = path.join(DATA_DIR, 'finance.db');
-const BACKUP_DIR  = path.join(DATA_DIR, 'backups');
+const DATA_DIR     = path.join(__dirname, '..', 'data');
+const DB_PATH      = path.join(DATA_DIR, 'finance.db');
+const BACKUP_DIR   = path.join(DATA_DIR, 'backups');
+const RECEIPTS_DIR = path.join(__dirname, '..', 'uploads', 'receipts');
 
-module.exports = ({ db, sendPushToAll, sendPushExcept }) => ({
+// Local LLM (Ollama native /api/generate). Configurable via env so the homelab
+// box address / model can change without code edits. Never a cloud call.
+const LLM_URL   = process.env.LLM_URL   || 'http://192.168.50.34:11434/api/generate';
+const LLM_MODEL = process.env.LLM_MODEL || 'llama3.2-vision';
+
+// Call the local model and coerce its reply to a JSON object. `images` is an
+// array of base64 strings (Ollama uses these for vision-capable models; non-
+// vision models simply ignore them, which is why the caller has an OCR fallback).
+async function callOllamaJson({ model, prompt, images }) {
+  const body = { model, prompt, stream: false, format: 'json', options: { temperature: 0 } };
+  if (images && images.length) body.images = images;
+
+  const res = await fetch(LLM_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`Ollama ${res.status}: ${(await res.text()).slice(0, 200)}`);
+
+  const data = await res.json();
+  const raw = (data && data.response) || '';     // /api/generate → { response: "<text>" }
+  try { return JSON.parse(raw); }
+  catch (_) {
+    const m = raw.match(/\{[\s\S]*\}/);           // salvage a JSON object if wrapped in prose
+    if (m) { try { return JSON.parse(m[0]); } catch (_) {} }
+    throw new Error('LLM response was not valid JSON');
+  }
+}
+
+module.exports = ({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptText }) => ({
 
   // ── Bills ──────────────────────────────────────────────────────────────────
   async findDueBills(daysAhead = 1) {
@@ -200,6 +230,73 @@ module.exports = ({ db, sendPushToAll, sendPushExcept }) => ({
   // like tx-added — the originating device is excluded so it doesn't ding itself)
   async sendPushExceptActivity(excludeEndpoint, payload) {
     return sendPushExcept(excludeEndpoint, payload);
+  },
+
+  // ── Receipt ingest (local vision LLM) ───────────────────────────────────────
+  // Read a stored receipt image and extract structured fields with the local
+  // model. Tries vision first (image sent directly); if that yields nothing
+  // useful, OCRs the image to text and asks the model to structure the text.
+  async extractReceiptWithLLM({ receiptFile }) {
+    const imgPath = path.join(RECEIPTS_DIR, receiptFile);
+    const buffer  = fs.readFileSync(imgPath);
+
+    const schemaHint =
+      'Respond with ONLY a JSON object: ' +
+      '{"merchant": string, "date": "YYYY-MM-DD" or null, "total": number, ' +
+      '"currency": string, "category": string or null, ' +
+      '"items": [{"name": string, "price": number}]}. ' +
+      'total is the final grand total actually paid.';
+
+    // 1) Vision attempt — send the image bytes directly.
+    let parsed = await callOllamaJson({
+      model: LLM_MODEL,
+      prompt: `You are a receipt parser. Read this receipt image and extract the merchant, purchase date, grand total, and line items. ${schemaHint}`,
+      images: [buffer.toString('base64')]
+    }).catch(err => { console.error('[receipt-ai] vision attempt failed:', err.message); return null; });
+
+    // 2) Fallback — OCR to text, then structure the text (works with text-only models).
+    if (!parsed || (!parsed.merchant && !(parsed.total > 0))) {
+      let text = '';
+      try { text = (await ocrReceiptText(buffer)) || ''; }
+      catch (e) { console.error('[receipt-ai] ocr fallback failed:', e.message); }
+      if (text.trim()) {
+        parsed = await callOllamaJson({
+          model: LLM_MODEL,
+          prompt: `You are a receipt parser. Below is the raw OCR text of a receipt:\n"""\n${text.slice(0, 4000)}\n"""\nExtract the fields. ${schemaHint}`
+        }).catch(err => { console.error('[receipt-ai] text attempt failed:', err.message); return null; });
+      }
+    }
+
+    if (!parsed) throw new Error('Could not extract any data from the receipt');
+    return parsed;
+  },
+
+  // Insert a transaction from the extracted fields. Flagged needs_review = 1 and
+  // source = 'receipt-ai' so it surfaces for confirmation rather than being
+  // silently trusted. Amount is stored negative (expense), per app convention.
+  async createTransactionFromReceipt({ extracted, receiptFile }) {
+    const today = new Date().toISOString().slice(0, 10);
+    const payee = String(extracted.merchant || 'Unknown merchant').trim().slice(0, 80) || 'Unknown merchant';
+    const total = Math.abs(parseFloat(extracted.total) || 0);
+    const amount = -total;
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(extracted.date || '') ? extracted.date : today;
+
+    const items = Array.isArray(extracted.items) ? extracted.items : [];
+    const itemLines = items
+      .filter(i => i && i.name)
+      .map(i => `- ${String(i.name).slice(0, 60)}${i.price != null ? ` $${Number(i.price).toFixed(2)}` : ''}`)
+      .join('\n');
+    const notes = ['🧾 Auto-extracted from receipt (needs review)', itemLines]
+      .filter(Boolean).join('\n').slice(0, 1000);
+
+    const resolved = applyRules({ payee, amount, notes, category: extracted.category || null });
+
+    const result = db.prepare(
+      "INSERT INTO transactions (date, payee, category, amount, notes, source, receipt_path, needs_review) " +
+      "VALUES (?, ?, ?, ?, ?, 'receipt-ai', ?, 1)"
+    ).run(date, payee, resolved.category, amount, notes, receiptFile);
+
+    return db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid);
   },
 
   // ── Database backups & integrity ───────────────────────────────────────────

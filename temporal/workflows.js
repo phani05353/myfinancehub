@@ -8,6 +8,13 @@ const acts = proxyActivities({
   retry: { maximumAttempts: 3 }
 });
 
+// LLM receipt extraction can be slow (vision inference on CPU) — give it room
+// and fewer retries so a genuinely unreadable receipt fails fast.
+const llmActs = proxyActivities({
+  startToCloseTimeout: '5 minutes',
+  retry: { maximumAttempts: 2 }
+});
+
 // 8 AM daily — push a single notification combining due + overdue bills.
 async function dailyBillsWorkflow() {
   const [due, overdue] = await Promise.all([
@@ -122,6 +129,35 @@ async function monthlyReportEmailWorkflow() {
 // Temporal UI with full payload, retries, and timing.
 async function sendPushWorkflow({ excludeEndpoint, payload }) {
   return acts.sendPushExceptActivity(excludeEndpoint, payload);
+}
+
+// Event-driven (not scheduled): fired from the API handler after a receipt
+// image is uploaded for AI ingest. Reads the image with the local vision LLM
+// (falling back to OCR text), creates a transaction flagged needs_review, and
+// pushes a "done" notification. On extraction failure, pushes a manual-entry
+// prompt and fails the workflow (visible in the Temporal UI).
+async function receiptIngestWorkflow({ receiptFile, excludeEndpoint, actorName }) {
+  let extracted;
+  try {
+    extracted = await llmActs.extractReceiptWithLLM({ receiptFile });
+  } catch (err) {
+    await acts.sendPush({
+      title: '🧾 Couldn’t read that receipt',
+      body: 'The AI couldn’t extract it — tap to add the transaction manually.',
+      tag: `receipt-fail-${receiptFile}`,
+      data: { route: '#/transactions' }
+    });
+    throw err;
+  }
+
+  const tx = await acts.createTransactionFromReceipt({ extracted, receiptFile });
+
+  return acts.sendPush({
+    title: '🧾 Receipt added — tap to review',
+    body: `${tx.payee} · -$${Math.abs(tx.amount).toFixed(2)}${tx.category ? ` · ${tx.category}` : ''}\nAuto-extracted — confirm the details`,
+    tag: `receipt-added-${tx.id}`,
+    data: { route: '#/transactions', txId: tx.id }
+  });
 }
 
 // Every 3 days at 04:00 — prune push subscriptions that haven't received a
@@ -242,6 +278,7 @@ module.exports = {
   monthEndCloseWorkflow,
   monthlyReportEmailWorkflow,
   sendPushWorkflow,
+  receiptIngestWorkflow,
   cleanupPushSubscriptionsWorkflow,
   dailyBackupWorkflow,
   weeklyIntegrityCheckWorkflow,
