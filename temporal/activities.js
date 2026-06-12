@@ -485,18 +485,16 @@ module.exports = ({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptTex
   },
 
   // ── Monthly report (emailed) ───────────────────────────────────────────────
-  // Builds a rich summary for the CURRENT (ending) calendar month. Also reports
-  // whether today is the last day of the month, so the workflow can fire on a
-  // 28–31 cron but only actually send on the true month-end.
+  // Builds a rich summary for the PREVIOUS (just-completed) calendar month.
+  // Scheduled on the 1st, so the month's data is final and the email fires
+  // exactly once — no "last day of month" cron gymnastics needed.
   async computeMonthlyReport() {
     const cal = db.prepare(`
-      SELECT strftime('%Y-%m','now')                              AS month,
-             date('now')                                          AS today,
-             date('now','start of month','+1 month','-1 day')     AS lastDay,
-             CAST(strftime('%d','now') AS INTEGER)                AS dayOfMonth
+      SELECT strftime('%Y-%m', date('now','start of month','-1 day'))               AS month,
+             date('now')                                                            AS today,
+             CAST(strftime('%d', date('now','start of month','-1 day')) AS INTEGER) AS daysInMonth
     `).get();
     const month = cal.month;
-    const isLastDay = cal.today === cal.lastDay;
 
     const totals = db.prepare(`
       SELECT
@@ -536,7 +534,7 @@ module.exports = ({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptTex
     `).all(month);
 
     const prevMonth = db.prepare(
-      "SELECT strftime('%Y-%m', date('now','start of month','-1 day')) AS m"
+      "SELECT strftime('%Y-%m', date('now','start of month','-1 day','start of month','-1 day')) AS m"
     ).get().m;
     const prevSpent = db.prepare(`
       SELECT COALESCE(SUM(ABS(amount)), 0) AS total
@@ -566,13 +564,12 @@ module.exports = ({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptTex
       month,
       monthLabel,
       today: cal.today,
-      isLastDay,
       spent,
       income,
       net,
       txCount: totals.txCount,
       savingsRate: income > 0 ? (net / income) * 100 : null,
-      avgDaily: cal.dayOfMonth > 0 ? spent / cal.dayOfMonth : spent,
+      avgDaily: cal.daysInMonth > 0 ? spent / cal.daysInMonth : spent,
       prevSpent,
       spentDeltaPct: prevSpent > 0 ? ((spent - prevSpent) / prevSpent) * 100 : null,
       topCategories,
