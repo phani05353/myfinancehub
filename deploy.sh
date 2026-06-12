@@ -7,13 +7,17 @@
 #   finance-hub/
 #   ├── deploy.sh             ← this script
 #   ├── myfinancehub/         ← git repo (auto-cloned if missing)
-#   ├── container-data/       ← finance SQLite DB           (preserved across deploys)
-#   ├── container-receipts/   ← receipt images / PDFs        (preserved across deploys)
-#   └── container-temporal/   ← Temporal workflow history    (preserved across deploys)
+#   ├── container-data/       ← finance SQLite DB     (preserved across deploys)
+#   └── container-receipts/   ← receipt images / PDFs (preserved across deploys)
 #
-# Brings up two containers connected on a private docker network:
-#   • home-finance-temporal — Temporal workflow engine + Web UI on :8090
-#   • home-finance          — the app  + worker (in-process) on :3090
+# Temporal is now SHARED: a single server owned by the home-lab-utils stack
+# (homelab.sh → container "homelab-temporal" on network "homelab-net"). This
+# script no longer runs its own Temporal — it connects the finance app to that
+# shared server. Start the home-lab-utils stack first:  ./homelab.sh up
+# The old container-temporal/ dir is left untouched on disk; it is simply unused.
+#
+# Brings up one container on the shared docker network:
+#   • home-finance — the app + Temporal worker (in-process) on :3090
 # ─────────────────────────────────────────────────────────────────────────────
 set -e
 
@@ -21,11 +25,12 @@ REPO_URL="https://github.com/phani05353/myfinancehub"
 REPO_DIR="myfinancehub"
 IMAGE_NAME="home-finance"
 APP_CONTAINER="home-finance"
-TEMPORAL_CONTAINER="home-finance-temporal"
-TEMPORAL_IMAGE="temporalio/temporal:latest"
-NETWORK_NAME="home-finance-net"
+# Shared Temporal — owned by the home-lab-utils stack (homelab.sh). Not managed
+# here; we only connect the app to it over the shared network below.
+TEMPORAL_CONTAINER="homelab-temporal"
+NETWORK_NAME="homelab-net"   # shared docker network (created by homelab.sh; we ensure it exists)
 APP_PORT=3090            # host → 3000 in container
-TEMPORAL_UI_PORT=8233    # host → 8233 in container (change if already taken)
+TEMPORAL_UI_PORT=8234    # home-lab-utils' Temporal Web UI — for the summary message only
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo ""
@@ -63,57 +68,31 @@ else
   echo "  ✓ Network '$NETWORK_NAME' already exists"
 fi
 
-# ── 4. Start Temporal server ──────────────────────────────────────────────────
+# ── 4. Check the shared Temporal server ───────────────────────────────────────
+# Temporal is owned by the home-lab-utils stack (homelab.sh), NOT this script. We
+# only verify it's reachable on the shared network. The finance worker retries its
+# own connection, so a not-yet-ready Temporal is a warning here, never a hard fail.
+# The old container-temporal/ bind dir is intentionally left untouched on disk.
 echo ""
-echo "▶ Step 4/6 — Starting Temporal..."
-sudo docker stop "$TEMPORAL_CONTAINER" 2>/dev/null && echo "  Stopped old Temporal container" || true
-sudo docker rm   "$TEMPORAL_CONTAINER" 2>/dev/null || true
-
-# Precheck: warn if host port is already bound by something else
-if command -v ss >/dev/null 2>&1; then
-  if ss -tln 2>/dev/null | grep -q ":${TEMPORAL_UI_PORT} "; then
-    echo "  ⚠ Port ${TEMPORAL_UI_PORT} is already in use on the host."
-    echo "    Edit TEMPORAL_UI_PORT at the top of this script and re-run."
-    echo "    Currently bound by:"
-    sudo ss -tlnp 2>/dev/null | grep ":${TEMPORAL_UI_PORT} " || true
-    exit 1
-  fi
-fi
-
-# Persistent state via bind mount — workflow history, schedules, completed
-# runs all survive `docker rm`/redeploys. Use sudo for the dir ops in case
-# the directory was previously created by a container running as root.
-sudo mkdir -p "$BASE_DIR/container-temporal"
-sudo chmod 777 "$BASE_DIR/container-temporal"
-
-sudo docker run -d \
-  --name "$TEMPORAL_CONTAINER" \
-  --network "$NETWORK_NAME" \
-  --restart unless-stopped \
-  --user 0:0 \
-  -p "${TEMPORAL_UI_PORT}:8233" \
-  -v "$BASE_DIR/container-temporal:/data" \
-  "$TEMPORAL_IMAGE" \
-  server start-dev \
-    --ip 0.0.0.0 \
-    --ui-ip 0.0.0.0 \
-    --db-filename /data/temporal.db \
-    --log-level warn >/dev/null
-
-echo "  Waiting for Temporal to be ready..."
-READY=0
-for i in $(seq 1 30); do
-  if sudo docker exec "$TEMPORAL_CONTAINER" temporal workflow list --namespace default --limit 1 >/dev/null 2>&1; then
-    READY=1
-    break
-  fi
-  sleep 3
-done
-if [ "$READY" = "1" ]; then
-  echo "  ✓ Temporal is up"
+echo "▶ Step 4/6 — Checking shared Temporal ($TEMPORAL_CONTAINER)..."
+if ! sudo docker ps --format '{{.Names}}' | grep -qx "$TEMPORAL_CONTAINER"; then
+  echo "  ⚠ Container '$TEMPORAL_CONTAINER' is not running."
+  echo "    Start the home-lab-utils stack first:  (in home-lab-utils)  ./homelab.sh up"
+  echo "    Continuing anyway — the finance worker will retry until Temporal is up."
 else
-  echo "  ⚠ Temporal didn't pass readiness check after 90s — the app will still start"
-  echo "    Notifications will retry on next container restart."
+  READY=0
+  for i in $(seq 1 20); do
+    if sudo docker exec "$TEMPORAL_CONTAINER" temporal workflow list --namespace default --limit 1 >/dev/null 2>&1; then
+      READY=1
+      break
+    fi
+    sleep 3
+  done
+  if [ "$READY" = "1" ]; then
+    echo "  ✓ Shared Temporal is up and reachable"
+  else
+    echo "  ⚠ Temporal is running but didn't pass readiness in 60s — continuing (worker retries)"
+  fi
 fi
 
 # ── 5. Replace app container ──────────────────────────────────────────────────
@@ -165,7 +144,7 @@ echo "════════════════════════�
 echo "  ✅ Deploy complete!"
 echo ""
 echo "  🌐 App      → http://${HOST_IP}:${APP_PORT}"
-echo "  📊 Temporal → http://${HOST_IP}:${TEMPORAL_UI_PORT}"
-echo "                (workflows, schedules, history)"
+echo "  📊 Temporal → http://${HOST_IP}:${TEMPORAL_UI_PORT}  (shared — owned by home-lab-utils)"
+echo "                finance-tq schedules now live on the same server as the homelab ones"
 echo "══════════════════════════════════════════════════════════"
 echo ""
