@@ -111,13 +111,11 @@ async function monthEndCloseWorkflow() {
   });
 }
 
-// Month-end at 21:00 — email a full monthly report (nice HTML) via Resend.
-// Scheduled on a 28–31 cron because plain cron can't express "last day of
-// month"; the activity reports isLastDay so we only actually email on the
-// true final day (handles 28/29/30/31-day months correctly).
+// 1st of month at 21:00 — email a full monthly report (nice HTML) via Resend
+// for the just-completed month. Firing on the 1st means the cron triggers
+// exactly once, so there's no risk of duplicate emails.
 async function monthlyReportEmailWorkflow() {
   const report = await acts.computeMonthlyReport();
-  if (!report.isLastDay) return { sent: false, reason: 'not-month-end', date: report.today };
   if (report.txCount === 0) return { sent: false, reason: 'no-transactions', month: report.month };
 
   const result = await acts.sendMonthlyReportEmail(report);
