@@ -33,17 +33,25 @@ async function ensureSchedule(client, def) {
     desc = null; // not found — fall through to create
   }
 
-  // Reconcile: if the schedule already exists but its cron drifted from the
-  // code, update it in place. Without this, changing a cron here was a no-op
+  // Reconcile: if the schedule already exists but its spec drifted from the
+  // code, normalize it in place. Without this, changing a cron here was a no-op
   // on any already-created schedule — the old definition kept firing forever.
+  // Compare (and rewrite) the WHOLE trigger set, not just cronExpressions[0]:
+  // a schedule can accumulate multiple cron expressions (and stray calendars/
+  // intervals) across past updates, and every one of them fires independently.
   if (desc) {
-    const current = desc.spec?.cronExpressions?.[0];
-    if (current === def.cron) return 'exists';
+    const current = desc.spec?.cronExpressions ?? [];
+    const inSync =
+      current.length === 1 && current[0] === def.cron &&
+      !(desc.spec?.calendars?.length) && !(desc.spec?.intervals?.length);
+    if (inSync) return 'exists';
     await handle.update((prev) => {
       prev.spec.cronExpressions = [def.cron];
+      prev.spec.calendars = [];
+      prev.spec.intervals = [];
       return prev;
     });
-    return `updated (${current} → ${def.cron})`;
+    return `updated (${current.join(' | ') || 'none'} → ${def.cron})`;
   }
 
   await client.schedule.create({
