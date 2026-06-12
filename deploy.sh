@@ -55,14 +55,14 @@ echo "  ✓ Source up to date"
 echo ""
 echo "▶ Step 2/6 — Building Docker image..."
 cd "$BASE_DIR/$REPO_DIR"
-sudo docker build -t "$IMAGE_NAME" .
+docker build -t "$IMAGE_NAME" .
 echo "  ✓ Image built"
 
 # ── 3. Ensure private network exists ──────────────────────────────────────────
 echo ""
 echo "▶ Step 3/6 — Ensuring docker network..."
-if ! sudo docker network ls --format '{{.Name}}' | grep -qx "$NETWORK_NAME"; then
-  sudo docker network create "$NETWORK_NAME" >/dev/null
+if ! docker network ls --format '{{.Name}}' | grep -qx "$NETWORK_NAME"; then
+  docker network create "$NETWORK_NAME" >/dev/null
   echo "  ✓ Network '$NETWORK_NAME' created"
 else
   echo "  ✓ Network '$NETWORK_NAME' already exists"
@@ -75,14 +75,14 @@ fi
 # The old container-temporal/ bind dir is intentionally left untouched on disk.
 echo ""
 echo "▶ Step 4/6 — Checking shared Temporal ($TEMPORAL_CONTAINER)..."
-if ! sudo docker ps --format '{{.Names}}' | grep -qx "$TEMPORAL_CONTAINER"; then
+if ! docker ps --format '{{.Names}}' | grep -qx "$TEMPORAL_CONTAINER"; then
   echo "  ⚠ Container '$TEMPORAL_CONTAINER' is not running."
   echo "    Start the home-lab-utils stack first:  (in home-lab-utils)  ./homelab.sh up"
   echo "    Continuing anyway — the finance worker will retry until Temporal is up."
 else
   READY=0
   for i in $(seq 1 20); do
-    if sudo docker exec "$TEMPORAL_CONTAINER" temporal workflow list --namespace default --limit 1 >/dev/null 2>&1; then
+    if docker exec "$TEMPORAL_CONTAINER" temporal workflow list --namespace default --limit 1 >/dev/null 2>&1; then
       READY=1
       break
     fi
@@ -98,8 +98,8 @@ fi
 # ── 5. Replace app container ──────────────────────────────────────────────────
 echo ""
 echo "▶ Step 5/6 — Replacing app container..."
-sudo docker stop "$APP_CONTAINER" 2>/dev/null && echo "  Stopped old app container" || echo "  No running app container found"
-sudo docker rm   "$APP_CONTAINER" 2>/dev/null || true
+docker stop "$APP_CONTAINER" 2>/dev/null && echo "  Stopped old app container" || echo "  No running app container found"
+docker rm   "$APP_CONTAINER" 2>/dev/null || true
 
 # Host-only secrets (Resend API key, report recipient, etc.). This file lives
 # OUTSIDE the git repo and is never committed — it only ever exists on this
@@ -116,7 +116,7 @@ else
   echo "    Create it (chmod 600) with: RESEND_API_KEY=re_xxx"
 fi
 
-sudo docker run -d \
+docker run -d \
   --name "$APP_CONTAINER" \
   --network "$NETWORK_NAME" \
   --restart unless-stopped \
@@ -133,7 +133,7 @@ echo "  ✓ App container started"
 echo ""
 echo "▶ Step 6/6 — Verifying..."
 sleep 2
-sudo docker ps --filter "name=$APP_CONTAINER" --filter "name=$TEMPORAL_CONTAINER" \
+docker ps --filter "name=$APP_CONTAINER" --filter "name=$TEMPORAL_CONTAINER" \
   --format "  {{.Names}}\t{{.Status}}"
 
 HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
