@@ -28,9 +28,15 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Install dependencies first (layer cached unless package.json changes)
-COPY package*.json ./
-RUN npm install --omit=dev
+# Enable pnpm via corepack (version pinned by package.json "packageManager").
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable
+
+# Install dependencies first (layer cached unless the manifest/lockfile change).
+# pnpm-workspace.yaml carries onlyBuiltDependencies so the native deps
+# (better-sqlite3, @swc/core) are actually compiled rather than skipped.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --prod --frozen-lockfile
 
 # Drop the build toolchain to keep the runtime image leaner
 RUN apt-get purge -y python3 make g++ \

@@ -152,11 +152,11 @@ All notifications skip silently when there's nothing to say — no notification 
 
 ### Local (Node.js)
 
-**Prerequisites:** Node.js 18+
+**Prerequisites:** Node.js 20+ and pnpm (via `corepack enable` — the version is pinned in `package.json`).
 
 ```bash
-npm install
-npm start
+pnpm install
+pnpm start
 ```
 
 Open [http://localhost:3000](http://localhost:3000). Any unauthenticated request redirects to Authentik to log in (set the `OIDC_*` env vars first — see [.env.example](.env.example) and the [home-lab-utils Authentik setup](https://github.com/phani05353/home-lab-utils#authentik-sso)). The **first** user to log in becomes the admin.

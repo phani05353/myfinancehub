@@ -1,5 +1,8 @@
 # Dependencies
 node_modules/
+# This project uses pnpm — pnpm-lock.yaml is the committed lockfile.
+# Never commit an npm lockfile (e.g. from a stray `npm install`).
+package-lock.json
 
 # SQLite database files (runtime data — not committed)
 data/
