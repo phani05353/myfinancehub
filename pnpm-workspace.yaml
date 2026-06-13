@@ -1,8 +1,10 @@
-# pnpm settings (pnpm v10+ reads build-script approval here, not package.json).
-# Native/build-script deps must be allowlisted or pnpm skips their build —
-# better-sqlite3 would then ship without its compiled binding.
-onlyBuiltDependencies:
-  - '@swc/core'
-  - better-sqlite3
-  - protobufjs
-  - tesseract.js
+# pnpm settings. pnpm 11 gates dependency build scripts: it errors
+# (ERR_PNPM_IGNORED_BUILDS) unless every dep with a build script is explicitly
+# approved here via `allowBuilds` (the `onlyBuiltDependencies` list is not
+# honored by pnpm 11). better-sqlite3 in particular must build, or it ships
+# without its compiled binding.
+allowBuilds:
+  '@swc/core': true      # @temporalio/worker workflow bundler
+  better-sqlite3: true   # native SQLite binding
+  protobufjs: true       # Temporal gRPC protobufs
+  tesseract.js: true     # OCR (postinstall)
