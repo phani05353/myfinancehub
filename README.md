@@ -107,11 +107,17 @@ All notifications skip silently when there's nothing to say — no notification 
 - Drag-and-drop CSV upload with auto column detection and duplicate detection
 - Full transaction export as CSV
 
-### Multi-User Auth
-- bcrypt-hashed passwords, `express-session` cookies (7-day, httpOnly)
-- **Admin / Member roles** — admins manage users and generate invites; all users share household data
-- **Display name** per user — shown in the dashboard greeting
-- Time-limited invite links (7-day, single-use)
+### Auth — Authentik SSO (OIDC)
+- Login is delegated to a self-hosted **Authentik** instance (stood up by the
+  [home-lab-utils](https://github.com/phani05353/home-lab-utils) repo: `./authentik.sh up`).
+  No passwords are stored or managed in this app — user/role management lives in Authentik.
+- `openid-client` + `express-session` cookies (7-day, httpOnly, SameSite=Lax; no
+  `Secure` flag since the homelab runs over plain HTTP)
+- **Admin / Member roles** — the **first** user to log in becomes admin, everyone
+  after is a member; all users share household data
+- **Display name** per user (from the OIDC `name` claim) — shown in the dashboard greeting
+- Existing local accounts are linked on first OIDC login by email/username, so
+  history and push subscriptions carry over
 
 ### Mobile / PWA
 - Installable on iOS / Android / desktop
@@ -131,7 +137,7 @@ All notifications skip silently when there's nothing to say — no notification 
 | Runtime | Node.js 20 (Debian slim) |
 | Web framework | Express |
 | Database | SQLite via `better-sqlite3` |
-| Auth | `bcryptjs` + `express-session` |
+| Auth | Authentik SSO via `openid-client` (OIDC) + `express-session` |
 | Charts | Chart.js 4 |
 | File uploads | `multer` |
 | CSV parsing | `csv-parse` |
@@ -153,7 +159,7 @@ npm install
 npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The first visit redirects to `/setup` to create the admin account.
+Open [http://localhost:3000](http://localhost:3000). Any unauthenticated request redirects to Authentik to log in (set the `OIDC_*` env vars first — see [.env.example](.env.example) and the [home-lab-utils Authentik setup](https://github.com/phani05353/home-lab-utils#authentik-sso)). The **first** user to log in becomes the admin.
 
 If a Temporal server isn't reachable on `localhost:7233`, the app logs a warning and runs **without notifications**. All other features work normally. Set `TEMPORAL_DISABLED=1` to silence the warning.
 
@@ -304,7 +310,6 @@ myfinancehub/
 │   └── schema.sql            # Database schema (auto-applied on startup)
 ├── public/
 │   ├── index.html            # SPA shell
-│   ├── login.html / setup.html / invite.html
 │   ├── manifest.json         # PWA manifest
 │   ├── sw.js                 # Service worker — push event handler
 │   ├── css/style.css
@@ -319,7 +324,6 @@ myfinancehub/
 │       ├── rules.js
 │       └── import.js
 ├── scripts/
-│   ├── hash-password.js
 │   └── generate-icons.py     # Regenerates PWA icons from the homepage logo design
 ├── data/                     # SQLite database (gitignored)
 │   └── backups/              # Nightly verified backups (14-day retention)
@@ -341,20 +345,15 @@ All `/api/*` routes require an active session cookie. Admin-only routes are note
 |---|---|---|
 | GET | `/health` | Returns `{ status: "healthy" }` — used by Docker HEALTHCHECK |
 
-### Auth & Users
+### Auth (Authentik OIDC)
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/auth/setup` | First-run: create the initial admin user |
-| POST | `/auth/login` | Log in and set session cookie |
-| GET  | `/auth/logout` | Destroy session |
-| POST | `/auth/change-password` | Change current user's password |
+| GET  | `/auth/login` | Start the OIDC flow — redirects to Authentik (PKCE + state + nonce) |
+| GET  | `/auth/callback` | OIDC redirect target — validates the code, provisions/links the user, opens the session |
+| GET  | `/auth/logout` | Destroy the session (and bounce through Authentik's end-session endpoint if configured) |
 | POST | `/auth/profile` | Update display name |
-| POST | `/auth/invite` | Accept an invite token and create a member account |
 | GET  | `/api/auth/me` | Current user `{ username, role, display_name }` |
-| GET  | `/api/users` | List all users (admin) |
-| DELETE | `/api/users/:id` | Remove a non-admin user (admin) |
-| POST | `/api/invites` | Generate a one-time invite link (admin) |
 
 ### Push Notifications
 

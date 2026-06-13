@@ -446,85 +446,8 @@ window.addEventListener('load', async () => {
       avatar.textContent = me.username.slice(0, 2).toUpperCase();
       avatar.title = `Signed in as ${me.username}`;
     }
-    if (me.role === 'admin') {
-      const btn = document.getElementById('manage-users-btn');
-      if (btn) btn.style.display = '';
-      const topBtn = document.getElementById('manage-users-top-btn');
-      if (topBtn) topBtn.style.display = '';
-    }
   } catch (_) {}
 });
-
-async function manageUsersModal() {
-  openModal('<h2>👥 Manage Users</h2><p style="color:var(--text-muted);margin-top:8px">Loading…</p>');
-  const users = await api('/api/users').catch(() => []);
-
-  const rows = users.map(u => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-      <div>
-        <span style="font-weight:600">${escHtml(u.username)}</span>
-        <span style="margin-left:8px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:20px;
-          background:${u.role === 'admin' ? 'rgba(108,142,245,0.15)' : 'rgba(136,146,164,0.15)'};
-          color:${u.role === 'admin' ? 'var(--accent)' : 'var(--text-muted)'}">${escHtml(u.role)}</span>
-      </div>
-      ${u.role !== 'admin' ? `<button class="btn btn-danger btn-sm" data-uid="${u.id}" data-uname="${escHtml(u.username)}">Remove</button>` : ''}
-    </div>
-  `).join('');
-
-  document.getElementById('modal-content').innerHTML = `
-    <h2 style="margin-bottom:16px">👥 Manage Users</h2>
-    <div style="margin-bottom:20px">${rows}</div>
-    <div style="background:var(--surface2);border-radius:10px;padding:16px">
-      <div style="font-size:13px;font-weight:600;margin-bottom:8px">Invite someone</div>
-      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">
-        Generate a one-time link (expires in 7 days). Share it with whoever you'd like to invite.
-      </p>
-      <div id="invite-result" style="display:none;margin-bottom:12px">
-        <input id="invite-url" type="text" readonly
-          style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;
-                 padding:8px 10px;color:var(--text);font-size:12px;font-family:monospace"
-          onclick="this.select()">
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Click to select, then copy. Link expires in 7 days.</div>
-      </div>
-      <button class="btn btn-primary" id="gen-invite-btn" onclick="generateInvite()" style="width:auto;padding:10px 20px">
-        Generate Invite Link
-      </button>
-    </div>
-  `;
-
-  document.querySelectorAll('[data-uid]').forEach(btn => {
-    btn.addEventListener('click', () => removeUser(parseInt(btn.dataset.uid), btn.dataset.uname));
-  });
-}
-
-async function removeUser(id, username) {
-  if (!confirm(`Remove "${username}"? They will lose access immediately.`)) return;
-  try {
-    await api(`/api/users/${id}`, { method: 'DELETE' });
-    toast(`${username} removed`);
-    manageUsersModal();
-  } catch (e) { toast(e.message, 'error'); }
-}
-
-async function generateInvite() {
-  const btn = document.getElementById('gen-invite-btn');
-  btn.disabled = true;
-  btn.textContent = 'Generating…';
-  try {
-    const { url } = await api('/api/invites', { method: 'POST' });
-    const result = document.getElementById('invite-result');
-    document.getElementById('invite-url').value = url;
-    result.style.display = 'block';
-    btn.textContent = 'Generate New Link';
-    btn.disabled = false;
-    // Auto-select the URL
-    document.getElementById('invite-url').select();
-  } catch (e) {
-    toast(e.message, 'error');
-    btn.disabled = false;
-    btn.textContent = 'Generate Invite Link';
-  }
-}
 
 async function editProfileModal() {
   let me = { username: '', display_name: '' };
@@ -624,43 +547,6 @@ async function editProfileModal() {
       toast('Profile updated');
       // Refresh dashboard greeting if currently shown
       if ((location.hash || '#/dashboard') === '#/dashboard') refreshCurrentView();
-    } catch (e) { toast(e.message, 'error'); }
-  };
-}
-
-function changePasswordModal() {
-  openModal(`
-    <h2>Change Password</h2>
-    <form id="cp-form" style="margin-top:16px">
-      <div class="form-group" style="margin-bottom:12px">
-        <label>Current Password</label>
-        <input type="password" id="cp-current" autocomplete="current-password" required>
-      </div>
-      <div class="form-group" style="margin-bottom:12px">
-        <label>New Password</label>
-        <input type="password" id="cp-new" autocomplete="new-password" required minlength="8">
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">At least 8 characters</div>
-      </div>
-      <div class="form-group" style="margin-bottom:20px">
-        <label>Confirm New Password</label>
-        <input type="password" id="cp-confirm" autocomplete="new-password" required>
-      </div>
-      <div style="display:flex;gap:10px;justify-content:flex-end">
-        <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary">Change Password</button>
-      </div>
-    </form>
-  `);
-  document.getElementById('cp-form').onsubmit = async e => {
-    e.preventDefault();
-    const current    = document.getElementById('cp-current').value;
-    const newPassword = document.getElementById('cp-new').value;
-    const confirm    = document.getElementById('cp-confirm').value;
-    if (newPassword !== confirm) { toast('Passwords do not match', 'error'); return; }
-    try {
-      await api('/auth/change-password', { method: 'POST', body: { current, newPassword } });
-      closeModal();
-      toast('Password changed successfully');
     } catch (e) { toast(e.message, 'error'); }
   };
 }
