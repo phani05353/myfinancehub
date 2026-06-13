@@ -11,6 +11,11 @@ const webpush = require('web-push');
 const { createWorker } = require('tesseract.js');
 
 const app = express();
+// The app is reachable on two origins: the LAN host (plain HTTP) and a Tailscale
+// HTTPS hostname that proxies in over loopback. Trusting the loopback proxy makes
+// req.protocol reflect X-Forwarded-Proto (https from Tailscale) so the OIDC
+// redirect_uri we build matches the origin the request actually came in on.
+app.set('trust proxy', 'loopback');
 const PORT = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, 'data', 'finance.db');
 const SCHEMA_PATH = path.join(__dirname, 'db', 'schema.sql');
@@ -247,10 +252,29 @@ async function getOidcClient() {
   _oidcClient = new issuer.Client({
     client_id: process.env.OIDC_CLIENT_ID,
     client_secret: process.env.OIDC_CLIENT_SECRET,
-    redirect_uris: [process.env.OIDC_REDIRECT_URI],
+    // redirect_uri is supplied per-request (see redirectUriFor); this default is
+    // only a fallback for tooling that reads client metadata.
+    redirect_uris: [process.env.OIDC_REDIRECT_URI].filter(Boolean),
     response_types: ['code']
   });
   return _oidcClient;
+}
+
+// Build the external base URL the *current* request arrived on, honouring the
+// Tailscale proxy's forwarded headers. This is what lets one app instance serve
+// both the LAN origin (http://<ip>:<port>) and the Tailscale origin
+// (https://<name>.ts.net) without the OIDC flow snapping back to a single host.
+function externalBase(req) {
+  const proto = (req.get('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();
+  const host  = (req.get('x-forwarded-host')  || req.get('host')).split(',')[0].trim();
+  return `${proto}://${host}`;
+}
+// The OIDC redirect_uri for this request's origin. Falls back to the static env
+// value if, somehow, no Host header is present. Every origin's
+// `${base}/auth/callback` must be registered on the Authentik provider.
+function redirectUriFor(req) {
+  try { return `${externalBase(req)}/auth/callback`; }
+  catch { return process.env.OIDC_REDIRECT_URI; }
 }
 
 // Map an Authentik identity to a local users row. Order: (1) existing oidc_sub,
@@ -303,8 +327,12 @@ app.get('/auth/login', async (req, res, next) => {
     const code_challenge = generators.codeChallenge(code_verifier);
     const state = generators.state();
     const nonce = generators.nonce();
-    req.session.oidc = { code_verifier, state, nonce };
+    // Pin the callback to THIS request's origin and remember it for the callback
+    // step (openid-client requires the same redirect_uri at both ends).
+    const redirect_uri = redirectUriFor(req);
+    req.session.oidc = { code_verifier, state, nonce, redirect_uri };
     res.redirect(client.authorizationUrl({
+      redirect_uri,
       scope: 'openid profile email',
       code_challenge,
       code_challenge_method: 'S256',
@@ -325,7 +353,7 @@ app.get('/auth/callback', async (req, res, next) => {
     if (!saved) return res.redirect('/auth/login');
     const client = await getOidcClient();
     const params = client.callbackParams(req);
-    const tokenSet = await client.callback(process.env.OIDC_REDIRECT_URI, params, {
+    const tokenSet = await client.callback(saved.redirect_uri || process.env.OIDC_REDIRECT_URI, params, {
       code_verifier: saved.code_verifier,
       state: saved.state,
       nonce: saved.nonce
@@ -345,10 +373,15 @@ app.get('/auth/callback', async (req, res, next) => {
 // end-session endpoint so the IdP session is cleared too.
 app.get('/auth/logout', (req, res) => {
   const idToken = req.session.id_token;
+  // Capture the origin before the session is destroyed so we return to the same
+  // host (LAN vs Tailscale) the user logged out from.
+  const postLogout = `${externalBase(req)}/auth/login`;
+  // OIDC_POST_LOGOUT_REDIRECT_URI is now just an on/off flag for RP-initiated
+  // logout (clearing the Authentik SSO session too); the target is origin-derived.
+  const rpLogout = !!process.env.OIDC_POST_LOGOUT_REDIRECT_URI;
   req.session.destroy(async () => {
     try {
-      const postLogout = process.env.OIDC_POST_LOGOUT_REDIRECT_URI;
-      if (postLogout && idToken) {
+      if (rpLogout && idToken) {
         const client = await getOidcClient();
         if (client.issuer.metadata.end_session_endpoint) {
           return res.redirect(client.endSessionUrl({
