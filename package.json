@@ -3,24 +3,25 @@
   "version": "1.0.0",
   "description": "Self-hosted personal finance tracker",
   "main": "server.js",
+  "packageManager": "pnpm@11.6.0",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js"
   },
   "dependencies": {
-    "@temporalio/activity": "^1.10.3",
-    "@temporalio/client": "^1.10.3",
-    "@temporalio/worker": "^1.10.3",
-    "@temporalio/workflow": "^1.10.3",
-    "better-sqlite3": "^9.4.3",
+    "@temporalio/activity": "^1.18.1",
+    "@temporalio/client": "^1.18.1",
+    "@temporalio/worker": "^1.18.1",
+    "@temporalio/workflow": "^1.18.1",
+    "better-sqlite3": "^12.10.0",
     "better-sqlite3-session-store": "^0.1.0",
-    "csv-parse": "^5.5.6",
-    "dotenv": "^16.4.5",
-    "express": "^4.18.3",
-    "express-session": "^1.18.0",
-    "multer": "^1.4.5-lts.1",
+    "csv-parse": "^6.2.1",
+    "dotenv": "^17.4.2",
+    "express": "^4.22.2",
+    "express-session": "^1.19.0",
+    "multer": "^2.1.1",
     "openid-client": "^5.7.1",
-    "tesseract.js": "^5.1.0",
+    "tesseract.js": "^5.1.1",
     "web-push": "^3.6.7"
   }
 }

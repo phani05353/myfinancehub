@@ -1,0 +1,6 @@
+# pnpm settings (pnpm v10+ reads build-script approval here, not package.json).
+# Native/build-script deps must be allowlisted or pnpm skips their build —
+# better-sqlite3 would then ship without its compiled binding.
+onlyBuiltDependencies:
+  - '@swc/core'
+  - better-sqlite3
