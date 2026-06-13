@@ -210,7 +210,16 @@ const receiptUpload = multer({
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Persist sessions in the SQLite DB (the finance.db volume survives restarts/
+// redeploys). The default in-memory MemoryStore drops every session on restart
+// — so each deploy logged everyone out — and leaks memory over time. The store
+// creates and manages its own `sessions` table on the existing db handle.
+const SqliteStore = require('better-sqlite3-session-store')(session);
 app.use(session({
+  store: new SqliteStore({
+    client: db,
+    expired: { clear: true, intervalMs: 15 * 60 * 1000 }   // sweep expired rows every 15 min
+  }),
   secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
