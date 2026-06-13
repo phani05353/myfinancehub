@@ -19,7 +19,7 @@
 # prebuilt binaries for glibc only.
 # ─────────────────────────────────────────────────────────────────────────────
 
-FROM node:20-slim
+FROM node:22-slim
 
 # Build deps for better-sqlite3 native bindings + ca-certs for outbound HTTPS
 RUN apt-get update \
