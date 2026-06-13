@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
-const bcrypt = require('bcryptjs');
+const { Issuer, generators } = require('openid-client');
 const Database = require('better-sqlite3');
 const multer = require('multer');
 const { parse } = require('csv-parse/sync');
@@ -32,6 +32,9 @@ try { db.prepare('ALTER TABLE transactions ADD COLUMN needs_review INTEGER DEFAU
 try { db.prepare("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'").run(); } catch (_) {}
 // Migrate: add display_name column to users
 try { db.prepare('ALTER TABLE users ADD COLUMN display_name TEXT').run(); } catch (_) {}
+// Migrate: Authentik OIDC identity columns (email + subject claim)
+try { db.prepare('ALTER TABLE users ADD COLUMN email TEXT').run(); } catch (_) {}
+try { db.prepare('ALTER TABLE users ADD COLUMN oidc_sub TEXT').run(); } catch (_) {}
 
 // Persist session secret in DB so it survives container restarts
 let sessionSecret = db.prepare("SELECT value FROM app_settings WHERE key = 'session_secret'").get()?.value;
@@ -213,6 +216,8 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
+    sameSite: 'lax',                  // sent on the top-level redirect back to /auth/callback
+    // no `secure` flag — the homelab runs over plain HTTP
     maxAge: 7 * 24 * 60 * 60 * 1000   // 7 days
   }
 }));
@@ -221,82 +226,140 @@ app.use(session({
 
 app.get('/health', (req, res) => res.json({ status: 'healthy' }));
 
-// ─── AUTH ─────────────────────────────────────────────────────────────────────
+// ─── AUTH (Authentik OIDC) ─────────────────────────────────────────────────────
 
-function requireAuth(req, res, next) {
-  const PUBLIC = new Set(['/login', '/setup', '/auth/login', '/auth/setup']);
-  if (PUBLIC.has(req.path)) return next();
-
-  // No users yet — force setup
-  const userCount = db.prepare('SELECT COUNT(*) as cnt FROM users').get().cnt;
-  if (userCount === 0) {
-    if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'No accounts exist. Visit /setup' });
-    return res.redirect('/setup');
-  }
-
-  if (req.session?.user) return next();
-  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
-  res.redirect('/login');
+// Lazily discover the Authentik issuer and build the OIDC client on first use,
+// so a missing/unreachable IdP doesn't block server boot. Use the SAME external
+// (host-IP) issuer URL the browser hits, so the `iss` claim validates.
+let _oidcClient = null;
+async function getOidcClient() {
+  if (_oidcClient) return _oidcClient;
+  const issuer = await Issuer.discover(process.env.OIDC_ISSUER);
+  _oidcClient = new issuer.Client({
+    client_id: process.env.OIDC_CLIENT_ID,
+    client_secret: process.env.OIDC_CLIENT_SECRET,
+    redirect_uris: [process.env.OIDC_REDIRECT_URI],
+    response_types: ['code']
+  });
+  return _oidcClient;
 }
 
-// Setup page — only when no users exist
-app.get('/setup', (req, res) => {
-  const userCount = db.prepare('SELECT COUNT(*) as cnt FROM users').get().cnt;
-  if (userCount > 0) return res.redirect('/login');
-  res.sendFile(path.join(__dirname, 'public', 'setup.html'));
-});
+// Map an Authentik identity to a local users row. Order: (1) existing oidc_sub,
+// (2) link a legacy row by email/username (keeps its role + push subscriptions),
+// (3) create a new row — the FIRST user ever becomes admin, everyone after member.
+function upsertOidcUser(claims) {
+  const sub      = claims.sub;
+  const email    = claims.email || null;
+  const username = String(claims.preferred_username || claims.email || sub).trim();
+  const display  = claims.name || null;
 
-app.post('/auth/setup', async (req, res) => {
-  const userCount = db.prepare('SELECT COUNT(*) as cnt FROM users').get().cnt;
-  if (userCount > 0) return res.redirect('/login');
-
-  const { username, password, confirm } = req.body;
-  if (!username?.trim() || !password) return res.redirect('/setup?error=missing');
-  if (password !== confirm)            return res.redirect('/setup?error=mismatch');
-  if (password.length < 8)            return res.redirect('/setup?error=short');
-
-  const hash = await bcrypt.hash(password, 12);
-  const result = db.prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'admin')").run(username.trim(), hash);
-  req.session.user = { id: result.lastInsertRowid, username: username.trim(), role: 'admin' };
-  res.redirect('/');
-});
-
-// Login page
-app.get('/login', (req, res) => {
-  const userCount = db.prepare('SELECT COUNT(*) as cnt FROM users').get().cnt;
-  if (userCount === 0) return res.redirect('/setup');
-  if (req.session?.user) return res.redirect('/');
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
-});
-
-app.post('/auth/login', async (req, res) => {
-  const { username, password } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username?.trim());
-  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-    return res.redirect('/login?error=1');
+  const bySub = db.prepare('SELECT * FROM users WHERE oidc_sub = ?').get(sub);
+  if (bySub) {
+    db.prepare('UPDATE users SET username = ?, email = COALESCE(?, email) WHERE id = ?')
+      .run(username, email, bySub.id);
+    return { id: bySub.id, username, role: bySub.role };
   }
-  req.session.user = { id: user.id, username: user.username, role: user.role };
-  res.redirect('/');
+
+  let legacy = email ? db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(email) : null;
+  if (!legacy) legacy = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username);
+  if (legacy) {
+    db.prepare('UPDATE users SET oidc_sub = ?, email = COALESCE(?, email), display_name = COALESCE(display_name, ?) WHERE id = ?')
+      .run(sub, email, display, legacy.id);
+    return { id: legacy.id, username: legacy.username, role: legacy.role };
+  }
+
+  const userCount = db.prepare('SELECT COUNT(*) AS cnt FROM users').get().cnt;
+  const role = userCount === 0 ? 'admin' : 'member';
+  const result = db.prepare(
+    "INSERT INTO users (username, password_hash, role, email, oidc_sub, display_name) VALUES (?, '', ?, ?, ?, ?)"
+  ).run(username, role, email, sub, display);
+  return { id: result.lastInsertRowid, username, role };
+}
+
+function requireAuth(req, res, next) {
+  const PUBLIC = new Set(['/auth/login', '/auth/callback']);
+  if (PUBLIC.has(req.path)) return next();
+  if (req.session?.user) return next();
+  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
+  res.redirect('/auth/login');
+}
+
+// Kick off the OIDC login: PKCE + state + nonce stored in the session, then
+// redirect to Authentik's authorization endpoint.
+app.get('/auth/login', async (req, res, next) => {
+  try {
+    if (req.session?.user) return res.redirect('/');
+    const client = await getOidcClient();
+    const code_verifier  = generators.codeVerifier();
+    const code_challenge = generators.codeChallenge(code_verifier);
+    const state = generators.state();
+    const nonce = generators.nonce();
+    req.session.oidc = { code_verifier, state, nonce };
+    res.redirect(client.authorizationUrl({
+      scope: 'openid profile email',
+      code_challenge,
+      code_challenge_method: 'S256',
+      state,
+      nonce
+    }));
+  } catch (err) {
+    console.error('[oidc] login error:', err.message);
+    next(err);
+  }
 });
 
+// OIDC redirect target: validate code/state/nonce, provision the user, open the
+// app session.
+app.get('/auth/callback', async (req, res, next) => {
+  try {
+    const saved = req.session.oidc;
+    if (!saved) return res.redirect('/auth/login');
+    const client = await getOidcClient();
+    const params = client.callbackParams(req);
+    const tokenSet = await client.callback(process.env.OIDC_REDIRECT_URI, params, {
+      code_verifier: saved.code_verifier,
+      state: saved.state,
+      nonce: saved.nonce
+    });
+    delete req.session.oidc;
+    const user = upsertOidcUser(tokenSet.claims());
+    req.session.id_token = tokenSet.id_token;   // for RP-initiated logout
+    req.session.user = { id: user.id, username: user.username, role: user.role };
+    res.redirect('/');
+  } catch (err) {
+    console.error('[oidc] callback error:', err.message);
+    next(err);
+  }
+});
+
+// Clear the local session, then (if configured) bounce through Authentik's
+// end-session endpoint so the IdP session is cleared too.
 app.get('/auth/logout', (req, res) => {
-  req.session.destroy(() => res.redirect('/login'));
+  const idToken = req.session.id_token;
+  req.session.destroy(async () => {
+    try {
+      const postLogout = process.env.OIDC_POST_LOGOUT_REDIRECT_URI;
+      if (postLogout && idToken) {
+        const client = await getOidcClient();
+        if (client.issuer.metadata.end_session_endpoint) {
+          return res.redirect(client.endSessionUrl({
+            id_token_hint: idToken,
+            post_logout_redirect_uri: postLogout
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('[oidc] logout error:', err.message);
+    }
+    res.redirect('/auth/login');
+  });
 });
 
-app.post('/auth/change-password', async (req, res) => {
-  if (!req.session?.user) return res.status(401).json({ error: 'Unauthorized' });
-  const { current, newPassword } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.user.id);
-  if (!user || !(await bcrypt.compare(current, user.password_hash))) {
-    return res.status(400).json({ error: 'Current password is incorrect' });
-  }
-  if (!newPassword || newPassword.length < 8) {
-    return res.status(400).json({ error: 'New password must be at least 8 characters' });
-  }
-  const hash = await bcrypt.hash(newPassword, 12);
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, user.id);
-  res.json({ ok: true });
-});
+// ─── EVERYTHING BELOW REQUIRES A VALID AUTHENTIK SESSION ───────────────────────
+// The only routes reachable unauthenticated are /health and the three /auth/*
+// OIDC routes above. This gate covers all data/API endpoints, static assets, and
+// receipts — there is no way into the app without completing the Authentik flow.
+app.use(requireAuth);
 
 app.get('/api/auth/me', (req, res) => {
   if (!req.session?.user) return res.json({ username: null, role: null, display_name: null });
@@ -364,79 +427,11 @@ app.post('/auth/profile', (req, res) => {
   res.json({ ok: true, display_name: name || null });
 });
 
-// ─── INVITE (public — before requireAuth) ─────────────────────────────────────
-
-app.get('/invite/:token', (req, res) => {
-  const invite = db.prepare('SELECT * FROM invites WHERE token = ?').get(req.params.token);
-  if (!invite || new Date(invite.expires_at) < new Date()) {
-    return res.status(410).send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invalid Invite</title>
-      <style>body{background:#0f1117;color:#e2e8f0;font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}
-      .card{background:#1a1d27;border:1px solid #2e3350;border-radius:14px;padding:40px;max-width:360px}
-      h2{color:#f87171;margin-bottom:12px}p{color:#8892a4;margin-bottom:20px}
-      a{color:#6c8ef5}</style></head>
-      <body><div class="card"><h2>Invite Expired</h2><p>This invite link is no longer valid. Ask the account admin to generate a new one.</p><a href="/login">Sign in</a></div></body></html>`);
-  }
-  res.sendFile(path.join(__dirname, 'public', 'invite.html'));
-});
-
-app.post('/auth/invite', async (req, res) => {
-  const { token, username, password, confirm } = req.body;
-  const invite = db.prepare('SELECT * FROM invites WHERE token = ?').get(token);
-  if (!invite || new Date(invite.expires_at) < new Date()) {
-    return res.redirect(`/invite/${token}?error=expired`);
-  }
-  if (!username?.trim() || !password) return res.redirect(`/invite/${encodeURIComponent(token)}?error=missing`);
-  if (password !== confirm)            return res.redirect(`/invite/${encodeURIComponent(token)}?error=mismatch`);
-  if (password.length < 8)            return res.redirect(`/invite/${encodeURIComponent(token)}?error=short`);
-  const existing = db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(username.trim());
-  if (existing) return res.redirect(`/invite/${encodeURIComponent(token)}?error=exists`);
-
-  const hash = await bcrypt.hash(password, 12);
-  const result = db.prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'member')").run(username.trim(), hash);
-  db.prepare('DELETE FROM invites WHERE token = ?').run(token);
-  req.session.user = { id: result.lastInsertRowid, username: username.trim(), role: 'member' };
-  res.redirect('/');
-});
-
-// Protect everything below this line
-app.use(requireAuth);
-
-// Static files (now auth-gated)
+// Static files (auth-gated — requireAuth is applied above)
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Serve receipt images (auth-gated)
 app.use('/receipts', express.static(path.join(__dirname, 'uploads', 'receipts')));
-
-// ─── USER MANAGEMENT (admin only) ────────────────────────────────────────────
-
-function requireAdmin(req, res, next) {
-  const user = db.prepare('SELECT role FROM users WHERE id = ?').get(req.session?.user?.id);
-  if (user?.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
-  next();
-}
-
-app.get('/api/users', requireAdmin, (req, res) => {
-  const users = db.prepare('SELECT id, username, role, created_at FROM users ORDER BY created_at ASC').all();
-  res.json(users);
-});
-
-app.delete('/api/users/:id', requireAdmin, (req, res) => {
-  const targetId = parseInt(req.params.id, 10);
-  if (targetId === req.session.user.id) return res.status(400).json({ error: "You can't remove your own account" });
-  if (!db.prepare('SELECT id FROM users WHERE id = ?').get(targetId)) return res.status(404).json({ error: 'User not found' });
-  db.prepare('DELETE FROM users WHERE id = ?').run(targetId);
-  res.json({ ok: true });
-});
-
-app.post('/api/invites', requireAdmin, (req, res) => {
-  // Clean up expired tokens first
-  db.prepare("DELETE FROM invites WHERE expires_at < datetime('now')").run();
-  const token     = crypto.randomBytes(24).toString('hex');
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  db.prepare('INSERT INTO invites (token, created_by, expires_at) VALUES (?, ?, ?)').run(token, req.session.user.id, expiresAt);
-  const url = `${req.protocol}://${req.get('host')}/invite/${token}`;
-  res.json({ url, expires_at: expiresAt });
-});
 
 // ─── TRANSACTIONS ─────────────────────────────────────────────────────────────
 

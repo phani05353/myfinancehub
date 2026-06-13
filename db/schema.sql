@@ -40,10 +40,16 @@ CREATE TABLE IF NOT EXISTS reminders (
     created_at  TEXT    DEFAULT (datetime('now'))
 );
 
+-- Users are provisioned via Authentik OIDC (see server.js). `oidc_sub` is the
+-- Authentik subject claim; `email`/`username` come from the OIDC claims.
+-- `password_hash` is retained (legacy, may be NULL) so old rows still satisfy
+-- their original NOT NULL constraint, but is no longer used for login.
 CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     username      TEXT UNIQUE NOT NULL COLLATE NOCASE,
-    password_hash TEXT NOT NULL,
+    password_hash TEXT,
+    email         TEXT,
+    oidc_sub      TEXT,
     created_at    TEXT DEFAULT (datetime('now'))
 );
 
@@ -63,13 +69,6 @@ CREATE TABLE IF NOT EXISTS budgets (
 CREATE TABLE IF NOT EXISTS categories (
     id   INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL COLLATE NOCASE
-);
-
-CREATE TABLE IF NOT EXISTS invites (
-    token      TEXT PRIMARY KEY,
-    created_by INTEGER NOT NULL,
-    created_at TEXT    NOT NULL DEFAULT (datetime('now')),
-    expires_at TEXT    NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS push_subscriptions (

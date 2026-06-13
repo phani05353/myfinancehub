@@ -101,11 +101,19 @@ echo "▶ Step 5/6 — Replacing app container..."
 docker stop "$APP_CONTAINER" 2>/dev/null && echo "  Stopped old app container" || echo "  No running app container found"
 docker rm   "$APP_CONTAINER" 2>/dev/null || true
 
-# Host-only secrets (Resend API key, report recipient, etc.). This file lives
-# OUTSIDE the git repo and is never committed — it only ever exists on this
-# homelab box. Passed straight into the container env via --env-file. If it's
-# missing, the app still runs; the monthly-report email just no-ops (the
-# activity throws "RESEND_API_KEY is not set" and Temporal flags it).
+# Host-only secrets (Resend API key, report recipient, AND the Authentik OIDC
+# settings). This file lives OUTSIDE the git repo and is never committed — it
+# only ever exists on this homelab box. Passed straight into the container env
+# via --env-file. If it's missing, the monthly-report email no-ops; and without
+# the OIDC_* vars below, login (Authentik SSO) will fail on first redirect.
+#
+# Required for login — add these to finance.env (use the homelab HOST IP, not a
+# container DNS name, so the issuer matches what the browser hits):
+#   OIDC_ISSUER=http://<homelab-ip>:9000/application/o/myfinancehub/
+#   OIDC_CLIENT_ID=<from Authentik provider>
+#   OIDC_CLIENT_SECRET=<from Authentik provider>
+#   OIDC_REDIRECT_URI=http://<homelab-ip>:3090/auth/callback
+#   # optional: OIDC_POST_LOGOUT_REDIRECT_URI=http://<homelab-ip>:3090/auth/login
 ENV_FILE="$BASE_DIR/finance.env"
 ENV_FILE_ARG=""
 if [ -f "$ENV_FILE" ]; then
