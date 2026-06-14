@@ -277,6 +277,25 @@ function redirectUriFor(req) {
   catch { return process.env.OIDC_REDIRECT_URI; }
 }
 
+// When a request arrives through the Tailscale proxy (x-forwarded-proto=https),
+// the browser is off-LAN and cannot reach the LAN issuer host that openid-client
+// discovered. Swap ONLY the origin of the authorization URL to the public
+// (Tailscale) Authentik origin in OIDC_PUBLIC_BASE so the user-agent can finish
+// login remotely. Back-channel calls (discovery, token, jwks) keep using the LAN
+// OIDC_ISSUER, which the container reaches directly — so the `iss` claim still
+// validates. LAN/direct (http) requests keep the discovered URL untouched.
+function authorizeUrlFor(req, url) {
+  const pub = process.env.OIDC_PUBLIC_BASE;
+  if (!pub) return url;
+  const fwdProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim();
+  if (fwdProto !== 'https') return url;
+  const out = new URL(url);
+  const base = new URL(pub);
+  out.protocol = base.protocol;
+  out.host = base.host;   // swap origin; keep /application/o/.../authorize + query
+  return out.toString();
+}
+
 // Map an Authentik identity to a local users row. Order: (1) existing oidc_sub,
 // (2) link a legacy row by email/username (keeps its role + push subscriptions),
 // (3) create a new row — the FIRST user ever becomes admin, everyone after member.
@@ -331,14 +350,14 @@ app.get('/auth/login', async (req, res, next) => {
     // step (openid-client requires the same redirect_uri at both ends).
     const redirect_uri = redirectUriFor(req);
     req.session.oidc = { code_verifier, state, nonce, redirect_uri };
-    res.redirect(client.authorizationUrl({
+    res.redirect(authorizeUrlFor(req, client.authorizationUrl({
       redirect_uri,
       scope: 'openid profile email',
       code_challenge,
       code_challenge_method: 'S256',
       state,
       nonce
-    }));
+    })));
   } catch (err) {
     console.error('[oidc] login error:', err.message);
     next(err);

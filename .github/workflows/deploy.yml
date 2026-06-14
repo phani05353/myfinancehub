@@ -8,6 +8,24 @@ on:
 jobs:
   deploy:
     runs-on: self-hosted
+    env:
+      # Non-secret config mirrored from GitHub repo Variables. Sensitive values
+      # (OIDC_CLIENT_ID/SECRET, RESEND_API_KEY, …) stay host-managed in finance.env
+      # and are intentionally NOT listed here.
+      OIDC_PUBLIC_BASE: ${{ vars.OIDC_PUBLIC_BASE }}
     steps:
+      - name: Sync GitHub-managed vars into finance.env
+        run: |
+          ENV_FILE="/home/phanikumar/finance-hub/finance.env"
+          touch "$ENV_FILE"
+          # Append/update only keys that are set as repo Variables. An unset var is
+          # skipped so it never blanks a host-managed value or a code default.
+          for key in OIDC_PUBLIC_BASE; do
+            val="${!key}"
+            [ -z "$val" ] && continue
+            sed -i "/^${key}=/d" "$ENV_FILE"   # drop any stale line for this key
+            echo "${key}=${val}" >> "$ENV_FILE"
+          done
+
       - name: Run deploy script
         run: /home/phanikumar/finance-hub/deploy.sh
