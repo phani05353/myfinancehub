@@ -296,6 +296,20 @@ function authorizeUrlFor(req, url) {
   return out.toString();
 }
 
+// users.username is UNIQUE, but the real OIDC identity is oidc_sub — the handle is
+// just a label. Return `desired` if no OTHER row holds it, else suffix it so a
+// clash with a different account never aborts the whole login. excludeId is the
+// row we're about to write (it may legitimately already own the name).
+function freeUsername(desired, excludeId = null) {
+  const clash = db.prepare(
+    'SELECT 1 FROM users WHERE username = ? COLLATE NOCASE AND (? IS NULL OR id != ?)'
+  );
+  const base = desired || 'user';
+  let candidate = base, n = 1;
+  while (clash.get(candidate, excludeId, excludeId)) candidate = `${base}-${++n}`;
+  return candidate;
+}
+
 // Map an Authentik identity to a local users row. Order: (1) existing oidc_sub,
 // (2) link a legacy row by email/username (keeps its role + push subscriptions),
 // (3) create a new row — the FIRST user ever becomes admin, everyone after member.
@@ -307,9 +321,10 @@ function upsertOidcUser(claims) {
 
   const bySub = db.prepare('SELECT * FROM users WHERE oidc_sub = ?').get(sub);
   if (bySub) {
+    const name = freeUsername(username, bySub.id);
     db.prepare('UPDATE users SET username = ?, email = COALESCE(?, email) WHERE id = ?')
-      .run(username, email, bySub.id);
-    return { id: bySub.id, username, role: bySub.role };
+      .run(name, email, bySub.id);
+    return { id: bySub.id, username: name, role: bySub.role };
   }
 
   let legacy = email ? db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(email) : null;
@@ -322,10 +337,11 @@ function upsertOidcUser(claims) {
 
   const userCount = db.prepare('SELECT COUNT(*) AS cnt FROM users').get().cnt;
   const role = userCount === 0 ? 'admin' : 'member';
+  const name = freeUsername(username);
   const result = db.prepare(
     "INSERT INTO users (username, password_hash, role, email, oidc_sub, display_name) VALUES (?, '', ?, ?, ?, ?)"
-  ).run(username, role, email, sub, display);
-  return { id: result.lastInsertRowid, username, role };
+  ).run(name, role, email, sub, display);
+  return { id: result.lastInsertRowid, username: name, role };
 }
 
 function requireAuth(req, res, next) {
