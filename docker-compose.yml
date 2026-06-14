@@ -17,6 +17,9 @@ services:
       # Authentik OIDC — login is delegated to the self-hosted Authentik instance.
       # Use the host IP (not a container name) so the issuer matches the browser.
       - OIDC_ISSUER=${OIDC_ISSUER:-}
+      # Public (Tailscale) Authentik origin for the browser authorize redirect; the
+      # back-channel still uses the LAN OIDC_ISSUER. Leave empty for LAN-only setups.
+      - OIDC_PUBLIC_BASE=${OIDC_PUBLIC_BASE:-}
       - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
       - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
       - OIDC_REDIRECT_URI=${OIDC_REDIRECT_URI:-}
