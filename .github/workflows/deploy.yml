@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    # Skip docs-only pushes: if EVERY changed file is markdown there's nothing to
+    # redeploy. A push that also touches any non-.md file still deploys as normal.
+    paths-ignore:
+      - '**.md'
 
 jobs:
   deploy:
