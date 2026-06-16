@@ -465,7 +465,7 @@ All `/api/*` routes require an active session cookie. Admin-only routes are note
 | `VAPID_SUBJECT` | `mailto:admin@home-finance.local` | Subject used in VAPID JWTs sent to push services |
 | `NODE_ENV` | — | Set to `production` in the Docker image |
 | `OLLAMA_BASE_URL` | `http://192.168.50.34:11434` | Base URL of the local Ollama server used by the **Ask** (natural-language query) feature. Use the homelab host IP so the container can reach it. |
-| `OLLAMA_MODEL` | `llama3.1:8b` | Ollama model used to translate questions → read-only SQL and summarise results (must be pulled on the box). |
+| `OLLAMA_MODEL` | `gemma3:4b` | Ollama model used to translate questions → read-only SQL and summarise results (must be pulled on the box). |
 | `OLLAMA_TIMEOUT_MS` | `30000` | Abort the Ollama call after this many milliseconds. |
 | `NLQUERY_ENABLED` | `1` | Set to `0`/`false`/`off` to disable the Ask endpoint entirely. |
 
