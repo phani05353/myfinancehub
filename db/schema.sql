@@ -95,8 +95,21 @@ CREATE TABLE IF NOT EXISTS rules (
     created_at      TEXT    DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS savings_goals (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    name          TEXT    NOT NULL,
+    target_amount REAL    NOT NULL CHECK(target_amount > 0),
+    saved_amount  REAL    NOT NULL DEFAULT 0,
+    target_date   TEXT,
+    notes         TEXT,
+    active        INTEGER NOT NULL DEFAULT 1,
+    created_at    TEXT    DEFAULT (datetime('now')),
+    updated_at    TEXT    DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_transactions_date     ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_payee    ON transactions(payee);
 CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
 CREATE INDEX IF NOT EXISTS idx_reminders_due_date    ON reminders(due_date);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_due     ON subscriptions(next_due_date);
+CREATE INDEX IF NOT EXISTS idx_savings_goals_active   ON savings_goals(active);

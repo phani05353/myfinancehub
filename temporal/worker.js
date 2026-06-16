@@ -13,6 +13,7 @@ const SCHEDULES = [
   { id: 'bills-daily',           workflow: 'dailyBillsWorkflow',           cron: '0 8 * * *',   note: '08:00 daily' },
   { id: 'price-hikes-daily',     workflow: 'priceHikeWorkflow',            cron: '0 9 * * *',   note: '09:00 daily' },
   { id: 'budget-threshold-daily',workflow: 'budgetThresholdWorkflow',      cron: '0 20 * * *',  note: '20:00 daily' },
+  { id: 'savings-nudge',         workflow: 'savingsNudgeWorkflow',         cron: '0 19 */3 * *',note: '19:00 every 3 days' },
   { id: 'daily-recap',           workflow: 'dailyRecapWorkflow',           cron: '0 21 * * *',  note: '21:00 daily' },
   { id: 'weekly-insights',       workflow: 'weeklyInsightsWorkflow',       cron: '0 18 * * 0',  note: 'Sun 18:00' },
   { id: 'month-end-close',       workflow: 'monthEndCloseWorkflow',        cron: '0 8 1 * *',   note: '1st of month 08:00' },

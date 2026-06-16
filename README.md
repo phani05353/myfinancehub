@@ -12,6 +12,7 @@ Analytics-first home page with a Monarch Money-style layout — pill navigation 
 - **Subscription price-hike alerts** — red-bordered card at the top whenever a recurring charge crept up vs its expected amount
 - **Category breakdown** — sticky right panel with donut chart, per-category sparklines (6-month trend), and share percentages
 - **Income & savings rate** — dual bar showing spent vs saved, color-coded by savings health
+- **Savings goals card** — active goals shown as saved / target with a progress bar and pace info (amount/month needed to hit the target date); clickable to manage
 - **Largest transactions**, **upcoming bills**, **budget overview**, **cash flow + Sankey** ("Where Money Flows") — clickable, drill into the underlying transactions modal
 - **Greeting** with display name (configurable per user)
 
@@ -35,6 +36,13 @@ Analytics-first home page with a Monarch Money-style layout — pill navigation 
 - Click any category card → modal with all transactions for that month
 - Dashboard rows are also clickable into the same modal
 
+### Savings Goals
+- Forward-looking savings targets — name, target amount, optional target date, and notes
+- Per-goal progress bars and **pace info** (the monthly contribution needed to hit the target date, or a past-due warning)
+- **Log contributions** that increment the saved amount; negative amounts allowed for corrections
+- Archive goals (keep history without cluttering the active list) and a 🎉 reached state
+- Periodic **Temporal nudge push** — celebrates a reached goal, warns when you've fallen behind pace, or gently reminds you to contribute (skips silently when there's nothing to say)
+
 ### Subscriptions
 - Track recurring charges with billing cycle (weekly / monthly / yearly)
 - **Mark Paid** advances next-due date and **auto-creates a transaction**, *unless* a matching transaction already exists (±5 days, ±2% amount tolerance)
@@ -56,6 +64,7 @@ Two sources fire pushes — **scheduled** alerts from Temporal workflows, and **
 | Daily, 8 AM | 🔔 Bills due tomorrow + any overdue bills |
 | Daily, 9 AM | 📈 Subscription price hikes detected |
 | Daily, 8 PM | 💰 Budget categories at ≥90% of limit |
+| Every 3 days, 7 PM | 🎯 Savings goal nudge — celebrate a reached goal, warn about a behind-pace goal, or gently remind to contribute |
 | Daily, 9 PM | 📊 Daily recap — what you spent today |
 | Sunday, 6 PM | 💡 Weekly insights digest |
 | 1st of month, 8 AM | 📅 Month-end close — spent, income, net, top category for the prior month |
@@ -280,10 +289,11 @@ To stop notifications on a device: open Edit Profile → tap **Disable**. The su
 Open **http://your-homelab-ip:8090** to see the Temporal Web UI.
 
 - **Workflows tab** — every run (succeeded / failed / running), full input/output, retry attempts, per-activity timing. This includes the event-driven `sendPushWorkflow` runs that fire on each transaction add and the per-trip `tripDetectionWorkflow` runs spawned by the daily scanner.
-- **Schedules tab** — ten cron jobs registered automatically by the worker on startup:
+- **Schedules tab** — eleven cron jobs registered automatically by the worker on startup:
   - `bills-daily` (08:00 daily)
   - `price-hikes-daily` (09:00 daily)
   - `budget-threshold-daily` (20:00 daily)
+  - `savings-nudge` (19:00 every 3 days)
   - `daily-recap` (21:00 daily)
   - `weekly-insights` (Sunday 18:00)
   - `month-end-close` (1st of month, 08:00)
@@ -394,6 +404,17 @@ All `/api/*` routes require an active session cookie. Admin-only routes are note
 | DELETE | `/api/categories/:name` | Remove a category |
 | GET | `/api/payees` | Distinct payee names |
 | GET | `/api/payees/suggest-category` | Smart category suggestion for a given payee |
+
+### Savings Goals
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/savings-goals` | List goals — `?active=1` for active only |
+| GET | `/api/savings-goals/:id` | Get one |
+| POST | `/api/savings-goals` | Create a goal (`name`, `target_amount`, optional `saved_amount`, `target_date`, `notes`) |
+| PUT | `/api/savings-goals/:id` | Update a goal (any field, incl. `active` to archive) |
+| DELETE | `/api/savings-goals/:id` | Delete a goal |
+| POST | `/api/savings-goals/:id/contribute` | Add a contribution (`amount`; negative allowed for corrections) — returns `{ goal, reached }` |
 
 ### Subscriptions
 

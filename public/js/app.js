@@ -398,6 +398,7 @@ const routes = {
   '#/dashboard':     () => dashboardModule.init(),
   '#/transactions':  () => transactionsModule.init(),
   '#/budget':        () => budgetModule.init(),
+  '#/savings':       () => savingsModule.init(),
   '#/subscriptions': () => subscriptionsModule.init(),
   '#/reminders':     () => remindersModule.init(),
   '#/charts':        () => chartsModule.init(),
@@ -562,7 +563,7 @@ const dashboardModule = {
     const currentMonth = today.toISOString().slice(0, 7);
     const todayStr = today.toISOString().slice(0, 10);
 
-    const [summary, reminders, subs, byCategory, allMonthTx, budgetStatus, trend, catMonthly, priceAlerts, me] = await Promise.all([
+    const [summary, reminders, subs, byCategory, allMonthTx, budgetStatus, trend, catMonthly, priceAlerts, savingsGoals, me] = await Promise.all([
       api(`/api/transactions/summary?month=${currentMonth}`),
       api('/api/reminders?paid=0&upcoming_days=30'),
       api('/api/subscriptions?active=1'),
@@ -572,6 +573,7 @@ const dashboardModule = {
       api('/api/charts/spending-trend?months=6').catch(() => []),
       api('/api/charts/category-monthly?months=6').catch(() => []),
       api('/api/subscriptions/price-alerts').catch(() => []),
+      api('/api/savings-goals?active=1').catch(() => []),
       api('/api/auth/me').catch(() => ({ username: null, display_name: null }))
     ]);
     const recentTx = { rows: (allMonthTx.rows || []).slice(0, 5) };
@@ -1243,6 +1245,44 @@ const dashboardModule = {
         </div>
       </div>`;
 
+    // ── Savings Goals card ───────────────────────────────────────────────────
+    // Reuses the savingsModule pace/progress logic so the dashboard mirrors the
+    // /savings page exactly. Clickable → manage. Hidden when no active goals.
+    const savingsList = Array.isArray(savingsGoals) ? savingsGoals : [];
+    const savingsCard = (savingsList.length === 0 || typeof savingsModule === 'undefined') ? '' : (() => {
+      const rows = savingsList.slice(0, 4).map(g => {
+        const pct      = g.target_amount > 0 ? (g.saved_amount / g.target_amount) * 100 : 0;
+        const barPct   = Math.min(100, Math.max(0, pct));
+        const reached  = g.saved_amount >= g.target_amount;
+        const barColor = reached ? 'var(--success)' : pct >= 75 ? 'var(--accent)' : pct >= 40 ? 'var(--accent2)' : 'var(--warning)';
+        const pace     = savingsModule.pace(g);
+        const paceLine = pace
+          ? `<span style="color:${pace.tone === 'good' ? 'var(--success)' : pace.tone === 'warn' ? 'var(--warning)' : 'var(--text-muted)'}">${escHtml(pace.label)}</span>`
+          : (reached ? '<span style="color:var(--success)">🎉 reached</span>' : `<span style="color:var(--text-muted)">${fmtCur(Math.max(0, g.target_amount - g.saved_amount))} to go</span>`);
+        return `
+          <div style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+              <span style="font-size:13px;font-weight:600">${reached ? '🎉 ' : ''}${escHtml(g.name)}</span>
+              <span style="font-size:12px;color:var(--text-muted)">${fmtCur(g.saved_amount)} <span style="opacity:.7">/ ${fmtCur(g.target_amount)}</span></span>
+            </div>
+            <div class="budget-bar-track"><div class="budget-bar-fill" style="width:${barPct.toFixed(1)}%;background:${barColor}"></div></div>
+            <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:11px">
+              ${paceLine}
+              <span style="color:${barColor};font-weight:600">${pct.toFixed(0)}%</span>
+            </div>
+          </div>`;
+      }).join('');
+      return `
+        <div class="card" style="margin-bottom:16px">
+          <div class="dash-card-head" style="margin-bottom:12px">
+            <h2 style="margin-bottom:0;display:flex;align-items:center;gap:8px">🎯 Savings Goals</h2>
+            <a href="#/savings" class="dash-see-more">Manage →</a>
+          </div>
+          ${rows}
+          ${savingsList.length > 4 ? `<div style="margin-top:4px"><a href="#/savings" class="dash-see-more">View all ${savingsList.length} →</a></div>` : ''}
+        </div>`;
+    })();
+
     const allRows    = allMonthTx.rows || [];
     const dayOfMonth = today.getDate();
     const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
@@ -1531,6 +1571,9 @@ const dashboardModule = {
             <div class="dash-income-big">${fmtCur(summary.income)}</div>
             ${savingsBarInner}
           </div>
+
+          <!-- Savings Goals -->
+          ${savingsCard}
 
           <!-- Largest Expenses -->
           <div class="card">
