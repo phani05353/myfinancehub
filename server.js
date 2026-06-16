@@ -928,6 +928,92 @@ app.delete('/api/budgets/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── SAVINGS GOALS ────────────────────────────────────────────────────────────
+// Forward-looking savings targets. Household-shared (auth-gated above). Each
+// goal tracks an amount saved toward a target, optionally by a target date.
+
+app.get('/api/savings-goals', (req, res) => {
+  const { active } = req.query;
+  let sql = 'SELECT * FROM savings_goals';
+  const params = [];
+  if (active !== undefined) {
+    sql += ' WHERE active = ?';
+    params.push(parseInt(active));
+  }
+  sql += ' ORDER BY active DESC, created_at DESC';
+  res.json(db.prepare(sql).all(...params));
+});
+
+app.get('/api/savings-goals/:id', (req, res) => {
+  const row = db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  res.json(row);
+});
+
+app.post('/api/savings-goals', (req, res) => {
+  const { name, target_amount, saved_amount, target_date, notes } = req.body;
+  if (!name?.trim() || target_amount === undefined || parseFloat(target_amount) <= 0) {
+    return res.status(400).json({ error: 'name and a positive target_amount are required' });
+  }
+  const result = db.prepare(`
+    INSERT INTO savings_goals (name, target_amount, saved_amount, target_date, notes)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    name.trim(),
+    parseFloat(target_amount),
+    saved_amount !== undefined ? Math.max(0, parseFloat(saved_amount) || 0) : 0,
+    target_date || null,
+    notes || null
+  );
+  res.json(db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(result.lastInsertRowid));
+});
+
+app.put('/api/savings-goals/:id', (req, res) => {
+  const existing = db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  const fields = ['name', 'target_amount', 'saved_amount', 'target_date', 'notes', 'active'];
+  const updates = {};
+  fields.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
+  if (updates.target_amount !== undefined) {
+    const t = parseFloat(updates.target_amount);
+    if (!(t > 0)) return res.status(400).json({ error: 'target_amount must be positive' });
+    updates.target_amount = t;
+  }
+  if (updates.saved_amount !== undefined) updates.saved_amount = Math.max(0, parseFloat(updates.saved_amount) || 0);
+  if (updates.active !== undefined) updates.active = parseInt(updates.active) ? 1 : 0;
+
+  if (Object.keys(updates).length === 0) return res.json(existing);
+  const cols = Object.keys(updates);
+  const setClauses = cols.map(k => `${k} = ?`).join(', ') + ", updated_at = datetime('now')";
+  db.prepare(`UPDATE savings_goals SET ${setClauses} WHERE id = ?`).run(...cols.map(k => updates[k]), req.params.id);
+  res.json(db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(req.params.id));
+});
+
+app.delete('/api/savings-goals/:id', (req, res) => {
+  const result = db.prepare('DELETE FROM savings_goals WHERE id = ?').run(req.params.id);
+  if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+});
+
+// Add a contribution toward a goal — increments saved_amount (never below 0,
+// to allow corrections). Returns the updated goal plus a `reached` flag so the
+// client can celebrate when a contribution tips the goal over its target.
+app.post('/api/savings-goals/:id/contribute', (req, res) => {
+  const goal = db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(req.params.id);
+  if (!goal) return res.status(404).json({ error: 'Not found' });
+  const amount = parseFloat(req.body.amount);
+  if (isNaN(amount) || amount === 0) return res.status(400).json({ error: 'a non-zero amount is required' });
+
+  const wasReached = goal.saved_amount >= goal.target_amount;
+  const newSaved = Math.max(0, goal.saved_amount + amount);
+  db.prepare(
+    "UPDATE savings_goals SET saved_amount = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(newSaved, goal.id);
+
+  const updated = db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(goal.id);
+  res.json({ goal: updated, reached: !wasReached && updated.saved_amount >= updated.target_amount });
+});
+
 // ─── CATEGORIES ───────────────────────────────────────────────────────────────
 
 app.get('/api/categories', (req, res) => {

@@ -109,6 +109,62 @@ module.exports = ({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptTex
     return rows.filter(r => r.budget > 0 && r.spent >= r.budget * 0.9);
   },
 
+  // ── Savings goals nudge ──────────────────────────────────────────────────────
+  // Classify each active goal into one of three nudge buckets, newest-reached
+  // first. The workflow decides what (if anything) to push; this activity is
+  // pure data so the "skip silently when nothing to say" rule lives in the
+  // deterministic workflow. Buckets:
+  //   - reached: saved >= target (celebrate, once — see lastNudge dedupe below)
+  //   - behind:  has a target_date, not reached, and the required monthly pace
+  //              to still hit it has climbed meaningfully above the original
+  //              even pace (i.e. contributions have fallen behind schedule)
+  //   - nudge:   active, unfunded-this-period goals that just want a gentle
+  //              "contribute something" reminder
+  async findSavingsNudges() {
+    const goals = db.prepare(
+      'SELECT * FROM savings_goals WHERE active = 1'
+    ).all();
+    if (goals.length === 0) return { reached: [], behind: [], nudge: [] };
+
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const msPerDay = 24 * 60 * 60 * 1000;
+
+    const reached = [], behind = [], nudge = [];
+    for (const g of goals) {
+      const remaining = g.target_amount - g.saved_amount;
+      if (remaining <= 0) {
+        reached.push({ id: g.id, name: g.name, target_amount: g.target_amount, saved_amount: g.saved_amount });
+        continue;
+      }
+
+      if (g.target_date) {
+        const target = new Date(g.target_date + 'T00:00:00');
+        const daysLeft = Math.round((target - today) / msPerDay);
+        if (daysLeft >= 0) {
+          const monthsLeft = Math.max(1, daysLeft / 30.44);
+          const perMonth = remaining / monthsLeft;
+          // "Behind" heuristic: the catch-up pace needed now is >25% higher than
+          // an even pace from goal creation would have been. createdMonths uses
+          // created_at so a brand-new goal isn't flagged immediately.
+          const created = new Date((g.created_at || '').replace(' ', 'T') + 'Z');
+          const totalMonths = isNaN(created) ? monthsLeft : Math.max(1, (target - created) / msPerDay / 30.44);
+          const evenPace = g.target_amount / totalMonths;
+          if (perMonth > evenPace * 1.25) {
+            behind.push({ id: g.id, name: g.name, perMonth, daysLeft, remaining });
+            continue;
+          }
+        } else {
+          // Past the target date and still short — definitely behind.
+          behind.push({ id: g.id, name: g.name, perMonth: remaining, daysLeft, remaining });
+          continue;
+        }
+      }
+
+      nudge.push({ id: g.id, name: g.name, remaining, saved_amount: g.saved_amount, target_amount: g.target_amount });
+    }
+    return { reached, behind, nudge };
+  },
+
   // ── Daily spending recap ───────────────────────────────────────────────────
   async computeDailyRecap() {
     const today = new Date().toISOString().slice(0, 10);

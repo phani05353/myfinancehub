@@ -66,6 +66,53 @@ async function budgetThresholdWorkflow() {
   });
 }
 
+// 6 PM, every 3 days — a single savings-goal nudge. Priority order keeps it to
+// one push (no fatigue): celebrate a reached goal first, else warn about the
+// most-behind goal, else a gentle "contribute" reminder. Skips silently when
+// there's nothing worth saying — matching every other scheduled workflow.
+async function savingsNudgeWorkflow() {
+  const { reached, behind, nudge } = await acts.findSavingsNudges();
+
+  if (reached.length > 0) {
+    const top = reached[0];
+    const body = reached.length === 1
+      ? `${top.name} — you saved ${'$' + top.saved_amount.toFixed(0)} of ${'$' + top.target_amount.toFixed(0)}`
+      : `${top.name} and ${reached.length - 1} more goal${reached.length > 2 ? 's' : ''} reached`;
+    return acts.sendPush({
+      title: '🎉 Savings goal reached!',
+      body,
+      tag: `savings-reached-${top.id}`,
+      data: { route: '#/savings' }
+    });
+  }
+
+  if (behind.length > 0) {
+    const top = behind.sort((a, b) => b.perMonth - a.perMonth)[0];
+    const when = top.daysLeft >= 0 ? `${top.daysLeft} day${top.daysLeft > 1 ? 's' : ''} left` : 'past due';
+    return acts.sendPush({
+      title: `⏳ Behind on “${top.name}”`,
+      body: `Save $${top.perMonth.toFixed(0)}/mo to hit your target (${when}) · $${top.remaining.toFixed(0)} to go`,
+      tag: `savings-behind-${top.id}`,
+      data: { route: '#/savings' }
+    });
+  }
+
+  if (nudge.length > 0) {
+    const top = nudge.sort((a, b) => a.remaining - b.remaining)[0];
+    const body = nudge.length === 1
+      ? `${top.name}: $${top.saved_amount.toFixed(0)} of $${top.target_amount.toFixed(0)} — add a little?`
+      : `${nudge.length} goals could use a contribution — closest: ${top.name}`;
+    return acts.sendPush({
+      title: '🎯 Keep your savings moving',
+      body,
+      tag: 'savings-nudge',
+      data: { route: '#/savings' }
+    });
+  }
+
+  return { sent: false };
+}
+
 // 9 PM daily — recap of what you spent today.
 async function dailyRecapWorkflow() {
   const recap = await acts.computeDailyRecap();
@@ -271,6 +318,7 @@ module.exports = {
   dailyBillsWorkflow,
   priceHikeWorkflow,
   budgetThresholdWorkflow,
+  savingsNudgeWorkflow,
   dailyRecapWorkflow,
   weeklyInsightsWorkflow,
   monthEndCloseWorkflow,
