@@ -1,5 +1,5 @@
 // Bumped on each release so stale clients pick up new assets.
-const CACHE = 'finance-hub-v10';
+const CACHE = 'finance-hub-v11';
 
 const SHELL = [
   '/',
@@ -10,6 +10,7 @@ const SHELL = [
   '/js/subscriptions.js',
   '/js/reminders.js',
   '/js/charts.js',
+  '/js/ask.js',
   '/js/import.js',
   '/js/yearreview.js',
   '/js/rules.js',

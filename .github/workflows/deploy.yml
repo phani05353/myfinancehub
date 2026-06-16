@@ -17,6 +17,12 @@ jobs:
       # (OIDC_CLIENT_ID/SECRET, RESEND_API_KEY, …) stay host-managed in finance.env
       # and are intentionally NOT listed here.
       OIDC_PUBLIC_BASE: ${{ vars.OIDC_PUBLIC_BASE }}
+      # Natural-language query (Ask) — non-secret Ollama config. Sensitive values
+      # never go here; these just point at the homelab LLM box / pick the model.
+      OLLAMA_BASE_URL: ${{ vars.OLLAMA_BASE_URL }}
+      OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL }}
+      OLLAMA_TIMEOUT_MS: ${{ vars.OLLAMA_TIMEOUT_MS }}
+      NLQUERY_ENABLED: ${{ vars.NLQUERY_ENABLED }}
     steps:
       - name: Sync GitHub-managed vars into finance.env
         run: |
@@ -24,7 +30,7 @@ jobs:
           touch "$ENV_FILE"
           # Append/update only keys that are set as repo Variables. An unset var is
           # skipped so it never blanks a host-managed value or a code default.
-          for key in OIDC_PUBLIC_BASE; do
+          for key in OIDC_PUBLIC_BASE OLLAMA_BASE_URL OLLAMA_MODEL OLLAMA_TIMEOUT_MS NLQUERY_ENABLED; do
             val="${!key}"
             [ -z "$val" ] && continue
             sed -i "/^${key}=/d" "$ENV_FILE"   # drop any stale line for this key

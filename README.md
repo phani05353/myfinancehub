@@ -464,6 +464,21 @@ All `/api/*` routes require an active session cookie. Admin-only routes are note
 | `TEMPORAL_DISABLED` | — | Set to `1` to skip starting the worker entirely |
 | `VAPID_SUBJECT` | `mailto:admin@home-finance.local` | Subject used in VAPID JWTs sent to push services |
 | `NODE_ENV` | — | Set to `production` in the Docker image |
+| `OLLAMA_BASE_URL` | `http://192.168.50.34:11434` | Base URL of the local Ollama server used by the **Ask** (natural-language query) feature. Use the homelab host IP so the container can reach it. |
+| `OLLAMA_MODEL` | `llama3.1:8b` | Ollama model used to translate questions → read-only SQL and summarise results (must be pulled on the box). |
+| `OLLAMA_TIMEOUT_MS` | `30000` | Abort the Ollama call after this many milliseconds. |
+| `NLQUERY_ENABLED` | `1` | Set to `0`/`false`/`off` to disable the Ask endpoint entirely. |
+
+### Ask — natural-language queries
+
+The **Ask** view lets you ask plain-English questions about your finances ("how
+much did I spend on coffee since March?"). A local [Ollama](https://ollama.com)
+model translates the question into a **single read-only `SELECT`**, which the
+server validates and runs against a **read-only** SQLite connection — writes and
+multi-statement injection are rejected and SQLite itself refuses any write. The
+answer is shown as a one-line summary, a results table, and (when the shape is
+numeric) a chart. Your data never leaves the homelab. If Ollama is unreachable or
+`NLQUERY_ENABLED=0`, the view degrades gracefully with a clear message.
 
 VAPID public/private keys are generated on first boot and persisted in the SQLite DB. You don't need to set them as env vars.
 

@@ -29,6 +29,18 @@ const db = new Database(DB_PATH);
 const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
 db.exec(schema);
 
+// A SEPARATE, strictly READ-ONLY handle to the same DB file. The natural-language
+// query feature (/api/query) runs LLM-generated SQL only through this connection,
+// so even if the statement validator were somehow bypassed, SQLite itself refuses
+// any write (INSERT/UPDATE/DELETE/DDL all error at the engine level). Opened lazily
+// so a fresh DB (created just above) already exists on disk before we attach.
+let _readonlyDb = null;
+function getReadonlyDb() {
+  if (_readonlyDb) return _readonlyDb;
+  _readonlyDb = new Database(DB_PATH, { readonly: true, fileMustExist: true });
+  return _readonlyDb;
+}
+
 // Migrate: add receipt_path column if it doesn't exist yet
 try { db.prepare('ALTER TABLE transactions ADD COLUMN receipt_path TEXT').run(); } catch (_) {}
 // Migrate: flag for AI-extracted transactions awaiting human confirmation
@@ -1566,6 +1578,158 @@ app.post('/api/rules/apply', (req, res) => {
   })();
 
   res.json({ updated });
+});
+
+// ─── NATURAL-LANGUAGE QUERY (local Ollama → read-only SQL) ─────────────────────
+// Ask a plain-English question ("how much on coffee since March?"); the local
+// Ollama model translates it to a single SELECT over a read-only view of the DB;
+// we validate + execute it on the readonly handle and return rows + a one-line
+// summary. The LLM output is treated as UNTRUSTED — see validateReadonlySql.
+
+// Local LLM (Ollama). Same address/style as temporal/activities.js, but its OWN
+// vars so the query model can differ from the receipt-vision model. /api/generate
+// is the native completion endpoint. NLQUERY_ENABLED gates the whole feature off.
+const OLLAMA_BASE_URL  = (process.env.OLLAMA_BASE_URL || 'http://192.168.50.34:11434').replace(/\/+$/, '');
+const OLLAMA_MODEL     = process.env.OLLAMA_MODEL || 'llama3.1:8b';
+const OLLAMA_TIMEOUT_MS = parseInt(process.env.OLLAMA_TIMEOUT_MS || '30000', 10);
+// Default ON; set NLQUERY_ENABLED=0 (or false) to disable the endpoint entirely.
+const NLQUERY_ENABLED  = !['0', 'false', 'no', 'off'].includes(
+  String(process.env.NLQUERY_ENABLED ?? '1').toLowerCase()
+);
+// Read-only SQL safety validator + row cap live in their own module so they can
+// be unit-tested in isolation (see db/sql-safety.js, test/sql-safety.test.js).
+const { validateReadonlySql, NLQUERY_ROW_CAP } = require('./db/sql-safety');
+
+// Schema description handed to the model. Kept curated (not the raw schema.sql) so
+// the model only ever sees the user-data tables — never users/sessions/secrets.
+const NLQUERY_SCHEMA_DOC = `
+You are a SQLite expert for a personal finance app. Tables (only these — never reference any others):
+
+transactions(id, date TEXT 'YYYY-MM-DD', payee TEXT, category TEXT, amount REAL, notes TEXT, source TEXT)
+  -- amount is NEGATIVE for expenses/spending, POSITIVE for income.
+budgets(id, category TEXT, amount REAL)            -- monthly budget per category
+subscriptions(id, name TEXT, amount REAL, billing_cycle TEXT, next_due_date TEXT, category TEXT, payee TEXT, active INTEGER)
+reminders(id, title TEXT, due_date TEXT, amount REAL, category TEXT, paid INTEGER)
+categories(id, name TEXT)
+
+Conventions:
+- Spending/expense totals use amount < 0; show them as ABS(amount) or SUM(ABS(amount)).
+- Income uses amount > 0.
+- Dates are ISO 'YYYY-MM-DD'. Use SQLite date funcs, e.g. strftime('%Y-%m', date), date('now', '-3 months').
+- Match text case-insensitively, e.g. lower(category) LIKE '%coffee%'.
+`.trim();
+
+// Build the completion prompt: schema + question + strict output contract.
+function buildNlQueryPrompt(question) {
+  return `${NLQUERY_SCHEMA_DOC}
+
+Translate the user's question into ONE read-only SQLite SELECT statement.
+Rules:
+- Output ONLY the SQL — no prose, no code fences, no comments, no semicolon.
+- Use a SELECT (or a WITH … SELECT). Never write, modify, or define anything.
+- Prefer labelling output columns with clear aliases (e.g. SUM(ABS(amount)) AS total).
+- Always include a LIMIT (max ${NLQUERY_ROW_CAP}).
+
+Question: ${question}
+
+SQL:`;
+}
+
+// Ask the model to summarise a result set in one short sentence. Best-effort:
+// returns null on any failure so the endpoint still works without a summary.
+async function summariseNlResult(question, columns, rows) {
+  try {
+    const sample = rows.slice(0, 20);
+    const prompt = `A user asked: "${question}"
+The SQL query returned these columns: ${columns.join(', ')}
+and these rows (JSON): ${JSON.stringify(sample)}
+
+Answer the user's question in ONE short, friendly sentence. Use $ for money amounts. Do not mention SQL.`;
+    const data = await callOllamaGenerate({ model: OLLAMA_MODEL, prompt });
+    const text = String(data || '').trim();
+    return text ? text.slice(0, 400) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Call Ollama's native /api/generate and return the raw text response. Times out
+// (AbortController) so an unreachable/slow homelab box fails fast and cleanly.
+async function callOllamaGenerate({ model, prompt }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt, stream: false, options: { temperature: 0 } }),
+      signal: controller.signal
+    });
+    if (!res.ok) throw new Error(`Ollama ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const data = await res.json();
+    return (data && data.response) || '';
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+app.get('/api/query/status', (req, res) => {
+  res.json({ enabled: NLQUERY_ENABLED, model: OLLAMA_MODEL });
+});
+
+app.post('/api/query', async (req, res) => {
+  if (!NLQUERY_ENABLED) {
+    return res.status(503).json({ error: 'Natural-language query is disabled (NLQUERY_ENABLED=0).' });
+  }
+  const question = String(req.body?.question || '').trim();
+  if (!question) return res.status(400).json({ error: 'A question is required' });
+  if (question.length > 500) return res.status(400).json({ error: 'Question too long (max 500 chars)' });
+
+  // 1) Ask the model to translate the question to SQL.
+  let rawSql;
+  try {
+    rawSql = await callOllamaGenerate({ model: OLLAMA_MODEL, prompt: buildNlQueryPrompt(question) });
+  } catch (err) {
+    console.error('[nlquery] Ollama call failed:', err.message);
+    const unreachable = /abort|fetch failed|ECONNREFUSED|ENOTFOUND|timeout/i.test(err.message);
+    return res.status(503).json({
+      error: unreachable
+        ? `Could not reach the local AI model at ${OLLAMA_BASE_URL}. Is Ollama running?`
+        : `AI model error: ${err.message}`
+    });
+  }
+
+  // 2) Validate the generated SQL — fail closed on anything non-conforming.
+  let sql;
+  try {
+    sql = validateReadonlySql(rawSql);
+  } catch (err) {
+    console.warn('[nlquery] rejected SQL:', err.message, '|', String(rawSql).slice(0, 200));
+    return res.status(422).json({
+      error: `The AI produced a query I won't run: ${err.message}`,
+      sql: String(rawSql).slice(0, 500)
+    });
+  }
+
+  // 3) Execute on the strictly READ-ONLY connection.
+  let rows, columns;
+  try {
+    const stmt = getReadonlyDb().prepare(sql);
+    rows = stmt.all();
+    columns = rows.length ? Object.keys(rows[0]) : (stmt.columns().map(c => c.name));
+    if (rows.length > NLQUERY_ROW_CAP) rows = rows.slice(0, NLQUERY_ROW_CAP);
+  } catch (err) {
+    console.warn('[nlquery] SQL execution failed:', err.message);
+    return res.status(422).json({
+      error: `The generated query failed to run: ${err.message}`,
+      sql
+    });
+  }
+
+  // 4) Best-effort one-line natural-language answer.
+  const summary = await summariseNlResult(question, columns, rows);
+
+  res.json({ sql, columns, rows, summary });
 });
 
 // ─── EXPORT ───────────────────────────────────────────────────────────────────

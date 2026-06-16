@@ -6,7 +6,8 @@
   "packageManager": "pnpm@11.6.0",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "node --test"
   },
   "dependencies": {
     "@temporalio/activity": "^1.18.1",

@@ -401,6 +401,7 @@ const routes = {
   '#/subscriptions': () => subscriptionsModule.init(),
   '#/reminders':     () => remindersModule.init(),
   '#/charts':        () => chartsModule.init(),
+  '#/ask':           () => askModule.init(),
   '#/import':        () => importModule.init(),
   '#/year-review':   () => yearReviewModule.init(),
   '#/rules':         () => rulesModule.init(),
