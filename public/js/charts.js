@@ -395,7 +395,7 @@ const chartsModule = {
       // pad to 31 with nulls so the X-axis is consistent
       while (cumulative.length < 31) cumulative.push(null);
 
-      const color = isCurrent ? 'rgba(93,155,235,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
+      const color = isCurrent ? 'rgba(52,211,153,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
       return {
         label: new Date(yr, mo - 1, 1).toLocaleString('default', { month: 'short', year: '2-digit' }),
         data: cumulative,

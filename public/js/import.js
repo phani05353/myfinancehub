@@ -252,8 +252,8 @@ const importModule = {
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; color: #1a1a2e; padding: 32px; }
-      .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #6c8ef5; padding-bottom: 12px; margin-bottom: 20px; }
-      .header h1 { font-size: 22px; color: #6c8ef5; }
+      .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #10b981; padding-bottom: 12px; margin-bottom: 20px; }
+      .header h1 { font-size: 22px; color: #10b981; }
       .header .sub { font-size: 12px; color: #666; margin-top: 4px; }
       .summary-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 24px; }
       .sum-box { background: #f5f5fa; border-radius: 8px; padding: 12px 14px; }

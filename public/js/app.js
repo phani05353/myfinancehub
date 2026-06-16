@@ -167,7 +167,7 @@ async function showPayeeTrend(payee, defaultMonths = 6) {
         cumulative.push(running);
       }
       while (cumulative.length < 31) cumulative.push(null);
-      const color = isCurrent ? 'rgba(93,155,235,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
+      const color = isCurrent ? 'rgba(52,211,153,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
       return {
         label: new Date(yr, mo - 1, 1).toLocaleString('default', { month: 'short', year: '2-digit' }),
         data: cumulative,
@@ -671,7 +671,7 @@ const dashboardModule = {
       });
       const last = data[data.length - 1];
       const prev = data[data.length - 2];
-      const trendColor = last > prev ? '#ff7a8a' : last < prev ? '#5be0a0' : color;
+      const trendColor = last > prev ? '#fb7185' : last < prev ? '#46e08f' : color;
       const areaPoints = `0,${h} ${points.join(' ')} ${w},${h}`;
       return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">
         <polygon points="${areaPoints}" fill="${color}" fill-opacity="0.12"/>
@@ -1037,7 +1037,7 @@ const dashboardModule = {
       for (const key of Object.keys(BUDGET_ICONS)) {
         if (lower.includes(key)) return BUDGET_ICONS[key];
       }
-      return { emoji: (name || '?').trim().charAt(0).toUpperCase(), bg: '#6c8ef5' };
+      return { emoji: (name || '?').trim().charAt(0).toUpperCase(), bg: '#34d399' };
     };
     const budgetSection = budgetStatus.length === 0 ? '' : (() => {
       const sorted = [...budgetStatus].sort((a, b) => (b.spent / b.budget) - (a.spent / a.budget));
@@ -1410,8 +1410,8 @@ const dashboardModule = {
               transform="rotate(-90 24 24)"/>
             <defs>
               <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#6c8ef5"/>
-                <stop offset="100%" stop-color="#a78bfa"/>
+                <stop offset="0%" stop-color="#34d399"/>
+                <stop offset="100%" stop-color="#2dd4bf"/>
               </linearGradient>
             </defs>
             <text x="24" y="28" text-anchor="middle" style="fill:var(--text);font-size:12px;font-weight:700;font-family:system-ui">${dayOfMonth}</text>
@@ -1635,14 +1635,14 @@ const dashboardModule = {
         {
           label: `${monthName} (actual)`,
           data: cumulData,
-          borderColor: 'rgba(93,155,235,0.95)',
+          borderColor: 'rgba(52,211,153,0.95)',
           backgroundColor: ctx => {
             const { chart } = ctx;
             const { ctx: c, chartArea } = chart;
-            if (!chartArea) return 'rgba(93,155,235,0.15)';
+            if (!chartArea) return 'rgba(52,211,153,0.15)';
             const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-            g.addColorStop(0, 'rgba(93,155,235,0.40)');
-            g.addColorStop(1, 'rgba(93,155,235,0.00)');
+            g.addColorStop(0, 'rgba(52,211,153,0.42)');
+            g.addColorStop(1, 'rgba(52,211,153,0.00)');
             return g;
           },
           borderWidth: 2.5,
@@ -1650,14 +1650,14 @@ const dashboardModule = {
           fill: true,
           pointRadius: 0,
           pointHoverRadius: 5,
-          pointHoverBackgroundColor: '#5d9beb'
+          pointHoverBackgroundColor: '#34d399'
         }
       ];
       if (prevPaceLine) {
         datasets.push({
           label: `${lastMonthLabel} (pace)`,
           data: prevPaceLine,
-          borderColor: 'rgba(200,220,255,0.22)',
+          borderColor: 'rgba(220,224,232,0.28)',
           backgroundColor: 'transparent',
           borderWidth: 1.5,
           borderDash: [6, 4],
@@ -1683,16 +1683,16 @@ const dashboardModule = {
           },
           scales: {
             x: {
-              ticks: { color: '#8aa0bf', font: { size: 10 }, maxTicksLimit: 10 },
+              ticks: { color: '#9398a3', font: { size: 10 }, maxTicksLimit: 10 },
               grid: { display: false }
             },
             y: {
               ticks: {
-                color: '#8aa0bf',
+                color: '#9398a3',
                 font: { size: 10 },
                 callback: v => '$' + (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : Math.round(v))
               },
-              grid: { color: 'rgba(120,168,220,0.07)', drawTicks: false }
+              grid: { color: 'rgba(255,255,255,0.07)', drawTicks: false }
             }
           }
         }
@@ -1711,7 +1711,7 @@ const dashboardModule = {
               type: 'bar',
               label: 'Income',
               data: flowIncome,
-              backgroundColor: 'rgba(136,178,240,0.92)',
+              backgroundColor: 'rgba(52,211,153,0.9)',
               borderRadius: { topLeft: 14, topRight: 14, bottomLeft: 0, bottomRight: 0 },
               borderSkipped: false,
               maxBarThickness: 26,
@@ -1722,7 +1722,7 @@ const dashboardModule = {
               type: 'bar',
               label: 'Expenses',
               data: flowExpense.map(e => -e),
-              backgroundColor: 'rgba(58,92,189,0.92)',
+              backgroundColor: 'rgba(251,113,133,0.82)',
               borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 14, bottomRight: 14 },
               borderSkipped: false,
               maxBarThickness: 26,
@@ -1741,7 +1741,7 @@ const dashboardModule = {
               pointRadius: 4,
               pointHoverRadius: 6,
               pointBackgroundColor: '#fff',
-              pointBorderColor: ctx => (ctx.raw >= 0 ? '#5be0a0' : '#ff7a8a'),
+              pointBorderColor: ctx => (ctx.raw >= 0 ? '#46e08f' : '#fb7185'),
               pointBorderWidth: 2,
               order: 1
             }
@@ -1764,16 +1764,16 @@ const dashboardModule = {
           scales: {
             x: {
               stacked: true,
-              ticks: { color: '#8aa0bf', font: { size: 11, weight: '600' } },
+              ticks: { color: '#9398a3', font: { size: 11, weight: '600' } },
               grid: { display: false }
             },
             y: {
               stacked: true,
               ticks: {
-                color: '#8aa0bf', font: { size: 10 },
+                color: '#9398a3', font: { size: 10 },
                 callback: v => v === 0 ? '0' : '$' + (Math.abs(v) >= 1000 ? (Math.abs(v) / 1000).toFixed(1) + 'k' : Math.abs(v))
               },
-              grid: { color: 'rgba(120,168,220,0.10)', drawTicks: false, borderDash: [3, 3] }
+              grid: { color: 'rgba(255,255,255,0.10)', drawTicks: false, borderDash: [3, 3] }
             }
           }
         }
