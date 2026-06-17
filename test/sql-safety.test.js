@@ -37,6 +37,65 @@ test('is case-insensitive about the SELECT keyword', () => {
   assert.equal(out, 'select payee from transactions limit 5');
 });
 
+// ── Table allow-list: must not reach secret/PII/internal tables ────────────────
+// Regression for the security finding: the read-only handle can physically see the
+// whole DB (app_settings.session_secret, sessions, users, push_subscriptions). A
+// valid SELECT is not enough — the table must be on the allow-list.
+
+test('rejects reading the users table (PII/credentials)', () => {
+  assert.throws(() => validateReadonlySql('SELECT oidc_sub, email, password_hash FROM users'), /not allowed|may only read/i);
+});
+
+test('rejects exfiltrating the session secret from app_settings', () => {
+  assert.throws(() => validateReadonlySql("SELECT value FROM app_settings WHERE key = 'session_secret'"), /not allowed|may only read/i);
+});
+
+test('rejects reading the sessions store', () => {
+  assert.throws(() => validateReadonlySql('SELECT * FROM sessions'), /not allowed|may only read/i);
+});
+
+test('rejects reading push_subscriptions', () => {
+  assert.throws(() => validateReadonlySql('SELECT endpoint, p256dh, auth FROM push_subscriptions'), /not allowed|may only read/i);
+});
+
+test('rejects reading sqlite_master (schema enumeration)', () => {
+  assert.throws(() => validateReadonlySql('SELECT name, sql FROM sqlite_master'), /not allowed|may only read/i);
+});
+
+test('rejects a secret table smuggled via a comma join', () => {
+  assert.throws(() => validateReadonlySql('SELECT * FROM transactions, users'), /not allowed|may only read/i);
+});
+
+test('rejects a double-quoted identifier referencing a secret table', () => {
+  assert.throws(() => validateReadonlySql('SELECT * FROM "users"'), /not allowed|may only read/i);
+});
+
+test('rejects an unknown table even if not on the denylist', () => {
+  assert.throws(() => validateReadonlySql('SELECT * FROM secrets_vault'), /may only read/i);
+});
+
+// ── Allow-list must NOT over-reject legitimate finance queries ─────────────────
+
+test('accepts a JOIN across two allowed tables', () => {
+  const out = validateReadonlySql(
+    'SELECT t.payee, b.amount FROM transactions t JOIN budgets b ON lower(t.category) = lower(b.category)'
+  );
+  assert.match(out, /^SELECT/i);
+});
+
+test('accepts a CTE and its self-reference', () => {
+  const out = validateReadonlySql(
+    'WITH top AS (SELECT payee, SUM(ABS(amount)) s FROM transactions GROUP BY payee) SELECT * FROM top ORDER BY s DESC'
+  );
+  assert.match(out, /LIMIT/i);
+});
+
+test('does not flag the word "users" inside a string literal', () => {
+  const out = validateReadonlySql("SELECT payee FROM transactions WHERE notes = 'former users club'");
+  assert.match(out, /^SELECT/i);
+  assert.match(out, /LIMIT/i);
+});
+
 // Regression (bug-NNN): gemma3:4b wraps output in ```sqlite (not ```sql), and the
 // old stripper left "ite\nSELECT…" → falsely "not a SELECT". Any language tag must
 // be stripped, with or without the closing fence.
