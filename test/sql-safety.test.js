@@ -37,6 +37,24 @@ test('is case-insensitive about the SELECT keyword', () => {
   assert.equal(out, 'select payee from transactions limit 5');
 });
 
+// Regression (bug-NNN): gemma3:4b wraps output in ```sqlite (not ```sql), and the
+// old stripper left "ite\nSELECT…" → falsely "not a SELECT". Any language tag must
+// be stripped, with or without the closing fence.
+test('strips a ```sqlite fence (any language tag)', () => {
+  const out = validateReadonlySql('```sqlite\nSELECT category FROM transactions\n```');
+  assert.equal(out, 'SELECT category FROM transactions LIMIT ' + NLQUERY_ROW_CAP);
+});
+
+test('strips an opening fence even when the closing fence is missing', () => {
+  const out = validateReadonlySql('```sqlite\n\nSELECT 1 AS one');
+  assert.equal(out, 'SELECT 1 AS one LIMIT ' + NLQUERY_ROW_CAP);
+});
+
+test('extracts SQL from a fenced block surrounded by prose', () => {
+  const out = validateReadonlySql('Sure!\n```sql\nSELECT 1 AS one\n```\nHope that helps.');
+  assert.equal(out, 'SELECT 1 AS one LIMIT ' + NLQUERY_ROW_CAP);
+});
+
 // ── Rejects writes / DDL / side effects ───────────────────────────────────────
 
 const REJECTS = {
