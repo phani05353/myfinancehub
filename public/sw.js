@@ -11,6 +11,7 @@ const SHELL = [
   '/js/subscriptions.js',
   '/js/reminders.js',
   '/js/charts.js',
+  '/js/ask.js',
   '/js/import.js',
   '/js/yearreview.js',
   '/js/rules.js',
