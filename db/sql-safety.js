@@ -20,11 +20,17 @@ const SQL_FORBIDDEN = [
 function validateReadonlySql(rawSql, { rowCap = NLQUERY_ROW_CAP } = {}) {
   if (!rawSql || typeof rawSql !== 'string') throw new Error('No SQL produced');
 
-  // Strip code fences / leading "sql" hints the model often wraps around output.
-  let sql = rawSql.trim()
-    .replace(/^```(?:sql)?/i, '')
-    .replace(/```$/, '')
-    .trim();
+  // Models often wrap output in a fenced block (```sql / ```sqlite / bare ```),
+  // and small models sometimes prepend prose ("Here is the query:"). Extract the
+  // SQL robustly: prefer the contents of the first fenced block; otherwise strip
+  // any stray leading/trailing fence (with an optional language tag).
+  let sql = rawSql.trim();
+  const fenced = sql.match(/```[\w-]*\s*([\s\S]*?)```/);
+  if (fenced) {
+    sql = fenced[1].trim();
+  } else {
+    sql = sql.replace(/^```[\w-]*[ \t]*\r?\n?/i, '').replace(/\s*```\s*$/i, '').trim();
+  }
 
   // Remove a single trailing semicolon, then ensure no OTHER statement follows.
   sql = sql.replace(/;\s*$/, '').trim();
