@@ -15,6 +15,21 @@ const SQL_FORBIDDEN = [
   'savepoint', 'release', 'trigger'
 ];
 
+// The ONLY tables an NL query may read. The read-only DB handle can physically
+// see the whole finance.db file — which also holds `app_settings` (session_secret,
+// vapid_private), the `sessions` store, `users` (oidc_sub/email/password_hash) and
+// `push_subscriptions`. A SELECT is still a SELECT, so without this allow-list a
+// crafted question could exfiltrate those secrets/PII. The prompt's "only these
+// tables" hint is NOT a security boundary — this is. (Default-deny.)
+const ALLOWED_TABLES = new Set([
+  'transactions', 'budgets', 'subscriptions', 'reminders', 'categories'
+]);
+
+// Identifiers that must NEVER be referenced, matched anywhere as a backstop in
+// case the FROM/JOIN extraction misses an exotic construct. Covers the secret/PII
+// tables plus SQLite's internal schema tables (sqlite_master/_schema/etc.).
+const SQL_DENY_IDENTIFIERS = /\b(?:app_settings|sessions|users|push_subscriptions|sqlite_[a-z_]*)\b/i;
+
 // Validate that a string is a SINGLE read-only SELECT statement. Returns the
 // cleaned SQL (with a LIMIT enforced) or throws with a clear reason.
 function validateReadonlySql(rawSql, { rowCap = NLQUERY_ROW_CAP } = {}) {
@@ -62,6 +77,33 @@ function validateReadonlySql(rawSql, { rowCap = NLQUERY_ROW_CAP } = {}) {
     }
   }
 
+  // Analyse a copy with single-quoted STRING LITERALS blanked, so a value like
+  // payee = 'session users' can't trip the table checks below. (In SQLite single
+  // quotes are strings; double quotes are identifiers — so real table refs, quoted
+  // or not, are still seen.)
+  const analyzable = sql.replace(/'(?:[^']|'')*'/g, "''");
+
+  // Backstop: hard-reject any reference to a secret/PII/internal identifier,
+  // matched anywhere. Catches constructs the FROM/JOIN scan below might miss
+  // (e.g. comma joins: FROM transactions, users).
+  if (SQL_DENY_IDENTIFIERS.test(analyzable)) {
+    throw new Error('Query references a table that is not allowed');
+  }
+
+  // Default-deny table allow-list: every real table read via FROM/JOIN must be in
+  // ALLOWED_TABLES. CTE names (WITH x AS (...)) are query-local aliases, not real
+  // tables, so they're permitted. This is the boundary that stops a crafted SELECT
+  // from reaching users/app_settings/sessions/etc. even though it's a valid read.
+  const cteNames = new Set(
+    [...analyzable.matchAll(/(?:\bwith\b|,)\s*([a-z_][\w$]*)\s+as\s*\(/gi)].map(m => m[1].toLowerCase())
+  );
+  for (const m of analyzable.matchAll(/\b(?:from|join)\s+([a-z_][\w$]*|"[^"]+"|`[^`]+`|\[[^\]]+\])/gi)) {
+    const ref = m[1].replace(/^["`\[]|["`\]]$/g, '').toLowerCase();
+    if (!ALLOWED_TABLES.has(ref) && !cteNames.has(ref)) {
+      throw new Error(`Query may only read these tables: ${[...ALLOWED_TABLES].join(', ')}`);
+    }
+  }
+
   // Enforce a LIMIT so a runaway query can't return the whole table.
   if (!/\blimit\b/i.test(sql)) {
     sql = `${sql} LIMIT ${rowCap}`;
@@ -70,4 +112,4 @@ function validateReadonlySql(rawSql, { rowCap = NLQUERY_ROW_CAP } = {}) {
   return sql;
 }
 
-module.exports = { validateReadonlySql, NLQUERY_ROW_CAP, SQL_FORBIDDEN };
+module.exports = { validateReadonlySql, NLQUERY_ROW_CAP, SQL_FORBIDDEN, ALLOWED_TABLES };
