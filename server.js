@@ -209,6 +209,14 @@ const receiptStorage = multer.diskStorage({
     cb(null, dir);
   },
   filename: (req, file, cb) => {
+    // SECURITY: req.params.id is attacker-controlled (Express decodes %2F), and
+    // multer joins this name onto the receipts dir BEFORE the route handler runs
+    // its tx-existence check. Without this guard a value like "..%2F..%2Fevil"
+    // escapes the uploads directory (path traversal write). Transaction ids are
+    // always integers, so reject anything else outright.
+    if (!/^\d+$/.test(String(req.params.id))) {
+      return cb(new Error('Invalid transaction id'));
+    }
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, `receipt-${req.params.id}-${Date.now()}${ext}`);
   }
@@ -243,7 +251,11 @@ app.use(session({
   cookie: {
     httpOnly: true,
     sameSite: 'lax',                  // sent on the top-level redirect back to /auth/callback
-    // no `secure` flag — the homelab runs over plain HTTP
+    // 'auto' (with trust proxy set above) marks the cookie Secure only when the
+    // request actually arrived over HTTPS — so the Tailscale origin gets a Secure
+    // cookie while the plain-HTTP LAN origin still works. Hardcoding secure:true
+    // would break LAN login; omitting it left the HTTPS cookie sendable over HTTP.
+    secure: 'auto',
     maxAge: 7 * 24 * 60 * 60 * 1000   // 7 days
   }
 }));
@@ -1835,7 +1847,11 @@ app.get('/api/export/csv', (req, res) => {
 
   const escape = v => {
     if (v == null) return '';
-    const s = String(v);
+    let s = String(v);
+    // SECURITY: defang spreadsheet formula injection. A field beginning with
+    // = + - @ (or tab/CR) is interpreted as a formula by Excel/Sheets when the
+    // exported CSV is opened, so prefix those with a single quote to neutralise.
+    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
   };
 
