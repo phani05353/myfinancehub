@@ -290,7 +290,17 @@ async function getOidcClient() {
 // (https://<name>.ts.net) without the OIDC flow snapping back to a single host.
 function externalBase(req) {
   const proto = (req.get('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();
-  const host  = (req.get('x-forwarded-host')  || req.get('host')).split(',')[0].trim();
+  let host    = (req.get('x-forwarded-host')  || req.get('host') || '').split(',')[0].trim();
+  // Tailscale serve on a non-default port passes the hostname in X-Forwarded-Host
+  // but the port separately in X-Forwarded-Port. Without restoring it, the origin
+  // (and thus the OIDC redirect_uri) loses the :port and stops matching what the
+  // browser actually used — e.g. the front door on :3090. Only append a non-default
+  // port, and only when the host doesn't already carry one.
+  if (host && !host.includes(':')) {
+    const port = (req.get('x-forwarded-port') || '').split(',')[0].trim();
+    const isDefault = (proto === 'https' && port === '443') || (proto === 'http' && port === '80');
+    if (port && !isDefault) host = `${host}:${port}`;
+  }
   return `${proto}://${host}`;
 }
 // The OIDC redirect_uri for this request's origin. Falls back to the static env
