@@ -41,13 +41,12 @@ CREATE TABLE IF NOT EXISTS reminders (
 );
 
 -- Users are provisioned via Authentik OIDC (see server.js). `oidc_sub` is the
--- Authentik subject claim; `email`/`username` come from the OIDC claims.
--- `password_hash` is retained (legacy, may be NULL) so old rows still satisfy
--- their original NOT NULL constraint, but is no longer used for login.
+-- Authentik subject claim; `email`/`username` come from the OIDC claims. There is
+-- no local password auth — login is delegated entirely to Authentik. (`role` and
+-- `display_name` are added by ALTER-based migrations in server.js.)
 CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     username      TEXT UNIQUE NOT NULL COLLATE NOCASE,
-    password_hash TEXT,
     email         TEXT,
     oidc_sub      TEXT,
     created_at    TEXT DEFAULT (datetime('now'))
