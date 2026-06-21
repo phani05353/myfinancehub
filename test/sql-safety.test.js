@@ -43,7 +43,7 @@ test('is case-insensitive about the SELECT keyword', () => {
 // valid SELECT is not enough — the table must be on the allow-list.
 
 test('rejects reading the users table (PII/credentials)', () => {
-  assert.throws(() => validateReadonlySql('SELECT oidc_sub, email, password_hash FROM users'), /not allowed|may only read/i);
+  assert.throws(() => validateReadonlySql('SELECT oidc_sub, email FROM users'), /not allowed|may only read/i);
 });
 
 test('rejects exfiltrating the session secret from app_settings', () => {

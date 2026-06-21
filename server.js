@@ -52,6 +52,10 @@ try { db.prepare('ALTER TABLE users ADD COLUMN display_name TEXT').run(); } catc
 // Migrate: Authentik OIDC identity columns (email + subject claim)
 try { db.prepare('ALTER TABLE users ADD COLUMN email TEXT').run(); } catch (_) {}
 try { db.prepare('ALTER TABLE users ADD COLUMN oidc_sub TEXT').run(); } catch (_) {}
+// Migrate: drop the vestigial legacy `password_hash` column. Auth is Authentik
+// OIDC only — the column was never read, just written as ''. Idempotent: the
+// DROP throws "no such column" once it's gone (and on fresh DBs), which we ignore.
+try { db.prepare('ALTER TABLE users DROP COLUMN password_hash').run(); } catch (_) {}
 
 // Persist session secret in DB so it survives container restarts
 let sessionSecret = db.prepare("SELECT value FROM app_settings WHERE key = 'session_secret'").get()?.value;
@@ -344,9 +348,10 @@ function freeUsername(desired, excludeId = null) {
   return candidate;
 }
 
-// Map an Authentik identity to a local users row. Order: (1) existing oidc_sub,
-// (2) link a legacy row by email/username (keeps its role + push subscriptions),
-// (3) create a new row — the FIRST user ever becomes admin, everyone after member.
+// Map an Authentik identity to a local users row. Order: (1) match an existing
+// row by oidc_sub, else (2) create a new row — the FIRST user ever becomes admin,
+// everyone after a member. (oidc_sub is the stable Authentik identity; every row
+// is provisioned through this path, so there are no unlinked legacy rows to adopt.)
 function upsertOidcUser(claims) {
   const sub      = claims.sub;
   const email    = claims.email || null;
@@ -361,19 +366,11 @@ function upsertOidcUser(claims) {
     return { id: bySub.id, username: name, role: bySub.role };
   }
 
-  let legacy = email ? db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(email) : null;
-  if (!legacy) legacy = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username);
-  if (legacy) {
-    db.prepare('UPDATE users SET oidc_sub = ?, email = COALESCE(?, email), display_name = COALESCE(display_name, ?) WHERE id = ?')
-      .run(sub, email, display, legacy.id);
-    return { id: legacy.id, username: legacy.username, role: legacy.role };
-  }
-
   const userCount = db.prepare('SELECT COUNT(*) AS cnt FROM users').get().cnt;
   const role = userCount === 0 ? 'admin' : 'member';
   const name = freeUsername(username);
   const result = db.prepare(
-    "INSERT INTO users (username, password_hash, role, email, oidc_sub, display_name) VALUES (?, '', ?, ?, ?, ?)"
+    "INSERT INTO users (username, role, email, oidc_sub, display_name) VALUES (?, ?, ?, ?, ?)"
   ).run(name, role, email, sub, display);
   return { id: result.lastInsertRowid, username: name, role };
 }

@@ -17,7 +17,7 @@ const SQL_FORBIDDEN = [
 
 // The ONLY tables an NL query may read. The read-only DB handle can physically
 // see the whole finance.db file — which also holds `app_settings` (session_secret,
-// vapid_private), the `sessions` store, `users` (oidc_sub/email/password_hash) and
+// vapid_private), the `sessions` store, `users` (oidc_sub/email) and
 // `push_subscriptions`. A SELECT is still a SELECT, so without this allow-list a
 // crafted question could exfiltrate those secrets/PII. The prompt's "only these
 // tables" hint is NOT a security boundary — this is. (Default-deny.)
