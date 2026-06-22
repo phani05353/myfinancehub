@@ -34,25 +34,41 @@ async function ensureSchedule(client, def) {
     desc = null; // not found — fall through to create
   }
 
-  // Reconcile: if the schedule already exists but its spec drifted from the
-  // code, normalize it in place. Without this, changing a cron here was a no-op
-  // on any already-created schedule — the old definition kept firing forever.
+  // Base workflow ID for each scheduled run. Use the schedule id verbatim:
+  // Temporal automatically APPENDS the nominal scheduled time (e.g.
+  // `-2026-06-21T21:00:00Z`) to guarantee per-run uniqueness, so this stays
+  // human-readable and resolvable in the Web UI. Do NOT add a `{{...}}` Go
+  // template here — the TS SDK does not expand it, so it ends up as a literal
+  // `{{.ScheduledStartTime.Unix}}` inside the workflow id, which breaks every
+  // run/trigger lookup in the UI (404) and is redundant with the time suffix.
+  const wfId = def.id;
+
+  // Reconcile: if the schedule already exists but its spec OR workflow id
+  // drifted from the code, normalize it in place. Without this, changing a cron
+  // (or fixing a bad workflow id) here was a no-op on any already-created
+  // schedule — the old definition kept firing forever.
   // Compare (and rewrite) the WHOLE trigger set, not just cronExpressions[0]:
   // a schedule can accumulate multiple cron expressions (and stray calendars/
   // intervals) across past updates, and every one of them fires independently.
   if (desc) {
     const current = desc.spec?.cronExpressions ?? [];
-    const inSync =
+    const currentWfId = desc.action?.workflowId ?? '';
+    const specInSync =
       current.length === 1 && current[0] === def.cron &&
       !(desc.spec?.calendars?.length) && !(desc.spec?.intervals?.length);
-    if (inSync) return 'exists';
+    const wfIdInSync = currentWfId === wfId;
+    if (specInSync && wfIdInSync) return 'exists';
     await handle.update((prev) => {
       prev.spec.cronExpressions = [def.cron];
       prev.spec.calendars = [];
       prev.spec.intervals = [];
+      prev.action.workflowId = wfId;
       return prev;
     });
-    return `updated (${current.join(' | ') || 'none'} → ${def.cron})`;
+    const changes = [];
+    if (!specInSync) changes.push(`cron ${current.join(' | ') || 'none'} → ${def.cron}`);
+    if (!wfIdInSync) changes.push(`workflowId ${currentWfId || 'none'} → ${wfId}`);
+    return `updated (${changes.join('; ')})`;
   }
 
   await client.schedule.create({
@@ -62,7 +78,7 @@ async function ensureSchedule(client, def) {
       type: 'startWorkflow',
       workflowType: def.workflow,
       taskQueue: TASK_QUEUE,
-      workflowId: `${def.id}-{{.ScheduledStartTime.Unix}}`
+      workflowId: wfId
     },
     policies: { overlap: 'SKIP' }
   });
