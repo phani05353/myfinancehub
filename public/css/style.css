@@ -980,15 +980,25 @@ tr.due-soon td:first-child { color: var(--warning); }
     width: 260px;
     top: calc(var(--mobile-header-h) + env(safe-area-inset-top));
     padding-top: 12px;
+    /* Clear the home indicator so the drawer footer (Edit Profile) is tappable */
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
     border-top: none;
+    /* Sit above the bottom nav (z 300) while open */
+    z-index: 400;
   }
   .sidebar.open { transform: translateX(0); }
   /* Hide the sidebar logo on mobile — the header already shows it */
   .sidebar .logo { display: none; }
-  /* Overlay also starts below the header */
+  /* Overlay also starts below the header, above the bottom nav */
   .sidebar-overlay {
     top: calc(var(--mobile-header-h) + env(safe-area-inset-top));
+    z-index: 390;
   }
+
+  /* While the drawer is open, hide the bottom bar + FAB: no clash, and the
+     drawer's Edit Profile / Sign Out footer is fully reachable */
+  body.drawer-open .bottom-nav,
+  body.drawer-open #fab { display: none; }
 
   /* Content takes full width, shifted down for mobile header + safe area */
   .content {

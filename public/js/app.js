@@ -392,6 +392,9 @@ function openSidebar() {
   sidebar.classList.add('open');
   overlay.classList.add('visible');
   hamburger.classList.add('open');
+  // Hide the bottom nav + FAB while the drawer is open so the drawer footer
+  // (Edit Profile / Sign Out) is reachable and the two nav bars don't clash.
+  document.body.classList.add('drawer-open');
   document.body.style.overflow = 'hidden';
 }
 
@@ -399,6 +402,7 @@ function closeSidebar() {
   sidebar.classList.remove('open');
   overlay.classList.remove('visible');
   hamburger.classList.remove('open');
+  document.body.classList.remove('drawer-open');
   document.body.style.overflow = '';
 }
 
