@@ -1435,29 +1435,50 @@ const dashboardModule = {
 
     view.innerHTML = `
     <div class="dash-enter">
-      <!-- Greeting bar -->
-      <div class="dash-greeting">
-        <div>
-          <div class="dash-greeting-text">${greeting}${(me?.display_name || me?.username) ? ', ' + escHtml(me.display_name || me.username) : ''} <span class="wave">👋</span></div>
-          <div class="dash-greeting-sub">${dateLabel}, ${today.getFullYear()}</div>
+      <!-- Hero summary band -->
+      <div class="dash-hero">
+        <div class="dash-hero-blob dash-hero-blob--1"></div>
+        <div class="dash-hero-blob dash-hero-blob--2"></div>
+        <div class="dash-hero-lead">
+          <div class="dash-hero-greeting">${greeting}${(me?.display_name || me?.username) ? ', ' + escHtml(me.display_name || me.username) : ''} <span class="wave">👋</span><span class="dash-hero-dot">•</span> ${dateLabel}</div>
+          <div class="dash-hero-label">Net ${netLabel} · ${monthName}</div>
+          <div class="dash-hero-amount dash-hero-amount--${netClass}">${netPositive ? '+' : ''}${fmtCur(summary.net)}</div>
+          <div class="dash-hero-sub">Income ${fmtCur(summary.income)} &nbsp;·&nbsp; Spent ${fmtCur(Math.abs(summary.expenses))}</div>
         </div>
-        <div class="dash-month-ring" title="Day ${dayOfMonth} of ${daysInMonth}">
-          <svg viewBox="0 0 48 48" width="48" height="48">
-            <circle cx="24" cy="24" r="${ringRadius}" fill="none" stroke="var(--surface2)" stroke-width="4"/>
-            <circle cx="24" cy="24" r="${ringRadius}" fill="none" stroke="url(#ringGrad)" stroke-width="4"
-              stroke-linecap="round"
-              stroke-dasharray="${ringCirc.toFixed(2)}"
-              stroke-dashoffset="${ringOffset.toFixed(2)}"
-              transform="rotate(-90 24 24)"/>
-            <defs>
-              <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#6366f1"/>
-                <stop offset="100%" stop-color="#818cf8"/>
-              </linearGradient>
-            </defs>
-            <text x="24" y="28" text-anchor="middle" style="fill:var(--text);font-size:12px;font-weight:700;font-family:system-ui">${dayOfMonth}</text>
-          </svg>
-          <div class="dash-month-ring-sub">of ${daysInMonth}</div>
+        <div class="dash-hero-right">
+          <div class="dash-hero-stat">
+            <div class="dash-hero-stat-label">Income</div>
+            <div class="dash-hero-stat-val income-text">${fmtCur(summary.income)}</div>
+          </div>
+          <div class="dash-hero-divider"></div>
+          <div class="dash-hero-stat">
+            <div class="dash-hero-stat-label">Spent</div>
+            <div class="dash-hero-stat-val expense-text">${fmtCur(Math.abs(summary.expenses))}</div>
+          </div>
+          <div class="dash-hero-divider"></div>
+          <div class="dash-hero-stat">
+            <div class="dash-hero-stat-label">Savings</div>
+            <div class="dash-hero-stat-val" style="color:${savingsColor}">${savingsRate.toFixed(0)}%</div>
+          </div>
+          <div class="dash-hero-divider"></div>
+          <div class="dash-month-ring" title="Day ${dayOfMonth} of ${daysInMonth}">
+            <svg viewBox="0 0 48 48" width="48" height="48">
+              <circle cx="24" cy="24" r="${ringRadius}" fill="none" stroke="var(--surface2)" stroke-width="4"/>
+              <circle cx="24" cy="24" r="${ringRadius}" fill="none" stroke="url(#ringGrad)" stroke-width="4"
+                stroke-linecap="round"
+                stroke-dasharray="${ringCirc.toFixed(2)}"
+                stroke-dashoffset="${ringOffset.toFixed(2)}"
+                transform="rotate(-90 24 24)"/>
+              <defs>
+                <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#6366f1"/>
+                  <stop offset="100%" stop-color="#818cf8"/>
+                </linearGradient>
+              </defs>
+              <text x="24" y="28" text-anchor="middle" style="fill:var(--text);font-size:12px;font-weight:700;font-family:system-ui">${dayOfMonth}</text>
+            </svg>
+            <div class="dash-month-ring-sub">of ${daysInMonth}</div>
+          </div>
         </div>
       </div>
 
@@ -1469,11 +1490,13 @@ const dashboardModule = {
 
           ${priceAlertCard}
 
-          <!-- Spending chart -->
+          <div class="dash-section"><span class="dash-section-label">This month</span><span class="dash-section-rule"></span></div>
+
+          <!-- Spending pace chart -->
           <div class="card dash-spend-card">
             <div class="dash-spend-hdr">
               <div>
-                <div class="dash-spend-label">Spent This Month</div>
+                <div class="dash-spend-label">Spending pace</div>
                 <div class="dash-spend-amount">${fmtCur(Math.abs(summary.expenses))}</div>
                 <div class="dash-spend-sub">
                   <span style="color:var(--accent)">•</span> ${monthName}
@@ -1482,15 +1505,7 @@ const dashboardModule = {
               </div>
               <div class="dash-spend-right-stats">
                 <div class="dash-mini-stat">
-                  <div class="dash-mini-stat-l">Income</div>
-                  <div class="dash-mini-stat-v income-text">${fmtCur(summary.income)}</div>
-                </div>
-                <div class="dash-mini-stat">
-                  <div class="dash-mini-stat-l">Net</div>
-                  <div class="dash-mini-stat-v ${netPositive ? 'income-text' : 'expense-text'}">${netPositive ? '+' : ''}${fmtCur(summary.net)}</div>
-                </div>
-                <div class="dash-mini-stat">
-                  <div class="dash-mini-stat-l">Subs</div>
+                  <div class="dash-mini-stat-l">Subscriptions</div>
                   <div class="dash-mini-stat-v">${fmtCur(subTotal)}<span style="font-size:10px;color:var(--text-muted)">/mo</span></div>
                 </div>
               </div>
@@ -1501,6 +1516,8 @@ const dashboardModule = {
           </div>
 
           ${insightsCard}
+
+          <div class="dash-section"><span class="dash-section-label">Activity</span><span class="dash-section-rule"></span></div>
 
           <!-- Latest Tx + Upcoming Bills -->
           <div class="dash-duo-grid">
@@ -1549,6 +1566,8 @@ const dashboardModule = {
             </div>
             <div class="sankey-wrap">${sankeyMobileHtml}</div>
           </div>
+
+          <div class="dash-section"><span class="dash-section-label">Planning</span><span class="dash-section-rule"></span></div>
 
           <!-- Budget -->
           ${budgetSection}

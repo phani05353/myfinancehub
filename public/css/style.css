@@ -1905,12 +1905,60 @@ tr.due-soon td:first-child { color: var(--warning); }
 .income-text  { color: var(--success); }
 .expense-text { color: var(--danger); }
 
+/* ── Dashboard hero greeting + section rhythm (refresh) ── */
+.dash-hero-lead { position: relative; z-index: 1; min-width: 0; }
+.dash-hero-greeting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.dash-hero-greeting .wave {
+  display: inline-block;
+  transform-origin: 70% 70%;
+  animation: wave 2.4s ease-in-out;
+  animation-iteration-count: 2;
+}
+.dash-hero-dot { opacity: 0.45; }
+
+/* Labeled section dividers that group the dashboard's stacked cards */
+.dash-section {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 26px 2px 14px;
+}
+.dash-main-col > .dash-section:first-child { margin-top: 4px; }
+.dash-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.dash-section-rule {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--border-strong), transparent);
+}
 @media (max-width: 768px) {
-  .dash-hero { padding: 18px 20px; }
-  .dash-hero-amount { font-size: 30px; }
-  .dash-hero-right { width: 100%; justify-content: space-around; margin-top: 8px; }
-  .dash-hero-stat { padding: 0 12px; }
-  .dash-hero-divider { height: 28px; }
+  .dash-section { margin: 20px 2px 12px; }
+}
+
+@media (max-width: 768px) {
+  .dash-hero { padding: 18px 18px; }
+  .dash-hero-amount { font-size: 32px; }
+  /* Stack on phones: lead on top, KPIs as an even row; hide ring + dividers so numbers stay legible */
+  .dash-hero-right { width: 100%; justify-content: space-between; margin-top: 10px; gap: 6px; }
+  .dash-hero-right .dash-hero-divider,
+  .dash-hero-right .dash-month-ring { display: none; }
+  .dash-hero-stat { flex: 1; padding: 0; align-items: flex-start; }
+  .dash-hero-stat-val { font-size: 16px; }
 }
 
 /* ── BUDGET OVERVIEW (redesigned) ── */
@@ -2072,10 +2120,7 @@ tr.due-soon td:first-child { color: var(--warning); }
   .payee-detail-table thead th:nth-child(2) { display: none; }
   .payee-detail-table tbody td:nth-child(2) { display: none; }
 
-  /* ── Dashboard hero: smaller amount on narrow screens ── */
-  .dash-hero-stat { padding: 0 10px; }
-  .dash-hero-stat-val { font-size: 15px; }
-  .dash-hero-divider { height: 22px; }
+  /* Dashboard hero mobile layout (stacked KPIs, hidden ring) handled in the hero @media block above */
 
   /* ── Rules: stack rule-actions below rule body ── */
   .rule-row {
