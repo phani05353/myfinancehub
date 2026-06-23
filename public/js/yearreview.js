@@ -278,8 +278,8 @@ const yearReviewModule = {
           }
         },
         scales: {
-          x: { ticks: { color: '#8892a4' }, grid: { color: '#2e3350' } },
-          y: { ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() }, grid: { color: '#2e3350' } }
+          x: { ticks: { color: '#8892a4' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.05)' } }
         }
       }
     });
@@ -291,7 +291,7 @@ const yearReviewModule = {
     const ctx = document.getElementById('yr-cat-chart');
     if (!ctx || !categories.length) return;
     const year = this.currentYear;
-    const palette = ['#6c8ef5','#a78bfa','#34d399','#fbbf24','#f87171','#60a5fa','#f472b6','#4ade80','#fb923c','#c084fc'];
+    const palette = ['#6366f1','#a78bfa','#22d3ee','#fbbf24','#fb7185','#60a5fa','#f472b6','#34d399','#fb923c','#c084fc'];
     const chart = new Chart(ctx, {
       type: 'doughnut',
       data: {
@@ -299,12 +299,16 @@ const yearReviewModule = {
         datasets: [{
           data: categories.map(c => c.total),
           backgroundColor: categories.map((_, i) => palette[i % palette.length]),
-          borderWidth: 0
+          borderWidth: 0,
+          borderRadius: 4,
+          spacing: 2,
+          hoverOffset: 6
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        cutout: '68%',
         onClick: (evt, els) => {
           if (!els.length) return;
           const c = categories[els[0].index];

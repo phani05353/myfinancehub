@@ -177,7 +177,7 @@ const askModule = {
     const canvas = document.getElementById('ask-chart');
     if (!canvas) return;
 
-    const palette = ['#34d399','#a78bfa','#2dd4bf','#fbbf24','#f87171','#60a5fa','#f472b6','#4ade80','#fb923c','#c084fc'];
+    const palette = ['#6366f1','#a78bfa','#22d3ee','#fbbf24','#fb7185','#60a5fa','#f472b6','#34d399','#fb923c','#c084fc'];
     const isMoney = this.looksLikeMoney(valueCol);
     const fmtTick = v => (isMoney ? '$' + v.toLocaleString() : v.toLocaleString());
     const fmtVal  = v => (isMoney ? fmtCur(v) : v.toLocaleString('en-US'));
@@ -189,8 +189,8 @@ const askModule = {
         datasets: [{
           label: valueCol,
           data: values,
-          backgroundColor: isTimeSeries ? 'rgba(52,211,153,0.15)' : values.map((_, i) => palette[i % palette.length]),
-          borderColor: '#34d399',
+          backgroundColor: isTimeSeries ? 'rgba(99,102,241,0.15)' : values.map((_, i) => palette[i % palette.length]),
+          borderColor: '#6366f1',
           borderWidth: 2,
           borderRadius: isTimeSeries ? 0 : 4,
           fill: isTimeSeries,
@@ -207,8 +207,8 @@ const askModule = {
           tooltip: { callbacks: { label: ctx => ` ${fmtVal(ctx.raw)}` } }
         },
         scales: {
-          x: { ticks: { color: '#8892a4', maxTicksLimit: 16 }, grid: { color: '#2e3350' } },
-          y: { beginAtZero: true, ticks: { color: '#8892a4', callback: fmtTick }, grid: { color: '#2e3350' } }
+          x: { ticks: { color: '#8892a4', maxTicksLimit: 16 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { beginAtZero: true, ticks: { color: '#8892a4', callback: fmtTick }, grid: { color: 'rgba(255,255,255,0.05)' } }
         }
       }
     });

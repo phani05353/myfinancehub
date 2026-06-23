@@ -5,6 +5,44 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── Modern Chart.js defaults (applied once, app-wide) ───────────────────────
+// Clean, premium look: no vertical chartjunk, faint horizontal grid, no axis
+// borders, soft rounded tooltips with point markers, circle legend keys,
+// rounded bars, smooth lines, points hidden until hover.
+(function modernizeCharts() {
+  if (typeof Chart === 'undefined') return;
+  const GRID  = 'rgba(255,255,255,0.05)';
+  const MUTED = 'rgba(147,152,163,0.9)';
+  Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
+  Chart.defaults.font.size = 11;
+  Chart.defaults.color = MUTED;
+  Chart.defaults.borderColor = GRID;
+  Chart.defaults.maintainAspectRatio = false;
+
+  Object.assign(Chart.defaults.plugins.legend.labels, {
+    usePointStyle: true, pointStyle: 'circle', boxWidth: 7, boxHeight: 7, padding: 14
+  });
+  Object.assign(Chart.defaults.plugins.tooltip, {
+    backgroundColor: 'rgba(18,21,29,0.96)', borderColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1, cornerRadius: 10, padding: 10, boxPadding: 6, usePointStyle: true,
+    titleColor: '#f3f5f7', bodyColor: '#cbd0d9',
+    titleFont: { weight: '700', size: 12 }, bodyFont: { size: 12 }
+  });
+  Object.assign(Chart.defaults.elements.bar,   { borderRadius: 6, borderSkipped: false });
+  Object.assign(Chart.defaults.elements.line,  { tension: 0.4, borderWidth: 2 });
+  Object.assign(Chart.defaults.elements.point, { radius: 0, hoverRadius: 5, hitRadius: 12 });
+
+  // No axis borders / inset ticks on any scale (generic scale defaults — the
+  // per-type scales.{category,linear} have no own grid/border objects in v4,
+  // so mutating them directly throws; assign fresh objects below instead).
+  Chart.defaults.scale.border.display = false;
+  Chart.defaults.scale.grid.drawTicks = false;
+  Chart.defaults.scale.ticks.padding = 8;
+  // Category axis (x on most charts) = no gridlines; linear axis = faint grid.
+  Chart.defaults.scales.category.grid = { display: false };
+  Chart.defaults.scales.linear.grid = { color: GRID };
+})();
+
 // ── Web Push subscribe / unsubscribe helpers ────────────────────────────────
 function urlBase64ToUint8Array(base64) {
   const pad = '='.repeat((4 - base64.length % 4) % 4);
@@ -154,7 +192,7 @@ async function showPayeeTrend(payee, defaultMonths = 6) {
       monthList.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     }
 
-    const colors = ['#94a3b8','#a78bfa','#34d399','#fbbf24','#f87171','#60a5fa','#f472b6','#fb923c','#22d3ee','#c084fc','#4ade80','#e879f9'];
+    const colors = ['#94a3b8','#818cf8','#a78bfa','#22d3ee','#fbbf24','#fb7185','#60a5fa','#f472b6','#34d399','#fb923c','#c084fc','#e879f9'];
     const datasets = monthList.map((m, idx) => {
       const isCurrent = idx === monthList.length - 1;
       const dayData = byMonth[m] || {};
@@ -167,7 +205,7 @@ async function showPayeeTrend(payee, defaultMonths = 6) {
         cumulative.push(running);
       }
       while (cumulative.length < 31) cumulative.push(null);
-      const color = isCurrent ? 'rgba(52,211,153,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
+      const color = isCurrent ? 'rgba(99,102,241,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
       return {
         label: new Date(yr, mo - 1, 1).toLocaleString('default', { month: 'short', year: '2-digit' }),
         data: cumulative,
@@ -211,13 +249,13 @@ async function showPayeeTrend(payee, defaultMonths = 6) {
         scales: {
           x: {
             ticks: { color: '#8892a4', maxTicksLimit: 10 },
-            grid: { color: '#2e3350' },
+            grid: { color: 'rgba(255,255,255,0.05)' },
             title: { display: true, text: 'Day of month', color: '#8892a4', font: { size: 11 } }
           },
           y: {
             beginAtZero: true,
             ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() },
-            grid: { color: '#2e3350' }
+            grid: { color: 'rgba(255,255,255,0.05)' }
           }
         }
       }
@@ -1040,7 +1078,7 @@ const dashboardModule = {
       for (const key of Object.keys(BUDGET_ICONS)) {
         if (lower.includes(key)) return BUDGET_ICONS[key];
       }
-      return { emoji: (name || '?').trim().charAt(0).toUpperCase(), bg: '#34d399' };
+      return { emoji: (name || '?').trim().charAt(0).toUpperCase(), bg: '#6366f1' };
     };
     const budgetSection = budgetStatus.length === 0 ? '' : (() => {
       const sorted = [...budgetStatus].sort((a, b) => (b.spent / b.budget) - (a.spent / a.budget));
@@ -1435,29 +1473,50 @@ const dashboardModule = {
 
     view.innerHTML = `
     <div class="dash-enter">
-      <!-- Greeting bar -->
-      <div class="dash-greeting">
-        <div>
-          <div class="dash-greeting-text">${greeting}${(me?.display_name || me?.username) ? ', ' + escHtml(me.display_name || me.username) : ''} <span class="wave">👋</span></div>
-          <div class="dash-greeting-sub">${dateLabel}, ${today.getFullYear()}</div>
+      <!-- Hero summary band -->
+      <div class="dash-hero">
+        <div class="dash-hero-blob dash-hero-blob--1"></div>
+        <div class="dash-hero-blob dash-hero-blob--2"></div>
+        <div class="dash-hero-lead">
+          <div class="dash-hero-greeting">${greeting}${(me?.display_name || me?.username) ? ', ' + escHtml(me.display_name || me.username) : ''} <span class="wave">👋</span><span class="dash-hero-dot">•</span> ${dateLabel}</div>
+          <div class="dash-hero-label">Net ${netLabel} · ${monthName}</div>
+          <div class="dash-hero-amount dash-hero-amount--${netClass}">${netPositive ? '+' : ''}${fmtCur(summary.net)}</div>
+          <div class="dash-hero-sub">Income ${fmtCur(summary.income)} &nbsp;·&nbsp; Spent ${fmtCur(Math.abs(summary.expenses))}</div>
         </div>
-        <div class="dash-month-ring" title="Day ${dayOfMonth} of ${daysInMonth}">
-          <svg viewBox="0 0 48 48" width="48" height="48">
-            <circle cx="24" cy="24" r="${ringRadius}" fill="none" stroke="var(--surface2)" stroke-width="4"/>
-            <circle cx="24" cy="24" r="${ringRadius}" fill="none" stroke="url(#ringGrad)" stroke-width="4"
-              stroke-linecap="round"
-              stroke-dasharray="${ringCirc.toFixed(2)}"
-              stroke-dashoffset="${ringOffset.toFixed(2)}"
-              transform="rotate(-90 24 24)"/>
-            <defs>
-              <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#34d399"/>
-                <stop offset="100%" stop-color="#2dd4bf"/>
-              </linearGradient>
-            </defs>
-            <text x="24" y="28" text-anchor="middle" style="fill:var(--text);font-size:12px;font-weight:700;font-family:system-ui">${dayOfMonth}</text>
-          </svg>
-          <div class="dash-month-ring-sub">of ${daysInMonth}</div>
+        <div class="dash-hero-right">
+          <div class="dash-hero-stat">
+            <div class="dash-hero-stat-label">Income</div>
+            <div class="dash-hero-stat-val income-text">${fmtCur(summary.income)}</div>
+          </div>
+          <div class="dash-hero-divider"></div>
+          <div class="dash-hero-stat">
+            <div class="dash-hero-stat-label">Spent</div>
+            <div class="dash-hero-stat-val expense-text">${fmtCur(Math.abs(summary.expenses))}</div>
+          </div>
+          <div class="dash-hero-divider"></div>
+          <div class="dash-hero-stat">
+            <div class="dash-hero-stat-label">Savings</div>
+            <div class="dash-hero-stat-val" style="color:${savingsColor}">${savingsRate.toFixed(0)}%</div>
+          </div>
+          <div class="dash-hero-divider"></div>
+          <div class="dash-month-ring" title="Day ${dayOfMonth} of ${daysInMonth}">
+            <svg viewBox="0 0 48 48" width="48" height="48">
+              <circle cx="24" cy="24" r="${ringRadius}" fill="none" stroke="var(--surface2)" stroke-width="4"/>
+              <circle cx="24" cy="24" r="${ringRadius}" fill="none" stroke="url(#ringGrad)" stroke-width="4"
+                stroke-linecap="round"
+                stroke-dasharray="${ringCirc.toFixed(2)}"
+                stroke-dashoffset="${ringOffset.toFixed(2)}"
+                transform="rotate(-90 24 24)"/>
+              <defs>
+                <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#6366f1"/>
+                  <stop offset="100%" stop-color="#818cf8"/>
+                </linearGradient>
+              </defs>
+              <text x="24" y="28" text-anchor="middle" style="fill:var(--text);font-size:12px;font-weight:700;font-family:system-ui">${dayOfMonth}</text>
+            </svg>
+            <div class="dash-month-ring-sub">of ${daysInMonth}</div>
+          </div>
         </div>
       </div>
 
@@ -1469,11 +1528,13 @@ const dashboardModule = {
 
           ${priceAlertCard}
 
-          <!-- Spending chart -->
+          <div class="dash-section"><span class="dash-section-label">This month</span><span class="dash-section-rule"></span></div>
+
+          <!-- Spending pace chart -->
           <div class="card dash-spend-card">
             <div class="dash-spend-hdr">
               <div>
-                <div class="dash-spend-label">Spent This Month</div>
+                <div class="dash-spend-label">Spending pace</div>
                 <div class="dash-spend-amount">${fmtCur(Math.abs(summary.expenses))}</div>
                 <div class="dash-spend-sub">
                   <span style="color:var(--accent)">•</span> ${monthName}
@@ -1482,15 +1543,7 @@ const dashboardModule = {
               </div>
               <div class="dash-spend-right-stats">
                 <div class="dash-mini-stat">
-                  <div class="dash-mini-stat-l">Income</div>
-                  <div class="dash-mini-stat-v income-text">${fmtCur(summary.income)}</div>
-                </div>
-                <div class="dash-mini-stat">
-                  <div class="dash-mini-stat-l">Net</div>
-                  <div class="dash-mini-stat-v ${netPositive ? 'income-text' : 'expense-text'}">${netPositive ? '+' : ''}${fmtCur(summary.net)}</div>
-                </div>
-                <div class="dash-mini-stat">
-                  <div class="dash-mini-stat-l">Subs</div>
+                  <div class="dash-mini-stat-l">Subscriptions</div>
                   <div class="dash-mini-stat-v">${fmtCur(subTotal)}<span style="font-size:10px;color:var(--text-muted)">/mo</span></div>
                 </div>
               </div>
@@ -1501,6 +1554,8 @@ const dashboardModule = {
           </div>
 
           ${insightsCard}
+
+          <div class="dash-section"><span class="dash-section-label">Activity</span><span class="dash-section-rule"></span></div>
 
           <!-- Latest Tx + Upcoming Bills -->
           <div class="dash-duo-grid">
@@ -1549,6 +1604,8 @@ const dashboardModule = {
             </div>
             <div class="sankey-wrap">${sankeyMobileHtml}</div>
           </div>
+
+          <div class="dash-section"><span class="dash-section-label">Planning</span><span class="dash-section-rule"></span></div>
 
           <!-- Budget -->
           ${budgetSection}
@@ -1642,6 +1699,7 @@ const dashboardModule = {
             backgroundColor: donutSegments.map(s => s.color),
             borderColor: 'rgba(0,0,0,0)',
             borderWidth: 0,
+            borderRadius: 4,
             hoverOffset: 6,
             spacing: 2
           }]
@@ -1679,14 +1737,14 @@ const dashboardModule = {
         {
           label: `${monthName} (actual)`,
           data: cumulData,
-          borderColor: 'rgba(52,211,153,0.95)',
+          borderColor: 'rgba(99,102,241,0.95)',
           backgroundColor: ctx => {
             const { chart } = ctx;
             const { ctx: c, chartArea } = chart;
-            if (!chartArea) return 'rgba(52,211,153,0.15)';
+            if (!chartArea) return 'rgba(99,102,241,0.15)';
             const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-            g.addColorStop(0, 'rgba(52,211,153,0.42)');
-            g.addColorStop(1, 'rgba(52,211,153,0.00)');
+            g.addColorStop(0, 'rgba(99,102,241,0.42)');
+            g.addColorStop(1, 'rgba(99,102,241,0.00)');
             return g;
           },
           borderWidth: 2.5,
@@ -1694,7 +1752,7 @@ const dashboardModule = {
           fill: true,
           pointRadius: 0,
           pointHoverRadius: 5,
-          pointHoverBackgroundColor: '#34d399'
+          pointHoverBackgroundColor: '#6366f1'
         }
       ];
       if (prevPaceLine) {
