@@ -140,7 +140,7 @@ const chartsModule = {
             tooltip: { callbacks: { label: ctx => ' $' + ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 }) } }
           },
           scales: {
-            x: { ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() }, grid: { color: '#2e3350' } },
+            x: { ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.05)' } },
             y: { ticks: { color: '#e2e8f0', font: { size: 11 } }, grid: { display: false } }
           }
         }
@@ -163,11 +163,15 @@ const chartsModule = {
           datasets: [{
             data: byCategory.map(c => c.total),
             backgroundColor: byCategory.map((_, i) => palette[i % palette.length]),
-            borderWidth: 0
+            borderWidth: 0,
+            borderRadius: 4,
+            spacing: 2,
+            hoverOffset: 6
           }]
         },
         options: {
           responsive: true, maintainAspectRatio: false,
+          cutout: '68%',
           onClick: (evt, els) => {
             if (!els.length) return;
             const c = byCategory[els[0].index];
@@ -441,13 +445,13 @@ const chartsModule = {
         scales: {
           x: {
             ticks: { color: '#8892a4', maxTicksLimit: 10 },
-            grid: { color: '#2e3350' },
+            grid: { color: 'rgba(255,255,255,0.05)' },
             title: { display: true, text: 'Day of month', color: '#8892a4', font: { size: 11 } }
           },
           y: {
             beginAtZero: true,
             ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() },
-            grid: { color: '#2e3350' }
+            grid: { color: 'rgba(255,255,255,0.05)' }
           }
         }
       }
@@ -490,8 +494,8 @@ const chartsModule = {
           tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: $${ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 })}` } }
         },
         scales: {
-          x: { ticks: { color: '#8892a4' }, grid: { color: '#2e3350' } },
-          y: { ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() }, grid: { color: '#2e3350' } }
+          x: { ticks: { color: '#8892a4' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.05)' } }
         }
       }
     });

@@ -207,8 +207,8 @@ const askModule = {
           tooltip: { callbacks: { label: ctx => ` ${fmtVal(ctx.raw)}` } }
         },
         scales: {
-          x: { ticks: { color: '#8892a4', maxTicksLimit: 16 }, grid: { color: '#2e3350' } },
-          y: { beginAtZero: true, ticks: { color: '#8892a4', callback: fmtTick }, grid: { color: '#2e3350' } }
+          x: { ticks: { color: '#8892a4', maxTicksLimit: 16 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { beginAtZero: true, ticks: { color: '#8892a4', callback: fmtTick }, grid: { color: 'rgba(255,255,255,0.05)' } }
         }
       }
     });

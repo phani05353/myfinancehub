@@ -5,6 +5,44 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── Modern Chart.js defaults (applied once, app-wide) ───────────────────────
+// Clean, premium look: no vertical chartjunk, faint horizontal grid, no axis
+// borders, soft rounded tooltips with point markers, circle legend keys,
+// rounded bars, smooth lines, points hidden until hover.
+(function modernizeCharts() {
+  if (typeof Chart === 'undefined') return;
+  const GRID  = 'rgba(255,255,255,0.05)';
+  const MUTED = 'rgba(147,152,163,0.9)';
+  Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
+  Chart.defaults.font.size = 11;
+  Chart.defaults.color = MUTED;
+  Chart.defaults.borderColor = GRID;
+  Chart.defaults.maintainAspectRatio = false;
+
+  Object.assign(Chart.defaults.plugins.legend.labels, {
+    usePointStyle: true, pointStyle: 'circle', boxWidth: 7, boxHeight: 7, padding: 14
+  });
+  Object.assign(Chart.defaults.plugins.tooltip, {
+    backgroundColor: 'rgba(18,21,29,0.96)', borderColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1, cornerRadius: 10, padding: 10, boxPadding: 6, usePointStyle: true,
+    titleColor: '#f3f5f7', bodyColor: '#cbd0d9',
+    titleFont: { weight: '700', size: 12 }, bodyFont: { size: 12 }
+  });
+  Object.assign(Chart.defaults.elements.bar,   { borderRadius: 6, borderSkipped: false });
+  Object.assign(Chart.defaults.elements.line,  { tension: 0.4, borderWidth: 2 });
+  Object.assign(Chart.defaults.elements.point, { radius: 0, hoverRadius: 5, hitRadius: 12 });
+
+  // No axis borders / inset ticks on any scale (generic scale defaults — the
+  // per-type scales.{category,linear} have no own grid/border objects in v4,
+  // so mutating them directly throws; assign fresh objects below instead).
+  Chart.defaults.scale.border.display = false;
+  Chart.defaults.scale.grid.drawTicks = false;
+  Chart.defaults.scale.ticks.padding = 8;
+  // Category axis (x on most charts) = no gridlines; linear axis = faint grid.
+  Chart.defaults.scales.category.grid = { display: false };
+  Chart.defaults.scales.linear.grid = { color: GRID };
+})();
+
 // ── Web Push subscribe / unsubscribe helpers ────────────────────────────────
 function urlBase64ToUint8Array(base64) {
   const pad = '='.repeat((4 - base64.length % 4) % 4);
@@ -211,13 +249,13 @@ async function showPayeeTrend(payee, defaultMonths = 6) {
         scales: {
           x: {
             ticks: { color: '#8892a4', maxTicksLimit: 10 },
-            grid: { color: '#2e3350' },
+            grid: { color: 'rgba(255,255,255,0.05)' },
             title: { display: true, text: 'Day of month', color: '#8892a4', font: { size: 11 } }
           },
           y: {
             beginAtZero: true,
             ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() },
-            grid: { color: '#2e3350' }
+            grid: { color: 'rgba(255,255,255,0.05)' }
           }
         }
       }
@@ -1661,6 +1699,7 @@ const dashboardModule = {
             backgroundColor: donutSegments.map(s => s.color),
             borderColor: 'rgba(0,0,0,0)',
             borderWidth: 0,
+            borderRadius: 4,
             hoverOffset: 6,
             spacing: 2
           }]
