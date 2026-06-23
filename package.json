@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Self-hosted personal finance tracker",
   "main": "server.js",
-  "packageManager": "pnpm@11.6.0",
+  "packageManager": "pnpm@11.9.0",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
