@@ -440,7 +440,7 @@ const transactionsModule = {
 };
 
 // Payee logo helpers
-const LOGO_COLORS = ['#6c8ef5','#a78bfa','#34d399','#fbbf24','#f87171','#60a5fa','#f472b6','#fb923c','#4ade80','#c084fc'];
+const LOGO_COLORS = ['#6366f1','#a78bfa','#22d3ee','#fbbf24','#fb7185','#60a5fa','#f472b6','#fb923c','#34d399','#c084fc'];
 
 // Curated payee → domain map. `null` means skip the favicon lookup and use the initial badge.
 const PAYEE_ALIASES = {

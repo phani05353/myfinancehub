@@ -291,7 +291,7 @@ const yearReviewModule = {
     const ctx = document.getElementById('yr-cat-chart');
     if (!ctx || !categories.length) return;
     const year = this.currentYear;
-    const palette = ['#6c8ef5','#a78bfa','#34d399','#fbbf24','#f87171','#60a5fa','#f472b6','#4ade80','#fb923c','#c084fc'];
+    const palette = ['#6366f1','#a78bfa','#22d3ee','#fbbf24','#fb7185','#60a5fa','#f472b6','#34d399','#fb923c','#c084fc'];
     const chart = new Chart(ctx, {
       type: 'doughnut',
       data: {

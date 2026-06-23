@@ -155,7 +155,7 @@ const chartsModule = {
       const existing = this.charts.find(c => c.canvas.id === 'category-chart');
       if (existing) { existing.destroy(); this.charts = this.charts.filter(c => c !== existing); }
 
-      const palette = ['#6c8ef5','#a78bfa','#34d399','#fbbf24','#f87171','#60a5fa','#f472b6','#4ade80','#fb923c','#c084fc'];
+      const palette = ['#6366f1','#a78bfa','#22d3ee','#fbbf24','#fb7185','#60a5fa','#f472b6','#34d399','#fb923c','#c084fc'];
       const chart = new Chart(catCtx, {
         type: 'doughnut',
         data: {
@@ -380,7 +380,7 @@ const chartsModule = {
       monthList.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     }
 
-    const colors = ['#94a3b8', '#a78bfa', '#34d399', '#fbbf24', '#f87171', '#60a5fa', '#f472b6', '#fb923c', '#22d3ee', '#c084fc', '#4ade80', '#e879f9'];
+    const colors = ['#94a3b8', '#818cf8', '#a78bfa', '#22d3ee', '#fbbf24', '#fb7185', '#60a5fa', '#f472b6', '#34d399', '#fb923c', '#c084fc', '#e879f9'];
     const datasets = monthList.map((m, idx) => {
       const isCurrent = idx === monthList.length - 1;
       const dayData = byMonth[m] || {};
@@ -395,7 +395,7 @@ const chartsModule = {
       // pad to 31 with nulls so the X-axis is consistent
       while (cumulative.length < 31) cumulative.push(null);
 
-      const color = isCurrent ? 'rgba(52,211,153,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
+      const color = isCurrent ? 'rgba(99,102,241,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
       return {
         label: new Date(yr, mo - 1, 1).toLocaleString('default', { month: 'short', year: '2-digit' }),
         data: cumulative,

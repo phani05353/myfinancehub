@@ -200,7 +200,7 @@ const importModule = {
     const fmt  = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
 
     // Payee initials avatar (no external img for print)
-    const COLORS = ['#6c8ef5','#a78bfa','#34d399','#fbbf24','#f87171','#60a5fa','#f472b6','#fb923c'];
+    const COLORS = ['#6366f1','#a78bfa','#22d3ee','#fbbf24','#fb7185','#60a5fa','#f472b6','#fb923c'];
     const avatar = (payee, amount) => {
       if (amount > 0) return `<span class="av" style="background:#34d399">$</span>`;
       let h = 0;

@@ -154,7 +154,7 @@ async function showPayeeTrend(payee, defaultMonths = 6) {
       monthList.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     }
 
-    const colors = ['#94a3b8','#a78bfa','#34d399','#fbbf24','#f87171','#60a5fa','#f472b6','#fb923c','#22d3ee','#c084fc','#4ade80','#e879f9'];
+    const colors = ['#94a3b8','#818cf8','#a78bfa','#22d3ee','#fbbf24','#fb7185','#60a5fa','#f472b6','#34d399','#fb923c','#c084fc','#e879f9'];
     const datasets = monthList.map((m, idx) => {
       const isCurrent = idx === monthList.length - 1;
       const dayData = byMonth[m] || {};
@@ -167,7 +167,7 @@ async function showPayeeTrend(payee, defaultMonths = 6) {
         cumulative.push(running);
       }
       while (cumulative.length < 31) cumulative.push(null);
-      const color = isCurrent ? 'rgba(52,211,153,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
+      const color = isCurrent ? 'rgba(99,102,241,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
       return {
         label: new Date(yr, mo - 1, 1).toLocaleString('default', { month: 'short', year: '2-digit' }),
         data: cumulative,
@@ -1040,7 +1040,7 @@ const dashboardModule = {
       for (const key of Object.keys(BUDGET_ICONS)) {
         if (lower.includes(key)) return BUDGET_ICONS[key];
       }
-      return { emoji: (name || '?').trim().charAt(0).toUpperCase(), bg: '#34d399' };
+      return { emoji: (name || '?').trim().charAt(0).toUpperCase(), bg: '#6366f1' };
     };
     const budgetSection = budgetStatus.length === 0 ? '' : (() => {
       const sorted = [...budgetStatus].sort((a, b) => (b.spent / b.budget) - (a.spent / a.budget));
@@ -1451,8 +1451,8 @@ const dashboardModule = {
               transform="rotate(-90 24 24)"/>
             <defs>
               <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#34d399"/>
-                <stop offset="100%" stop-color="#2dd4bf"/>
+                <stop offset="0%" stop-color="#6366f1"/>
+                <stop offset="100%" stop-color="#818cf8"/>
               </linearGradient>
             </defs>
             <text x="24" y="28" text-anchor="middle" style="fill:var(--text);font-size:12px;font-weight:700;font-family:system-ui">${dayOfMonth}</text>
@@ -1679,14 +1679,14 @@ const dashboardModule = {
         {
           label: `${monthName} (actual)`,
           data: cumulData,
-          borderColor: 'rgba(52,211,153,0.95)',
+          borderColor: 'rgba(99,102,241,0.95)',
           backgroundColor: ctx => {
             const { chart } = ctx;
             const { ctx: c, chartArea } = chart;
-            if (!chartArea) return 'rgba(52,211,153,0.15)';
+            if (!chartArea) return 'rgba(99,102,241,0.15)';
             const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-            g.addColorStop(0, 'rgba(52,211,153,0.42)');
-            g.addColorStop(1, 'rgba(52,211,153,0.00)');
+            g.addColorStop(0, 'rgba(99,102,241,0.42)');
+            g.addColorStop(1, 'rgba(99,102,241,0.00)');
             return g;
           },
           borderWidth: 2.5,
@@ -1694,7 +1694,7 @@ const dashboardModule = {
           fill: true,
           pointRadius: 0,
           pointHoverRadius: 5,
-          pointHoverBackgroundColor: '#34d399'
+          pointHoverBackgroundColor: '#6366f1'
         }
       ];
       if (prevPaceLine) {
