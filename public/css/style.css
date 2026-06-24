@@ -1211,8 +1211,9 @@ tr.due-soon td:first-child { color: var(--warning); }
 }
 .list-row:last-child { margin-bottom: 0; }
 .list-row:hover { border-color: var(--border-strong); }
-.list-row.overdue { border-color: rgba(255,140,107,0.42); }
-.list-row.due-soon { border-color: rgba(255,177,94,0.40); }
+/* Attention states — clear colored border + left accent (subs, bills) */
+.list-row.overdue { border-color: rgba(255,140,107,0.55); border-left: 3px solid var(--danger); }
+.list-row.due-soon { border-color: rgba(255,177,94,0.55); border-left: 3px solid var(--warning); }
 .list-row-icon {
   width: 40px;
   height: 40px;
@@ -2926,3 +2927,8 @@ tr.due-soon td:first-child { color: var(--warning); }
   }
   .cat-grid > .cat-bar-row { margin-bottom: 0; }
 }
+
+/* Budget category attention accent (scoped to .cat-grid so dashboard Top-categories is unaffected) */
+.cat-grid .cat-bar-row { border-left: 3px solid transparent; padding-left: 12px; }
+.cat-grid .cat-bar-row.over { border-left-color: var(--danger); }
+.cat-grid .cat-bar-row.warn { border-left-color: var(--warning); }

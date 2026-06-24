@@ -120,8 +120,9 @@ const budgetModule = {
     const pctLabel  = pct.toFixed(1) + '%';
 
     const catJs = escHtml(b.category).replace(/'/g, "\\'");
+    const attn = over ? ' over' : pct >= 80 ? ' warn' : '';
     return `
-      <div class="cat-bar-row">
+      <div class="cat-bar-row${attn}">
         <div class="cat-bar-head">
           <span style="cursor:pointer" onclick="budgetModule.openTxModal('${catJs}','${this.currentMonth}')">${escHtml(b.category)} →</span>
           <div style="display:flex;align-items:center;gap:8px">
