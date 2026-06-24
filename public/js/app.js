@@ -23,7 +23,7 @@ function escHtml(s) {
     usePointStyle: true, pointStyle: 'circle', boxWidth: 7, boxHeight: 7, padding: 14
   });
   Object.assign(Chart.defaults.plugins.tooltip, {
-    backgroundColor: 'rgba(34,31,28,0.96)', borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(18,18,22,0.96)', borderColor: 'rgba(255,255,255,0.10)',
     borderWidth: 1, cornerRadius: 10, padding: 10, boxPadding: 6, usePointStyle: true,
     titleColor: '#f4efe7', bodyColor: '#d8cfc4',
     titleFont: { weight: '700', size: 12 }, bodyFont: { size: 12 }
