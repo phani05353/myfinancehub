@@ -5,12 +5,11 @@
 const savingsModule = {
   async init() {
     document.getElementById('view').innerHTML = `
-      <div class="budget-title-row" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+      <div class="dash-card-head" style="margin-bottom:20px;flex-wrap:wrap;gap:12px">
         <h1 style="margin-bottom:0;flex:1">🎯 Savings Goals</h1>
-        <div class="budget-toolbar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="savingsModule.openAddModal()">+ New Goal</button>
-        </div>
+        <button class="btn btn-primary" onclick="savingsModule.openAddModal()">+ New Goal</button>
       </div>
+      <div id="savings-summary"></div>
       <div id="savings-grid"></div>
     `;
     await this.load();
@@ -45,7 +44,10 @@ const savingsModule = {
   },
 
   renderCards(goals) {
-    const grid = document.getElementById('savings-grid');
+    const grid    = document.getElementById('savings-grid');
+    const summary = document.getElementById('savings-summary');
+    if (summary) summary.innerHTML = '';
+
     if (!goals || goals.length === 0) {
       grid.innerHTML = `
         <div class="empty-state">
@@ -57,47 +59,82 @@ const savingsModule = {
         </div>`;
       return;
     }
-    grid.innerHTML = `<div class="budget-cards">${goals.map(g => this.cardHtml(g)).join('')}</div>`;
+
+    if (summary) summary.innerHTML = this.summaryHtml(goals);
+    grid.innerHTML = `<div class="card" style="padding:18px 20px">${goals.map(g => this.barHtml(g)).join('')}</div>`;
   },
 
-  cardHtml(g) {
-    const pct      = g.target_amount > 0 ? (g.saved_amount / g.target_amount) * 100 : 0;
-    const barPct   = Math.min(100, Math.max(0, pct));
-    const reached  = g.saved_amount >= g.target_amount;
+  // KPI summary across all goals — Maple kpi-card row.
+  summaryHtml(goals) {
+    const active     = goals.filter(g => g.active);
+    const totalSaved = goals.reduce((s, g) => s + Number(g.saved_amount || 0), 0);
+    const totalTarget = goals.reduce((s, g) => s + Number(g.target_amount || 0), 0);
+    const reachedCount = goals.filter(g => g.saved_amount >= g.target_amount).length;
+    const pct = totalTarget > 0 ? (totalSaved / totalTarget) * 100 : 0;
+
+    return `
+      <div class="kpi-grid" style="margin-bottom:20px">
+        <div class="kpi-card kpi-card--feature">
+          <div class="kpi-label">Total saved</div>
+          <div class="kpi-value">${fmtCur(totalSaved)}</div>
+          <span class="kpi-badge kpi-badge--muted">${pct.toFixed(0)}% of ${fmtCur(totalTarget)}</span>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Active goals</div>
+          <div class="kpi-value">${active.length}</div>
+          <span class="kpi-badge kpi-badge--muted">${goals.length} total</span>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Goals reached</div>
+          <div class="kpi-value">${reachedCount}</div>
+          <span class="kpi-badge kpi-badge--muted">${goals.length ? Math.round((reachedCount / goals.length) * 100) : 0}% complete</span>
+        </div>
+      </div>`;
+  },
+
+  // One goal rendered as a Maple cat-bar progress row.
+  barHtml(g) {
+    const pct       = g.target_amount > 0 ? (g.saved_amount / g.target_amount) * 100 : 0;
+    const barPct    = Math.min(100, Math.max(0, pct));
+    const reached   = g.saved_amount >= g.target_amount;
     const remaining = Math.max(0, g.target_amount - g.saved_amount);
-    const barColor = reached ? 'var(--success)' : pct >= 75 ? 'var(--accent)' : pct >= 40 ? 'var(--accent2)' : 'var(--warning)';
-    const pace     = this.pace(g);
-    const inactive = !g.active;
+    const barColor  = reached ? 'var(--success)' : pct >= 75 ? 'var(--accent)' : pct >= 40 ? 'var(--accent2)' : 'var(--warning)';
+    const pace      = this.pace(g);
+    const inactive  = !g.active;
 
     const paceLine = pace
       ? `<span style="color:${pace.tone === 'good' ? 'var(--success)' : pace.tone === 'warn' ? 'var(--warning)' : 'var(--text-muted)'};font-weight:600">${escHtml(pace.label)}</span>`
       : (reached ? '<span style="color:var(--success);font-weight:600">🎉 Goal reached</span>' : `<span style="color:var(--text-muted)">${fmtCur(remaining)} to go</span>`);
 
+    const badgeClass = reached ? 'badge-green' : pct >= 75 ? 'badge-blue' : 'badge-yellow';
     const nameJs = escHtml(g.name).replace(/'/g, "\\'");
     return `
-      <div class="budget-card${inactive ? '' : ''}" style="${inactive ? 'opacity:.6' : ''}">
-        <div class="budget-card-header">
-          <span class="budget-cat">${reached ? '🎉 ' : ''}${escHtml(g.name)}${inactive ? ' <span class="badge">archived</span>' : ''}</span>
-          <div style="display:flex;gap:6px">
+      <div class="cat-bar-row" style="${inactive ? 'opacity:.6;' : ''}">
+        <div class="cat-bar-head" style="align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="display:flex;align-items:center;gap:8px;min-width:0">
+            ${reached ? '🎉 ' : ''}${escHtml(g.name)}
+            ${inactive ? '<span class="badge badge-gray">archived</span>' : ''}
+            <span class="badge ${badgeClass}">${pct.toFixed(0)}%</span>
+          </span>
+          <span style="display:flex;gap:6px;flex-shrink:0">
             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();savingsModule.openContributeModal(${g.id},'${nameJs}')">+ Add</button>
             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();savingsModule.openEditModal(${g.id})">Edit</button>
             <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();savingsModule.deleteGoal(${g.id})">✕</button>
-          </div>
+          </span>
         </div>
 
-        <div class="budget-card-body" onclick="savingsModule.openContributeModal(${g.id},'${nameJs}')">
-          <div class="budget-amounts">
-            <span style="font-size:22px;font-weight:700;color:${barColor}">${fmtCur(g.saved_amount)}</span>
-            <span style="color:var(--text-muted);font-size:13px">of ${fmtCur(g.target_amount)}</span>
+        <div onclick="savingsModule.openContributeModal(${g.id},'${nameJs}')" style="cursor:pointer">
+          <div class="cat-bar-head" style="margin-bottom:7px">
+            <span style="font-weight:700;color:${barColor}">${fmtCur(g.saved_amount)}</span>
+            <span class="cat-bar-amt">of ${fmtCur(g.target_amount)}</span>
           </div>
 
-          <div class="budget-bar-track" style="margin:10px 0 6px">
-            <div class="budget-bar-fill" style="width:${barPct.toFixed(1)}%;background:${barColor}"></div>
+          <div class="cat-bar-track">
+            <div class="cat-bar-fill" style="width:${barPct.toFixed(1)}%;background:${barColor}"></div>
           </div>
 
-          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-top:7px">
             ${paceLine}
-            <span class="budget-pct-badge" style="background:${barColor}20;color:${barColor}">${pct.toFixed(0)}%</span>
           </div>
           ${g.notes ? `<div style="margin-top:8px;font-size:12px;color:var(--text-muted);white-space:pre-wrap">${escHtml(g.notes)}</div>` : ''}
         </div>
