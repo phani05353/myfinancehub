@@ -140,8 +140,8 @@ const chartsModule = {
             tooltip: { callbacks: { label: ctx => ' $' + ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 }) } }
           },
           scales: {
-            x: { ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.05)' } },
-            y: { ticks: { color: '#e2e8f0', font: { size: 11 } }, grid: { display: false } }
+            x: { ticks: { color: '#9b938a', callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: '#f4efe7', font: { size: 11 } }, grid: { display: false } }
           }
         }
       });
@@ -155,7 +155,7 @@ const chartsModule = {
       const existing = this.charts.find(c => c.canvas.id === 'category-chart');
       if (existing) { existing.destroy(); this.charts = this.charts.filter(c => c !== existing); }
 
-      const palette = ['#6366f1','#a78bfa','#22d3ee','#fbbf24','#fb7185','#60a5fa','#f472b6','#34d399','#fb923c','#c084fc'];
+      const palette = ['#5e8bff','#9b7bff','#22d3ee','#fbbf24','#ff8c6b','#60a5fa','#f472b6','#57cf8e','#fb923c','#c084fc'];
       const chart = new Chart(catCtx, {
         type: 'doughnut',
         data: {
@@ -182,7 +182,7 @@ const chartsModule = {
             });
           },
           plugins: {
-            legend: { position: 'right', labels: { color: '#8892a4', font: { size: 11 }, padding: 12 } },
+            legend: { position: 'right', labels: { color: '#9b938a', font: { size: 11 }, padding: 12 } },
             tooltip: { callbacks: { label: ctx => ` ${ctx.label}: $${ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 })}` } }
           }
         }
@@ -247,7 +247,7 @@ const chartsModule = {
     const thresholds = [pct(0.4), pct(0.6), pct(0.75), pct(0.9)];
 
     // Light red → dark red: more spending = darker
-    const palette = ['#fecaca', '#f87171', '#ef4444', '#dc2626', '#7f1d1d'];
+    const palette = ['#fecaca', '#ff8c6b', '#ef4444', '#dc2626', '#7f1d1d'];
     const getColor = amount => {
       if (!amount) return null;
       if (amount <= thresholds[0]) return palette[0];
@@ -384,7 +384,7 @@ const chartsModule = {
       monthList.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     }
 
-    const colors = ['#94a3b8', '#818cf8', '#a78bfa', '#22d3ee', '#fbbf24', '#fb7185', '#60a5fa', '#f472b6', '#34d399', '#fb923c', '#c084fc', '#e879f9'];
+    const colors = ['#94a3b8', '#7da0ff', '#9b7bff', '#22d3ee', '#fbbf24', '#ff8c6b', '#60a5fa', '#f472b6', '#57cf8e', '#fb923c', '#c084fc', '#e879f9'];
     const datasets = monthList.map((m, idx) => {
       const isCurrent = idx === monthList.length - 1;
       const dayData = byMonth[m] || {};
@@ -399,7 +399,7 @@ const chartsModule = {
       // pad to 31 with nulls so the X-axis is consistent
       while (cumulative.length < 31) cumulative.push(null);
 
-      const color = isCurrent ? 'rgba(99,102,241,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
+      const color = isCurrent ? 'rgba(94,139,255,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
       return {
         label: new Date(yr, mo - 1, 1).toLocaleString('default', { month: 'short', year: '2-digit' }),
         data: cumulative,
@@ -434,7 +434,7 @@ const chartsModule = {
           });
         },
         plugins: {
-          legend: { position: 'top', align: 'end', labels: { color: '#8892a4', font: { size: 11 }, boxWidth: 14, padding: 10 } },
+          legend: { position: 'top', align: 'end', labels: { color: '#9b938a', font: { size: 11 }, boxWidth: 14, padding: 10 } },
           tooltip: {
             callbacks: {
               title: ctx => `Day ${ctx[0].label}`,
@@ -444,13 +444,13 @@ const chartsModule = {
         },
         scales: {
           x: {
-            ticks: { color: '#8892a4', maxTicksLimit: 10 },
+            ticks: { color: '#9b938a', maxTicksLimit: 10 },
             grid: { color: 'rgba(255,255,255,0.05)' },
-            title: { display: true, text: 'Day of month', color: '#8892a4', font: { size: 11 } }
+            title: { display: true, text: 'Day of month', color: '#9b938a', font: { size: 11 } }
           },
           y: {
             beginAtZero: true,
-            ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() },
+            ticks: { color: '#9b938a', callback: v => '$' + v.toLocaleString() },
             grid: { color: 'rgba(255,255,255,0.05)' }
           }
         }
@@ -474,8 +474,8 @@ const chartsModule = {
       data: {
         labels: trend.map(t => t.month),
         datasets: [
-          { label: 'Income', data: trend.map(t => t.income), backgroundColor: 'rgba(52,211,153,0.6)', borderColor: '#34d399', borderWidth: 2, borderRadius: 4 },
-          { label: 'Expenses', data: trend.map(t => t.expenses), backgroundColor: 'rgba(248,113,113,0.6)', borderColor: '#f87171', borderWidth: 2, borderRadius: 4 }
+          { label: 'Income', data: trend.map(t => t.income), backgroundColor: 'rgba(52,211,153,0.6)', borderColor: '#57cf8e', borderWidth: 2, borderRadius: 4 },
+          { label: 'Expenses', data: trend.map(t => t.expenses), backgroundColor: 'rgba(248,113,113,0.6)', borderColor: '#ff8c6b', borderWidth: 2, borderRadius: 4 }
         ]
       },
       options: {
@@ -490,12 +490,12 @@ const chartsModule = {
           });
         },
         plugins: {
-          legend: { labels: { color: '#8892a4' } },
+          legend: { labels: { color: '#9b938a' } },
           tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: $${ctx.raw.toLocaleString('en-US', { minimumFractionDigits: 2 })}` } }
         },
         scales: {
-          x: { ticks: { color: '#8892a4' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-          y: { ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.05)' } }
+          x: { ticks: { color: '#9b938a' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { ticks: { color: '#9b938a', callback: v => '$' + v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.05)' } }
         }
       }
     });
