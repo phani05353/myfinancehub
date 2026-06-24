@@ -1478,50 +1478,78 @@ const dashboardModule = {
 
     view.innerHTML = `
     <div class="dash-enter">
-      <!-- Hero summary band -->
-      <div class="dash-hero">
-        <div class="dash-hero-blob dash-hero-blob--1"></div>
-        <div class="dash-hero-blob dash-hero-blob--2"></div>
-        <div class="dash-hero-lead">
-          <div class="dash-hero-greeting">${greeting}${(me?.display_name || me?.username) ? ', ' + escHtml(me.display_name || me.username) : ''} <span class="wave">👋</span><span class="dash-hero-dot">•</span> ${dateLabel}</div>
-          <div class="dash-hero-label">Net ${netLabel} · ${monthName}</div>
-          <div class="dash-hero-amount dash-hero-amount--${netClass}">${netPositive ? '+' : ''}${fmtCur(summary.net)}</div>
-          <div class="dash-hero-sub">Income ${fmtCur(summary.income)} &nbsp;·&nbsp; Spent ${fmtCur(Math.abs(summary.expenses))}</div>
+      <!-- Greeting -->
+      <div class="dash-greet">
+        <div>
+          <div class="dash-greet-hi">${greeting}${(me?.display_name || me?.username) ? ', ' + escHtml(me.display_name || me.username) : ''} <span class="wave">👋</span></div>
+          <div class="dash-greet-date">${dateLabel} · ${monthName}</div>
         </div>
-        <div class="dash-hero-right">
-          <div class="dash-hero-stat">
-            <div class="dash-hero-stat-label">Income</div>
-            <div class="dash-hero-stat-val income-text">${fmtCur(summary.income)}</div>
+        <div class="dash-month-ring" title="Day ${dayOfMonth} of ${daysInMonth}">
+          <svg viewBox="0 0 48 48" width="48" height="48">
+            <circle cx="24" cy="24" r="${ringRadius}" fill="none" stroke="var(--surface2)" stroke-width="4"/>
+            <circle cx="24" cy="24" r="${ringRadius}" fill="none" stroke="url(#ringGrad)" stroke-width="4"
+              stroke-linecap="round"
+              stroke-dasharray="${ringCirc.toFixed(2)}"
+              stroke-dashoffset="${ringOffset.toFixed(2)}"
+              transform="rotate(-90 24 24)"/>
+            <defs>
+              <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#5e8bff"/>
+                <stop offset="100%" stop-color="#7da0ff"/>
+              </linearGradient>
+            </defs>
+            <text x="24" y="28" text-anchor="middle" style="fill:var(--text);font-size:12px;font-weight:700;font-family:system-ui">${dayOfMonth}</text>
+          </svg>
+          <div class="dash-month-ring-sub">of ${daysInMonth}</div>
+        </div>
+      </div>
+
+      <!-- KPI cards (Maple top row) -->
+      <div class="kpi-grid">
+        <div class="kpi-card kpi-card--feature">
+          <div class="kpi-label">Net ${netLabel} · ${today.toLocaleString('default', { month: 'short' })}</div>
+          <div class="kpi-value dash-hero-amount--${netClass}">${netPositive ? '+' : ''}${fmtCur(summary.net)}</div>
+          <span class="kpi-badge" style="color:${savingsColor};background:rgba(94,139,255,0.10)">${savingsRate.toFixed(0)}% saved</span>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Income · ${today.toLocaleString('default', { month: 'short' })}</div>
+          <div class="kpi-value">${fmtCur(summary.income)}</div>
+          <span class="kpi-badge kpi-badge--muted">${allRows.filter(r => r.amount > 0).length} deposits</span>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Spending · ${today.toLocaleString('default', { month: 'short' })}</div>
+          <div class="kpi-value">${fmtCur(Math.abs(summary.expenses))}</div>
+          <span class="kpi-badge kpi-badge--danger">${spentPct.toFixed(0)}% of income</span>
+        </div>
+      </div>
+
+      <!-- Spending overview (grouped bars) + Top categories (progress bars) -->
+      <div class="dash-overview-grid">
+        <div class="card">
+          <div class="dash-card-head">
+            <h2 style="margin-bottom:0">Spending overview</h2>
+            <div class="dash-legend">
+              <span class="dash-legend-i"><span class="dash-legend-dot" style="background:#5e8bff"></span>Spending</span>
+              <span class="dash-legend-i"><span class="dash-legend-dot" style="background:#57cf8e"></span>Income</span>
+            </div>
           </div>
-          <div class="dash-hero-divider"></div>
-          <div class="dash-hero-stat">
-            <div class="dash-hero-stat-label">Spent</div>
-            <div class="dash-hero-stat-val expense-text">${fmtCur(Math.abs(summary.expenses))}</div>
-          </div>
-          <div class="dash-hero-divider"></div>
-          <div class="dash-hero-stat">
-            <div class="dash-hero-stat-label">Savings</div>
-            <div class="dash-hero-stat-val" style="color:${savingsColor}">${savingsRate.toFixed(0)}%</div>
-          </div>
-          <div class="dash-hero-divider"></div>
-          <div class="dash-month-ring" title="Day ${dayOfMonth} of ${daysInMonth}">
-            <svg viewBox="0 0 48 48" width="48" height="48">
-              <circle cx="24" cy="24" r="${ringRadius}" fill="none" stroke="var(--surface2)" stroke-width="4"/>
-              <circle cx="24" cy="24" r="${ringRadius}" fill="none" stroke="url(#ringGrad)" stroke-width="4"
-                stroke-linecap="round"
-                stroke-dasharray="${ringCirc.toFixed(2)}"
-                stroke-dashoffset="${ringOffset.toFixed(2)}"
-                transform="rotate(-90 24 24)"/>
-              <defs>
-                <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stop-color="#5e8bff"/>
-                  <stop offset="100%" stop-color="#7da0ff"/>
-                </linearGradient>
-              </defs>
-              <text x="24" y="28" text-anchor="middle" style="fill:var(--text);font-size:12px;font-weight:700;font-family:system-ui">${dayOfMonth}</text>
-            </svg>
-            <div class="dash-month-ring-sub">of ${daysInMonth}</div>
-          </div>
+          ${trendRows.length === 0
+            ? '<p style="color:var(--text-muted);font-size:13px">No trend data yet.</p>'
+            : '<div class="dash-overview-chart"><canvas id="dash-overview-bars"></canvas></div>'}
+        </div>
+        <div class="card">
+          <div class="dash-card-head"><h2 style="margin-bottom:0">Top categories</h2></div>
+          ${(() => {
+            const ranked = donutSegments.filter(s => !/\bOthers?$/.test(s.name)).slice(0, 4);
+            if (ranked.length === 0) return '<p style="color:var(--text-muted);font-size:13px">No expense data this month.</p>';
+            const maxT = Math.max(...ranked.map(s => s.total), 1);
+            const cols = ['#5e8bff', '#57cf8e', '#ffb15e', '#ff8c6b'];
+            return ranked.map((s, i) => `
+              <div class="cat-bar-row" data-bar-cat="${escHtml(s.name)}">
+                <div class="cat-bar-head"><span>${escHtml(s.name)}</span><span class="cat-bar-amt">${fmtCur(s.total).replace('.00', '')}</span></div>
+                <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${Math.max(4, s.total / maxT * 100).toFixed(0)}%;background:${cols[i]}"></div></div>
+              </div>`).join('');
+          })()}
         </div>
       </div>
 
@@ -1664,6 +1692,18 @@ const dashboardModule = {
       });
     });
 
+    // Top-categories progress bars → drill into that category's transactions
+    document.querySelectorAll('.cat-bar-row[data-bar-cat]').forEach(row => {
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', () => {
+        const cat = row.dataset.barCat;
+        showFilteredTransactions({
+          category: cat, month: currentMonth,
+          title: cat, subtitle: `Transactions in ${monthName}`
+        });
+      });
+    });
+
     // Make dashboard Recent rows with receipts clickable → view receipt
     document.querySelectorAll('.dash-recent-row[data-receipt]').forEach(row => {
       row.addEventListener('click', () => {
@@ -1731,6 +1771,37 @@ const dashboardModule = {
         }
       });
       donutCanvas.style.cursor = 'pointer';
+    }
+
+    // Spending overview — grouped bars (spend vs income per month), Maple-style
+    const overviewCanvas = document.getElementById('dash-overview-bars');
+    if (overviewCanvas && typeof Chart !== 'undefined' && trendRows.length > 0) {
+      if (this._overviewChart) this._overviewChart.destroy();
+      this._overviewChart = new Chart(overviewCanvas, {
+        type: 'bar',
+        data: {
+          labels: flowLabels,
+          datasets: [
+            { label: 'Spending', data: flowExpense, backgroundColor: '#5e8bff', borderRadius: 5, maxBarThickness: 18 },
+            { label: 'Income',   data: flowIncome,  backgroundColor: '#57cf8e', borderRadius: 5, maxBarThickness: 18 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmtCur(ctx.raw)}` } }
+          },
+          scales: {
+            x: { ticks: { color: '#9b938a', font: { size: 11 } }, grid: { display: false } },
+            y: {
+              ticks: { color: '#9b938a', font: { size: 10 }, callback: v => '$' + (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : Math.round(v)) },
+              grid: { color: 'rgba(255,255,255,0.06)', drawTicks: false }
+            }
+          }
+        }
+      });
     }
 
     // Cumulative spending chart (filled area + last month pace dashed line)
