@@ -1,14 +1,14 @@
 const rulesModule = {
   async init() {
     document.getElementById('view').innerHTML = `
-      <div class="page-title-row" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div class="dash-card-head" style="margin-bottom:20px;flex-wrap:wrap;gap:12px">
         <div>
-          <h1 style="margin-bottom:2px">⚡ Rules Engine</h1>
-          <p style="color:var(--text-muted);font-size:13px">Automatically categorise transactions as they're added or imported</p>
+          <h1 style="margin-bottom:2px;display:flex;align-items:center;gap:8px">⚡ Rules Engine</h1>
+          <p style="color:var(--text-muted);font-size:13px;margin:0">Automatically categorise transactions as they're added or imported</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-ghost" onclick="rulesModule.applyAll()">▶ Apply to Existing</button>
-          <button class="btn btn-primary" onclick="rulesModule.openAddModal()">+ Add Rule</button>
+          <button class="btn btn-ghost btn-sm" onclick="rulesModule.applyAll()">▶ Apply to Existing</button>
+          <button class="btn btn-primary btn-sm" onclick="rulesModule.openAddModal()">+ Add rule</button>
         </div>
       </div>
       <div id="rules-list"></div>
@@ -27,21 +27,20 @@ const rulesModule = {
 
     if (rules.length === 0) {
       el.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon">⚡</div>
-          <p>No rules yet.</p>
+        <div class="card empty-state" style="text-align:center;padding:40px 24px">
+          <div class="empty-icon" style="font-size:40px">⚡</div>
+          <p style="font-weight:600;margin-top:8px">No rules yet.</p>
           <p style="margin-top:8px;color:var(--text-muted);font-size:13px">Rules automatically set categories when transactions are added or imported.</p>
-          <p style="margin-top:16px"><button class="btn btn-primary" onclick="rulesModule.openAddModal()">Add your first rule</button></p>
+          <p style="margin-top:16px"><button class="btn btn-primary" onclick="rulesModule.openAddModal()">+ Add your first rule</button></p>
         </div>`;
       return;
     }
 
     el.innerHTML = `
       <div class="card" style="padding:0;overflow:hidden">
-        <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center">
-          <span style="font-size:12px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em">
-            ${rules.length} rule${rules.length !== 1 ? 's' : ''} · processed top to bottom, last match wins
-          </span>
+        <div class="dash-card-head" style="padding:14px 18px;border-bottom:1px solid var(--border);gap:10px">
+          <span class="badge badge-gray">${rules.length} rule${rules.length !== 1 ? 's' : ''}</span>
+          <span style="font-size:12px;color:var(--text-muted);font-weight:500">Processed top to bottom · last match wins</span>
         </div>
         ${rules.map((r, i) => this.rowHtml(r, i, rules.length)).join('')}
       </div>
@@ -57,25 +56,25 @@ const rulesModule = {
     const actionLabel = r.action_type === 'set_category' ? 'Set category →' : r.action_type;
 
     return `
-      <div class="rule-row ${r.enabled ? '' : 'rule-row--disabled'}" style="border-bottom:${i < total - 1 ? '1px solid var(--border)' : 'none'}">
-        <div class="rule-toggle">
+      <div class="rule-row ${r.enabled ? '' : 'rule-row--disabled'}" style="border-bottom:${i < total - 1 ? '1px solid var(--border)' : 'none'};${r.enabled ? '' : 'opacity:.55;'}display:flex;align-items:flex-start;gap:14px;padding:14px 18px;flex-wrap:wrap">
+        <div class="rule-toggle" style="padding-top:2px">
           <label class="toggle-switch" title="${r.enabled ? 'Disable rule' : 'Enable rule'}">
             <input type="checkbox" ${r.enabled ? 'checked' : ''} onchange="rulesModule.toggleEnabled(${r.id}, this.checked)">
             <span class="toggle-slider"></span>
           </label>
         </div>
-        <div class="rule-body">
-          <div class="rule-name">${escHtml(r.name)}</div>
-          <div class="rule-desc">
-            <span class="rule-pill rule-pill--condition">IF</span>
-            <span class="rule-cond"><strong>${fieldLabel}</strong> ${opLabel} <strong>"${escHtml(r.condition_value)}"</strong></span>
-            <span class="rule-pill rule-pill--action">THEN</span>
-            <span class="rule-action">${actionLabel} <strong>${escHtml(r.action_value)}</strong></span>
+        <div class="rule-body" style="flex:1;min-width:200px">
+          <div class="rule-name" style="font-weight:600;color:var(--text);margin-bottom:8px">${escHtml(r.name)}</div>
+          <div class="rule-desc" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px">
+            <span class="rule-pill rule-pill--condition badge badge-blue">IF</span>
+            <span class="rule-cond" style="color:var(--text-muted)"><strong style="color:var(--text)">${fieldLabel}</strong> ${opLabel} <strong style="color:var(--text)">"${escHtml(r.condition_value)}"</strong></span>
+            <span class="rule-pill rule-pill--action badge badge-green">THEN</span>
+            <span class="rule-action" style="color:var(--text-muted)">${actionLabel} <strong style="color:var(--success)">${escHtml(r.action_value)}</strong></span>
           </div>
         </div>
-        <div class="rule-actions">
+        <div class="rule-actions" style="display:flex;gap:6px;flex-shrink:0">
           <button class="btn btn-ghost btn-sm" onclick="rulesModule.openEditModal(${r.id})">Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="rulesModule.deleteRule(${r.id})">✕</button>
+          <button class="btn btn-danger btn-sm" onclick="rulesModule.deleteRule(${r.id})" title="Delete rule">✕</button>
         </div>
       </div>
     `;
@@ -99,7 +98,7 @@ const rulesModule = {
   async openAddModal() {
     const categories = await api('/api/categories').catch(() => []);
     openModal(`
-      <h2 style="margin-bottom:16px">Add Rule</h2>
+      <h2 style="margin-bottom:16px;display:flex;align-items:center;gap:8px">⚡ Add Rule</h2>
       ${this.formHtml(null, categories)}
     `);
     document.getElementById('rule-form').onsubmit = e => { e.preventDefault(); this.submitSave(null); };
@@ -114,7 +113,7 @@ const rulesModule = {
     const rule = rules.find(r => r.id === id);
     if (!rule) return;
     openModal(`
-      <h2 style="margin-bottom:16px">Edit Rule</h2>
+      <h2 style="margin-bottom:16px;display:flex;align-items:center;gap:8px">⚡ Edit Rule</h2>
       ${this.formHtml(rule, categories)}
     `);
     document.getElementById('rule-form').onsubmit = e => { e.preventDefault(); this.submitSave(id); };
@@ -145,8 +144,8 @@ const rulesModule = {
             value="${rule ? escHtml(rule.name) : ''}" required>
         </div>
 
-        <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:14px">
-          <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">IF condition</div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px">
+          <div style="margin-bottom:10px"><span class="badge badge-blue">IF condition</span></div>
           <div class="form-row" style="margin-bottom:10px">
             <div class="form-group" style="margin-bottom:0">
               <label>Field</label>
@@ -170,8 +169,8 @@ const rulesModule = {
           </div>
         </div>
 
-        <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:20px">
-          <div style="font-size:11px;font-weight:700;color:var(--success);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">THEN action</div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:20px">
+          <div style="margin-bottom:10px"><span class="badge badge-green">THEN action</span></div>
           <div class="form-group" style="margin-bottom:0">
             <label>Set Category to</label>
             <select id="rule-action-value" required>

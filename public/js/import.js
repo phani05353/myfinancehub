@@ -11,19 +11,25 @@ const importModule = {
     }
 
     document.getElementById('view').innerHTML = `
-      <h1 style="margin-bottom:20px">Import &amp; Export</h1>
+      <h1 style="margin-bottom:6px">Import &amp; Export</h1>
+      <p style="color:var(--text-muted);font-size:14px;line-height:1.6;margin-bottom:24px;max-width:640px">
+        Bring transactions in from a CSV, or take your data out as a spreadsheet or printable report.
+      </p>
 
       <!-- ── IMPORT ───────────────────────────────────────────────── -->
       <div class="card" style="margin-bottom:20px">
-        <h2 style="margin-bottom:4px">Import Transactions</h2>
-        <p style="color:var(--text-muted);margin-bottom:16px;line-height:1.6;font-size:13px">
+        <div class="dash-card-head">
+          <h2 style="margin:0">Import Transactions</h2>
+          <span class="badge badge-blue">CSV</span>
+        </div>
+        <p style="color:var(--text-muted);margin:4px 0 18px;line-height:1.6;font-size:13px">
           Upload a CSV file from your bank or any finance app.
           Duplicate transactions are automatically skipped.
         </p>
 
-        <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:20px;font-size:12px;color:var(--text-muted)">
-          <strong style="color:var(--text)">Supported Formats</strong>
-          <ul style="margin:8px 0 0 16px;line-height:2">
+        <div style="background:var(--surface2);border:1px solid var(--border, rgba(244,239,231,.08));border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:20px;font-size:12px;color:var(--text-muted)">
+          <strong style="color:var(--text);font-size:12px;text-transform:uppercase;letter-spacing:.05em">Supported Formats</strong>
+          <ul style="margin:10px 0 0 18px;line-height:2">
             <li>Generic bank CSV: <code>Date, Description/Merchant, Amount</code></li>
             <li>Full format: <code>Date, Payee, Category, Amount, Notes</code></li>
             <li>Date formats: <code>MM/DD/YYYY</code> or <code>YYYY-MM-DD</code></li>
@@ -32,21 +38,25 @@ const importModule = {
         </div>
 
         <form id="import-form">
-          <div class="drop-zone" id="drop-zone" onclick="document.getElementById('csv-file').click()">
-            <div class="drop-icon">📂</div>
-            <div style="font-size:16px;font-weight:600;margin-bottom:8px">Drop CSV file here or click to browse</div>
+          <div class="drop-zone" id="drop-zone" onclick="document.getElementById('csv-file').click()"
+               style="border:2px dashed var(--accent);border-radius:var(--radius);padding:36px 20px;text-align:center;cursor:pointer;background:var(--surface2);transition:background .15s,border-color .15s">
+            <div class="drop-icon" style="font-size:34px;margin-bottom:10px">📂</div>
+            <div style="font-size:16px;font-weight:600;margin-bottom:6px;color:var(--text)">Drop CSV file here or click to browse</div>
             <div style="font-size:12px;color:var(--text-muted)">Supports .csv files</div>
             <input type="file" id="csv-file" accept=".csv,text/csv" style="display:none">
           </div>
 
-          <div id="file-preview" style="display:none;margin-top:12px;padding:12px;background:var(--surface2);border-radius:8px">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <span id="file-name" style="font-weight:600"></span>
+          <div id="file-preview" style="display:none;margin-top:14px;padding:14px 16px;background:var(--surface2);border:1px solid var(--border, rgba(244,239,231,.08));border-radius:var(--radius-sm)">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+              <span style="display:flex;align-items:center;gap:10px;min-width:0">
+                <span style="font-size:18px;flex-shrink:0">📄</span>
+                <span id="file-name" style="font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+              </span>
               <button type="button" class="btn btn-ghost btn-sm" onclick="importModule.clearFile()">✕ Remove</button>
             </div>
           </div>
 
-          <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
+          <div style="margin-top:18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
             <button type="submit" id="import-btn" class="btn btn-primary" disabled>Import Transactions</button>
             <span id="import-status" style="color:var(--text-muted);font-size:13px"></span>
           </div>
@@ -57,15 +67,17 @@ const importModule = {
 
       <!-- ── EXPORT ───────────────────────────────────────────────── -->
       <div class="card">
-        <h2 style="margin-bottom:4px">Export Data</h2>
-        <p style="color:var(--text-muted);margin-bottom:20px;font-size:13px;line-height:1.6">
+        <div class="dash-card-head">
+          <h2 style="margin:0">Export Data</h2>
+        </div>
+        <p style="color:var(--text-muted);margin:4px 0 20px;font-size:13px;line-height:1.6">
           Download your transactions as a CSV or generate a printable PDF monthly report.
         </p>
 
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
-          <div>
-            <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em">Month</label>
-            <select id="export-month" class="tx-filter-select" style="min-width:180px">
+        <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:20px">
+          <div style="flex:1;min-width:180px">
+            <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">Month</label>
+            <select id="export-month" class="tx-filter-select" style="width:100%">
               <option value="">All time</option>
               ${monthOptions.join('')}
             </select>
@@ -80,7 +92,7 @@ const importModule = {
             🖨 Export PDF Report
           </button>
         </div>
-        <p style="margin-top:12px;font-size:12px;color:var(--text-muted)">
+        <p style="margin-top:14px;font-size:12px;color:var(--text-muted);line-height:1.6">
           PDF opens a print-ready report in a new tab — use your browser's Save as PDF option.
         </p>
       </div>
@@ -140,20 +152,21 @@ const importModule = {
       if (!res.ok) throw new Error(result.error);
 
       const hasErrors = result.errors && result.errors.length > 0;
+      const failed = result.imported === 0 && hasErrors;
       document.getElementById('import-result').innerHTML = `
-        <div class="import-result ${hasErrors && result.imported === 0 ? 'error' : 'success'}">
-          <div style="font-size:16px;font-weight:700;margin-bottom:8px">
-            ${result.imported === 0 && hasErrors ? '❌ Import failed' : '✅ Import complete'}
+        <div class="import-result ${failed ? 'error' : 'success'}" style="margin-top:18px;padding:16px;border-radius:var(--radius-sm);background:var(--surface2);border-left:3px solid var(--${failed ? 'danger' : 'success'})">
+          <div style="font-size:15px;font-weight:700;margin-bottom:12px;color:var(--text)">
+            ${failed ? '❌ Import failed' : '✅ Import complete'}
           </div>
-          <div style="display:flex;gap:24px;margin-bottom:${hasErrors ? '12px' : '0'}">
-            <div><strong style="color:var(--success)">${result.imported}</strong> <span style="color:var(--text-muted)">imported</span></div>
-            <div><strong style="color:var(--text-muted)">${result.skipped}</strong> <span style="color:var(--text-muted)">skipped (duplicates)</span></div>
-            ${hasErrors ? `<div><strong style="color:var(--danger)">${result.errors.length}</strong> <span style="color:var(--text-muted)">errors</span></div>` : ''}
+          <div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:${hasErrors ? '12px' : '0'}">
+            <div><strong style="color:var(--success);font-size:18px">${result.imported}</strong> <span style="color:var(--text-muted);font-size:12px">imported</span></div>
+            <div><strong style="color:var(--text);font-size:18px">${result.skipped}</strong> <span style="color:var(--text-muted);font-size:12px">skipped (duplicates)</span></div>
+            ${hasErrors ? `<div><strong style="color:var(--danger);font-size:18px">${result.errors.length}</strong> <span style="color:var(--text-muted);font-size:12px">errors</span></div>` : ''}
           </div>
           ${hasErrors ? `
             <details style="margin-top:8px">
               <summary style="cursor:pointer;color:var(--danger);font-size:12px">Show ${result.errors.length} error(s)</summary>
-              <ul style="margin:8px 0 0 16px;font-size:11px;color:var(--text-muted)">
+              <ul style="margin:8px 0 0 16px;font-size:11px;color:var(--text-muted);line-height:1.8">
                 ${result.errors.map(e => `<li>Row ${e.row}: ${escHtml(e.error)}</li>`).join('')}
               </ul>
             </details>
@@ -167,7 +180,7 @@ const importModule = {
     } catch (e) {
       toast(e.message, 'error');
       document.getElementById('import-result').innerHTML = `
-        <div class="import-result error"><strong>Error:</strong> ${escHtml(e.message)}</div>
+        <div class="import-result error" style="margin-top:18px;padding:16px;border-radius:var(--radius-sm);background:var(--surface2);border-left:3px solid var(--danger);color:var(--text)"><strong style="color:var(--danger)">Error:</strong> ${escHtml(e.message)}</div>
       `;
     } finally {
       btn.disabled = false;
