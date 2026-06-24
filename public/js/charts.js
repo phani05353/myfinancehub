@@ -19,10 +19,13 @@ const chartsModule = {
     const defaultCat = sortedCats[0] || '';
 
     document.getElementById('view').innerHTML = `
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
-        <h1 style="margin-bottom:0;flex:1">Charts</h1>
+      <div class="dash-card-head" style="margin-bottom:24px">
+        <div>
+          <h1 style="margin-bottom:4px">Charts</h1>
+          <p style="color:var(--text-muted);font-size:13px;margin:0">Visual insights into your spending and income.</p>
+        </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <label style="color:var(--text-muted);font-size:13px;white-space:nowrap">Month:</label>
+          <label style="color:var(--text-muted);font-size:13px;white-space:nowrap">Month</label>
           <select id="chart-month" class="tx-filter-select-panel">
             ${months.map(m => `<option value="${m}" ${m === currentMonth ? 'selected' : ''}>${m}</option>`).join('')}
           </select>
@@ -31,17 +34,21 @@ const chartsModule = {
 
       <div class="charts-grid">
         <div class="card">
-          <h2>Spending by Payee</h2>
+          <div class="dash-card-head" style="margin-bottom:16px">
+            <h2 style="margin-bottom:0">Spending by Payee</h2>
+          </div>
           <div class="chart-container"><canvas id="payee-chart"></canvas></div>
         </div>
         <div class="card">
-          <h2>Category Breakdown</h2>
+          <div class="dash-card-head" style="margin-bottom:16px">
+            <h2 style="margin-bottom:0">Category Breakdown</h2>
+          </div>
           <div class="chart-container"><canvas id="category-chart"></canvas></div>
         </div>
       </div>
 
       <div class="card" style="margin-top:20px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+        <div class="dash-card-head" style="margin-bottom:16px">
           <h2 style="margin-bottom:0">Income vs Expenses Trend</h2>
           <select id="trend-months" class="tx-filter-select-panel">
             <option value="3">Last 3 months</option>
@@ -53,8 +60,11 @@ const chartsModule = {
       </div>
 
       <div class="card" style="margin-top:20px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px">
-          <h2 style="margin-bottom:0">Category Trend</h2>
+        <div class="dash-card-head" style="margin-bottom:6px;align-items:flex-start">
+          <div>
+            <h2 style="margin-bottom:4px">Category Trend</h2>
+            <p style="color:var(--text-muted);font-size:12px;margin:0">Cumulative spend by day of month — compare pace across months.</p>
+          </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <select id="cat-trend-cat" class="tx-filter-select-panel" style="width:auto">
               ${sortedCats.map(c => `<option value="${c}" ${c === defaultCat ? 'selected' : ''}>${c}</option>`).join('')}
@@ -66,12 +76,11 @@ const chartsModule = {
             </select>
           </div>
         </div>
-        <p style="color:var(--text-muted);font-size:12px;margin-bottom:14px">Cumulative spend by day of month — compare pace across months.</p>
-        <div class="chart-container chart-container--tall"><canvas id="cat-trend-chart"></canvas></div>
+        <div class="chart-container chart-container--tall" style="margin-top:14px"><canvas id="cat-trend-chart"></canvas></div>
       </div>
 
       <div class="card" style="margin-top:20px">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+        <div class="dash-card-head" style="margin-bottom:16px">
           <h2 style="margin-bottom:0">Spending Heatmap</h2>
           <select id="heatmap-year" class="tx-filter-select-panel" style="width:auto">
             ${years.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('')}
@@ -81,7 +90,9 @@ const chartsModule = {
       </div>
 
       <div class="card" style="margin-top:20px">
-        <h2>Top Payees — Details</h2>
+        <div class="dash-card-head" style="margin-bottom:16px">
+          <h2 style="margin-bottom:0">Top Payees — Details</h2>
+        </div>
         <div id="payee-table"></div>
       </div>
     `;
@@ -195,10 +206,20 @@ const chartsModule = {
     const tbl = document.getElementById('payee-table');
     if (tbl) {
       if (byPayee.length === 0) {
-        tbl.innerHTML = '<p style="color:var(--text-muted)">No expense data for this month.</p>';
+        tbl.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:24px 0;margin:0">No expense data for this month.</p>';
       } else {
         const total = byPayee.reduce((s, p) => s + Math.abs(p.total), 0);
         tbl.innerHTML = `
+          <div class="stats-grid" style="margin-bottom:16px">
+            <div class="stat-card">
+              <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px">Total Spend</div>
+              <div style="font-size:22px;font-weight:600;color:var(--text)">$${total.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+            </div>
+            <div class="stat-card">
+              <div style="color:var(--text-muted);font-size:12px;margin-bottom:4px">Payees</div>
+              <div style="font-size:22px;font-weight:600;color:var(--text)">${byPayee.length}</div>
+            </div>
+          </div>
           <div class="table-wrap">
             <table class="payee-detail-table">
               <thead><tr><th>Payee</th><th style="text-align:right">Txns</th><th style="text-align:right">Total</th><th class="hide-mobile">Share</th></tr></thead>

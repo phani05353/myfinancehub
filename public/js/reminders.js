@@ -12,6 +12,11 @@ const remindersModule = {
     const today = new Date().toISOString().slice(0, 10);
     const overdue = upcoming.filter(r => r.due_date < today);
     const dueSoon = upcoming.filter(r => r.due_date >= today && r.due_date <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
+    const later = upcoming.filter(r => !overdue.includes(r) && !dueSoon.includes(r));
+
+    const sumAmt = list => list.reduce((a, r) => a + Math.abs(r.amount || 0), 0);
+    const upcomingTotal = sumAmt(upcoming);
+    const overdueTotal = sumAmt(overdue);
 
     document.getElementById('view').innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
@@ -22,23 +27,46 @@ const remindersModule = {
         </div>
       </div>
 
+      <div class="stats-grid" style="margin-bottom:24px">
+        <div class="stat-card">
+          <div class="label">Upcoming Total</div>
+          <div class="value expense" style="font-size:22px">${fmtCur(upcomingTotal)}</div>
+          <div class="sublabel">${upcoming.length} bill${upcoming.length !== 1 ? 's' : ''}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Overdue</div>
+          <div class="value" style="font-size:22px;color:${overdue.length ? 'var(--danger)' : 'var(--text-muted)'}">${overdue.length}</div>
+          <div class="sublabel">${overdue.length ? fmtCur(overdueTotal) + ' past due' : 'all caught up'}</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Due This Week</div>
+          <div class="value" style="font-size:22px;color:${dueSoon.length ? 'var(--warning)' : 'var(--text-muted)'}">${dueSoon.length}</div>
+          <div class="sublabel">next 7 days</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Paid History</div>
+          <div class="value neutral" style="font-size:22px;color:var(--success)">${paid.length}</div>
+          <div class="sublabel">recorded</div>
+        </div>
+      </div>
+
       ${overdue.length > 0 ? `
-      <div class="card" style="border-color:var(--danger);margin-bottom:20px">
-        <h2 style="color:var(--danger)">Overdue (${overdue.length})</h2>
+      <div class="card" style="margin-bottom:20px">
+        <div class="dash-card-head"><h2 style="color:var(--danger);margin:0">Overdue (${overdue.length})</h2></div>
         ${this.renderTable(overdue, true)}
       </div>` : ''}
 
       ${dueSoon.length > 0 ? `
-      <div class="card" style="border-color:var(--warning);margin-bottom:20px">
-        <h2 style="color:var(--warning)">Due This Week (${dueSoon.length})</h2>
+      <div class="card" style="margin-bottom:20px">
+        <div class="dash-card-head"><h2 style="color:var(--warning);margin:0">Due This Week (${dueSoon.length})</h2></div>
         ${this.renderTable(dueSoon, true)}
       </div>` : ''}
 
       <div class="card" style="margin-bottom:20px">
-        <h2>Upcoming Bills</h2>
-        ${upcoming.filter(r => !overdue.includes(r) && !dueSoon.includes(r)).length === 0 && overdue.length === 0 && dueSoon.length === 0
+        <div class="dash-card-head"><h2 style="margin:0">Upcoming Bills</h2></div>
+        ${later.length === 0 && overdue.length === 0 && dueSoon.length === 0
           ? `<div class="empty-state" style="padding:32px"><div class="empty-icon">✅</div><p>No upcoming bills</p></div>`
-          : this.renderTable(upcoming.filter(r => !overdue.includes(r) && !dueSoon.includes(r)), true)}
+          : this.renderTable(later, true)}
       </div>
 
       <div class="card">
@@ -52,42 +80,49 @@ const remindersModule = {
     `;
   },
 
+  // Friendly Maple-style due label (Due today / in N days / Nd overdue)
+  dueLabel(dueDate, paid) {
+    if (paid) return `Paid ${fmtDate(dueDate)}`;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const due = new Date(dueDate + 'T00:00:00');
+    const days = Math.round((due - today) / 86400000);
+    if (days < 0) return `${Math.abs(days)}d overdue`;
+    if (days === 0) return 'Due today';
+    if (days === 1) return 'Due tomorrow';
+    if (days <= 14) return `Due in ${days} days`;
+    return `Due ${fmtDate(dueDate)}`;
+  },
+
   renderTable(reminders, showPayBtn) {
     if (reminders.length === 0) return '<p style="color:var(--text-muted);padding:12px 0">None</p>';
     const today = new Date().toISOString().slice(0, 10);
-    return `
-      <div class="table-wrap">
-        <table class="rem-table">
-          <thead>
-            <tr>
-              <th>Title</th><th>Due Date</th><th>Amount</th><th>Recurring</th>
-              ${showPayBtn ? '<th>Status</th>' : '<th>Paid On</th>'}
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${reminders.map(r => {
-              const isOverdue = r.due_date < today && !r.paid;
-              return `<tr class="${isOverdue ? 'overdue' : ''}">
-                <td data-label="Title"><span class="payee-cell">${payeeLogoHtml(r.title, -1)}<span><strong>${escHtml(r.title)}</strong>${r.notes ? `<span style="display:block;color:var(--text-muted);font-size:11px;margin-top:2px">${escHtml(r.notes)}</span>` : ''}</span></span></td>
-                <td data-label="Due Date">${fmtDate(r.due_date)}</td>
-                <td data-label="Amount">${r.amount ? fmt(-Math.abs(r.amount)) : '—'}</td>
-                <td data-label="Recurring">${r.recurring ? `<span class="badge badge-blue">Every ${r.recur_days}d</span>` : '<span class="badge badge-gray">Once</span>'}</td>
-                ${showPayBtn
-                  ? `<td data-label="Status"><span class="badge ${isOverdue ? 'badge-red' : 'badge-yellow'}">${isOverdue ? 'Overdue' : 'Pending'}</span></td>`
-                  : `<td data-label="Paid On" style="color:var(--text-muted)">${fmtDate(r.paid_date)}</td>`
-                }
-                <td data-label="Actions">
-                  ${showPayBtn ? `<button class="btn btn-success btn-sm" onclick="remindersModule.markPaid(${r.id})">✓ Paid</button>` : ''}
-                  <button class="btn btn-ghost btn-sm" onclick="remindersModule.openEditModal(${r.id})">Edit</button>
-                  <button class="btn btn-danger btn-sm" onclick="remindersModule.deleteRow(${r.id})">Del</button>
-                </td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
+    const soonCutoff = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    return reminders.map(r => {
+      const isOverdue = showPayBtn && r.due_date < today;
+      const isDueSoon = showPayBtn && !isOverdue && r.due_date <= soonCutoff;
+      const rowCls = isOverdue ? ' overdue' : isDueSoon ? ' due-soon' : '';
+      const subCls = !showPayBtn ? 'color:var(--success)' : isOverdue ? 'color:var(--danger)' : isDueSoon ? 'color:var(--warning)' : 'color:var(--text-muted)';
+      const subText = showPayBtn ? this.dueLabel(r.due_date, false) : this.dueLabel(r.paid_date, true);
+      const recurBadge = r.recurring
+        ? `<span class="badge badge-blue">Every ${r.recur_days}d</span>`
+        : '<span class="badge badge-gray">Once</span>';
+      return `
+        <div class="list-row${rowCls}">
+          ${payeeLogoHtml(r.title, -1)}
+          <div class="list-row-main">
+            <div class="list-row-title">${escHtml(r.title)} ${recurBadge}</div>
+            <div class="list-row-sub" style="${subCls}">${subText}${r.notes ? ` · <span style="color:var(--text-muted)">${escHtml(r.notes)}</span>` : ''}</div>
+          </div>
+          <div class="list-row-trail">
+            <div class="list-row-amount">${r.amount ? fmt(-Math.abs(r.amount)) : '—'}</div>
+            <div class="list-row-actions">
+              ${showPayBtn ? `<button class="btn btn-success btn-sm" onclick="remindersModule.markPaid(${r.id})">✓ Paid</button>` : ''}
+              <button class="btn btn-ghost btn-sm" onclick="remindersModule.openEditModal(${r.id})">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="remindersModule.deleteRow(${r.id})">Del</button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
   },
 
   async openDetectModal() {
