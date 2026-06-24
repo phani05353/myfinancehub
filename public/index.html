@@ -6,10 +6,13 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#0b0d12">
+  <meta name="theme-color" content="#181512">
   <title>Home Finance</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 </head>
@@ -57,7 +60,7 @@
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
           </svg>
         </a>
-        <button type="button" class="top-nav-avatar" id="top-nav-avatar" title="Edit profile" onclick="editProfileModal()" style="border:none;cursor:pointer">?</button>
+        <button type="button" class="top-nav-avatar user-avatar" id="top-nav-avatar" title="Edit profile" onclick="editProfileModal()" style="border:none;cursor:pointer">?</button>
       </div>
     </div>
   </header>
@@ -71,7 +74,15 @@
       <span class="logo-icon">$</span>
       Home Finance
     </a>
-    <div id="mobile-overdue-dot" style="display:none;width:8px;height:8px;background:var(--danger);border-radius:50%"></div>
+    <div class="mobile-header-actions">
+      <div id="mobile-overdue-dot" style="display:none;width:8px;height:8px;background:var(--danger);border-radius:50%"></div>
+      <a href="/auth/logout" class="top-nav-icon-btn" title="Sign Out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </a>
+      <button type="button" class="top-nav-avatar user-avatar" title="Edit profile" onclick="editProfileModal()" style="border:none;cursor:pointer">?</button>
+    </div>
   </header>
 
   <!-- Sidebar overlay (mobile) -->

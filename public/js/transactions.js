@@ -525,7 +525,7 @@ function payeeLogoHtml(payee, amount) {
   // Income transactions get a fixed $ badge instead of a favicon lookup
   if (amount > 0) {
     return `<span class="payee-logo-wrap">
-      <span class="payee-initial" style="background:#34d399;display:flex">$</span>
+      <span class="payee-initial" style="background:#57cf8e;display:flex">$</span>
     </span>`;
   }
   const domain  = payeeDomain(payee);

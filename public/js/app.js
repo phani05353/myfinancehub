@@ -23,9 +23,9 @@ function escHtml(s) {
     usePointStyle: true, pointStyle: 'circle', boxWidth: 7, boxHeight: 7, padding: 14
   });
   Object.assign(Chart.defaults.plugins.tooltip, {
-    backgroundColor: 'rgba(18,21,29,0.96)', borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(34,31,28,0.96)', borderColor: 'rgba(255,255,255,0.10)',
     borderWidth: 1, cornerRadius: 10, padding: 10, boxPadding: 6, usePointStyle: true,
-    titleColor: '#f3f5f7', bodyColor: '#cbd0d9',
+    titleColor: '#f4efe7', bodyColor: '#d8cfc4',
     titleFont: { weight: '700', size: 12 }, bodyFont: { size: 12 }
   });
   Object.assign(Chart.defaults.elements.bar,   { borderRadius: 6, borderSkipped: false });
@@ -192,7 +192,7 @@ async function showPayeeTrend(payee, defaultMonths = 6) {
       monthList.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     }
 
-    const colors = ['#94a3b8','#818cf8','#a78bfa','#22d3ee','#fbbf24','#fb7185','#60a5fa','#f472b6','#34d399','#fb923c','#c084fc','#e879f9'];
+    const colors = ['#94a3b8','#7da0ff','#9b7bff','#22d3ee','#fbbf24','#ff8c6b','#60a5fa','#f472b6','#57cf8e','#fb923c','#c084fc','#e879f9'];
     const datasets = monthList.map((m, idx) => {
       const isCurrent = idx === monthList.length - 1;
       const dayData = byMonth[m] || {};
@@ -205,7 +205,7 @@ async function showPayeeTrend(payee, defaultMonths = 6) {
         cumulative.push(running);
       }
       while (cumulative.length < 31) cumulative.push(null);
-      const color = isCurrent ? 'rgba(99,102,241,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
+      const color = isCurrent ? 'rgba(94,139,255,0.95)' : colors[(monthList.length - 2 - idx) % colors.length];
       return {
         label: new Date(yr, mo - 1, 1).toLocaleString('default', { month: 'short', year: '2-digit' }),
         data: cumulative,
@@ -238,7 +238,7 @@ async function showPayeeTrend(payee, defaultMonths = 6) {
           });
         },
         plugins: {
-          legend: { position: 'top', align: 'end', labels: { color: '#8892a4', font: { size: 11 }, boxWidth: 14, padding: 10 } },
+          legend: { position: 'top', align: 'end', labels: { color: '#9b938a', font: { size: 11 }, boxWidth: 14, padding: 10 } },
           tooltip: {
             callbacks: {
               title: ctx => `Day ${ctx[0].label}`,
@@ -248,13 +248,13 @@ async function showPayeeTrend(payee, defaultMonths = 6) {
         },
         scales: {
           x: {
-            ticks: { color: '#8892a4', maxTicksLimit: 10 },
+            ticks: { color: '#9b938a', maxTicksLimit: 10 },
             grid: { color: 'rgba(255,255,255,0.05)' },
-            title: { display: true, text: 'Day of month', color: '#8892a4', font: { size: 11 } }
+            title: { display: true, text: 'Day of month', color: '#9b938a', font: { size: 11 } }
           },
           y: {
             beginAtZero: true,
-            ticks: { color: '#8892a4', callback: v => '$' + v.toLocaleString() },
+            ticks: { color: '#9b938a', callback: v => '$' + v.toLocaleString() },
             grid: { color: 'rgba(255,255,255,0.05)' }
           }
         }
@@ -485,10 +485,11 @@ window.addEventListener('load', async () => {
     const me = await api('/api/auth/me');
     const el = document.getElementById('sidebar-username');
     if (el && me.username) el.textContent = me.username;
-    const avatar = document.getElementById('top-nav-avatar');
-    if (avatar && me.username) {
-      avatar.textContent = me.username.slice(0, 2).toUpperCase();
-      avatar.title = `Signed in as ${me.username}`;
+    if (me.username) {
+      document.querySelectorAll('.user-avatar').forEach(avatar => {
+        avatar.textContent = me.username.slice(0, 2).toUpperCase();
+        avatar.title = `Signed in as ${me.username}`;
+      });
     }
   } catch (_) {}
 });
@@ -669,7 +670,7 @@ const dashboardModule = {
       </div>` : '';
 
     // Expense Categories — donut + legend (top 5 + "N Others")
-    const CAT_PALETTE = ['#b45c32','#7fc68a','#f4a055','#ec85b5','#e26b6b','#8a6bd6','#5cb3f2','#d99b4a'];
+    const CAT_PALETTE = ['#b45c32','#7fc68a','#f4a055','#ec85b5','#e26b6b','#8a6bd6','#5e8bff','#d99b4a'];
     const catTotal = byCategory.reduce((s, c) => s + c.total, 0);
     const catTop = byCategory.slice(0, 5);
     const catOthers = byCategory.slice(5);
@@ -716,7 +717,7 @@ const dashboardModule = {
       });
       const last = data[data.length - 1];
       const prev = data[data.length - 2];
-      const trendColor = last > prev ? '#fb7185' : last < prev ? '#46e08f' : color;
+      const trendColor = last > prev ? '#ff8c6b' : last < prev ? '#57cf8e' : color;
       const areaPoints = `0,${h} ${points.join(' ')} ${w},${h}`;
       return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">
         <polygon points="${areaPoints}" fill="${color}" fill-opacity="0.12"/>
@@ -788,7 +789,7 @@ const dashboardModule = {
         return '<div class="sankey-empty">No cash flow data this month.</div>';
       }
 
-      const SOURCE_COLORS = ['#5cb3f2','#4a7dd4','#6c8ef5','#8a6bd6','#a78bfa','#7fc68a','#d99b4a'];
+      const SOURCE_COLORS = ['#5e8bff','#4a7dd4','#6c8ef5','#8a6bd6','#9b7bff','#7fc68a','#d99b4a'];
       const MAX_SRC = 5, MAX_CAT = 8;
       let sources = incomeList.slice(0, MAX_SRC);
       if (incomeList.length > MAX_SRC) {
@@ -885,7 +886,7 @@ const dashboardModule = {
         <text class="sankey-node-label" x="${midX + nodeW / 2}" y="${midY + midHeight / 2 - 4}" text-anchor="middle">Income</text>
         <text class="sankey-node-label sankey-node-label--amt" x="${midX + nodeW / 2}" y="${midY + midHeight / 2 + 10}" text-anchor="middle">${fmtCur(totalIn).replace('.00', '')} (100%)</text>`;
       const midNodeSvg = `
-        <rect class="sankey-node" x="${midX}" y="${midY}" width="${nodeW}" height="${midHeight}" fill="#5cb3f2" rx="2"/>
+        <rect class="sankey-node" x="${midX}" y="${midY}" width="${nodeW}" height="${midHeight}" fill="#5e8bff" rx="2"/>
         ${midLabel}`;
 
       const rightNodesSvg = rightNodes.map(n => `
@@ -911,7 +912,7 @@ const dashboardModule = {
 
       // Income: collapse all sources into a single bar instead of per-payee
       let sources = totalIn > 0
-        ? [{ name: 'Income', value: totalIn, color: '#5cb3f2' }]
+        ? [{ name: 'Income', value: totalIn, color: '#5e8bff' }]
         : [];
 
       let cats = expenseList.slice(0, MAX_CAT).map((c, i) => ({ ...c, color: CAT_PALETTE[i % CAT_PALETTE.length] }));
@@ -977,7 +978,7 @@ const dashboardModule = {
 
       const sourceBars = sources.map(s => `
         <rect class="sankey-node" x="${s.x}" y="${topY}" width="${s.width}" height="${nodeH}" fill="${s.color}" rx="2"/>`).join('');
-      const middleBar  = `<rect class="sankey-node" x="${midX}" y="${midY}" width="${midWidth}" height="${nodeH}" fill="#5cb3f2" rx="2"/>
+      const middleBar  = `<rect class="sankey-node" x="${midX}" y="${midY}" width="${midWidth}" height="${nodeH}" fill="#5e8bff" rx="2"/>
         <text class="sankey-node-label" x="${W/2}" y="${midY - 4}" text-anchor="middle">Income · ${fmtCur(totalIn).replace('.00','')}</text>`;
       const catBars   = rightNodes.map(n => `
         <rect class="sankey-node" x="${n.x}" y="${botY}" width="${n.width}" height="${nodeH}" fill="${n.color}" rx="2"/>`).join('');
@@ -1071,10 +1072,10 @@ const dashboardModule = {
       health:       { emoji: '⚕', bg: '#ec85b5' },
       medical:      { emoji: '⚕', bg: '#ec85b5' },
       entertainment:{ emoji: '🎬', bg: '#7fc68a' },
-      shopping:     { emoji: '🛍', bg: '#a78bfa' },
+      shopping:     { emoji: '🛍', bg: '#9b7bff' },
       travel:       { emoji: '✈', bg: '#60a5fa' },
       utilities:    { emoji: '⚡', bg: '#fbbf24' },
-      subscriptions:{ emoji: '🔁', bg: '#a78bfa' },
+      subscriptions:{ emoji: '🔁', bg: '#9b7bff' },
       drinks:       { emoji: '🍺', bg: '#f2994a' }
     };
     const pickBudgetIcon = (name) => {
@@ -1082,7 +1083,7 @@ const dashboardModule = {
       for (const key of Object.keys(BUDGET_ICONS)) {
         if (lower.includes(key)) return BUDGET_ICONS[key];
       }
-      return { emoji: (name || '?').trim().charAt(0).toUpperCase(), bg: '#6366f1' };
+      return { emoji: (name || '?').trim().charAt(0).toUpperCase(), bg: '#5e8bff' };
     };
     const budgetSection = budgetStatus.length === 0 ? '' : (() => {
       const sorted = [...budgetStatus].sort((a, b) => (b.spent / b.budget) - (a.spent / a.budget));
@@ -1513,8 +1514,8 @@ const dashboardModule = {
                 transform="rotate(-90 24 24)"/>
               <defs>
                 <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stop-color="#6366f1"/>
-                  <stop offset="100%" stop-color="#818cf8"/>
+                  <stop offset="0%" stop-color="#5e8bff"/>
+                  <stop offset="100%" stop-color="#7da0ff"/>
                 </linearGradient>
               </defs>
               <text x="24" y="28" text-anchor="middle" style="fill:var(--text);font-size:12px;font-weight:700;font-family:system-ui">${dayOfMonth}</text>
@@ -1741,14 +1742,14 @@ const dashboardModule = {
         {
           label: `${monthName} (actual)`,
           data: cumulData,
-          borderColor: 'rgba(99,102,241,0.95)',
+          borderColor: 'rgba(94,139,255,0.95)',
           backgroundColor: ctx => {
             const { chart } = ctx;
             const { ctx: c, chartArea } = chart;
-            if (!chartArea) return 'rgba(99,102,241,0.15)';
+            if (!chartArea) return 'rgba(94,139,255,0.15)';
             const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-            g.addColorStop(0, 'rgba(99,102,241,0.42)');
-            g.addColorStop(1, 'rgba(99,102,241,0.00)');
+            g.addColorStop(0, 'rgba(94,139,255,0.42)');
+            g.addColorStop(1, 'rgba(94,139,255,0.00)');
             return g;
           },
           borderWidth: 2.5,
@@ -1756,7 +1757,7 @@ const dashboardModule = {
           fill: true,
           pointRadius: 0,
           pointHoverRadius: 5,
-          pointHoverBackgroundColor: '#6366f1'
+          pointHoverBackgroundColor: '#5e8bff'
         }
       ];
       if (prevPaceLine) {
@@ -1847,7 +1848,7 @@ const dashboardModule = {
               pointRadius: 4,
               pointHoverRadius: 6,
               pointBackgroundColor: '#fff',
-              pointBorderColor: ctx => (ctx.raw >= 0 ? '#46e08f' : '#fb7185'),
+              pointBorderColor: ctx => (ctx.raw >= 0 ? '#57cf8e' : '#ff8c6b'),
               pointBorderWidth: 2,
               order: 1
             }
