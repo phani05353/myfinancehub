@@ -1,10 +1,10 @@
 :root {
-  --bg: #181512;
-  --bg-2: #141210;
-  --bg-3: #262220;
-  --surface: rgba(34, 31, 28, 0.72);
-  --surface-solid: #221f1c;
-  --surface2: rgba(42, 38, 34, 0.55);
+  --bg: #000000;
+  --bg-2: #050506;
+  --bg-3: #16161a;
+  --surface: rgba(22, 22, 26, 0.72);
+  --surface-solid: #121214;
+  --surface2: rgba(40, 40, 46, 0.55);
   --border: rgba(255, 255, 255, 0.06);
   --border-strong: rgba(255, 255, 255, 0.14);
   --accent: #5e8bff;
@@ -111,7 +111,7 @@ body::before {
     radial-gradient(ellipse 60% 50% at 12% 0%, rgba(94,139,255,0.12) 0%, transparent 55%),
     radial-gradient(ellipse 50% 45% at 92% 6%, rgba(125,160,255,0.07) 0%, transparent 55%),
     radial-gradient(ellipse 90% 60% at 50% 110%, rgba(155,123,255,0.06) 0%, transparent 60%),
-    linear-gradient(180deg, #181512 0%, #141210 50%, #0e0d0b 100%);
+    linear-gradient(180deg, #050506 0%, #000000 55%, #000000 100%);
   pointer-events: none;
 }
 body::after {
@@ -1062,8 +1062,8 @@ tr.due-soon td:first-child { color: var(--warning); }
   /* filter-bar handles its own mobile layout via grid-template-areas */
   .filter-bar { gap: 10px; }
 
-  /* Card padding reduced */
-  .card { padding: 14px; }
+  /* Card padding — keep Maple breathing room on mobile */
+  .card { padding: 16px; border-radius: 20px; }
 
   /* Modal fills screen on mobile */
   #modal-overlay { padding: 0; align-items: flex-end; }
@@ -1296,7 +1296,7 @@ tr.due-soon td:first-child { color: var(--warning); }
     position: fixed;
     bottom: 0; left: 0; right: 0;
     z-index: 300;
-    background: linear-gradient(to top, var(--bg) 72%, rgba(24,21,18,0.86));
+    background: linear-gradient(to top, var(--bg) 72%, rgba(8,8,10,0.86));
     border-top: 1px solid var(--border);
     padding: 6px 8px env(safe-area-inset-bottom, 0px);
     justify-content: space-around;
@@ -2850,7 +2850,7 @@ tr.due-soon td:first-child { color: var(--warning); }
   padding: 18px 20px;
 }
 .kpi-card--feature {
-  background: linear-gradient(160deg, #2b2724, #211e1b);
+  background: linear-gradient(160deg, #14161c, #0d0e12);
   border-color: rgba(255,255,255,0.06);
 }
 .kpi-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
@@ -2891,7 +2891,16 @@ tr.due-soon td:first-child { color: var(--warning); }
   .dash-overview-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 768px) {
-  .kpi-grid { grid-template-columns: 1fr; gap: 12px; }
-  .dash-greet-hi { font-size: 19px; }
+  /* Maple phone layout: full-width balance card, Income/Spending as 2 tiles */
+  .kpi-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .kpi-card--feature { grid-column: 1 / -1; padding: 20px; }
+  .kpi-card { padding: 14px 16px; }
+  .kpi-value { font-size: 22px; }
+  .kpi-card--feature .kpi-value { font-size: 34px; }
+  .kpi-label { font-size: 11px; }
+  .kpi-badge { margin-top: 8px; }
+  .dash-greet { margin-bottom: 14px; }
+  .dash-greet-hi { font-size: 20px; }
   .dash-overview-chart { height: 200px; }
+  .cat-bar-row { margin-bottom: 14px; }
 }
