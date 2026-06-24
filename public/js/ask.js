@@ -25,20 +25,26 @@ const askModule = {
     document.getElementById('view').innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
         <h1 style="margin-bottom:0;flex:1">Ask</h1>
+        <span class="badge badge-blue">AI</span>
       </div>
 
       <div class="card">
-        <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px">
-          Ask a question about your finances in plain English. A local AI model turns it into
-          a read-only query — your data never leaves the homelab.
-        </p>
+        <div class="dash-card-head" style="margin-bottom:14px">
+          <div>
+            <h2 style="margin:0">Ask your finances</h2>
+            <p style="color:var(--text-muted);font-size:13px;margin:4px 0 0">
+              Plain English in, a read-only query out — your data never leaves the homelab.
+            </p>
+          </div>
+        </div>
         <form id="ask-form" style="display:flex;gap:8px;flex-wrap:wrap">
           <input id="ask-input" type="text" class="tx-filter-select-panel" autocomplete="off"
             placeholder="e.g. how much on coffee since March?"
             style="flex:1;min-width:220px" maxlength="500">
           <button type="submit" id="ask-submit" class="btn btn-primary">Ask</button>
         </form>
-        <div id="ask-examples" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <div id="ask-examples" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+          <span style="color:var(--text-muted);font-size:12px;align-self:center">Try:</span>
           ${examples.map(q => `<button type="button" class="btn btn-ghost btn-sm ask-example" data-q="${escHtml(q)}">${escHtml(q)}</button>`).join('')}
         </div>
       </div>
@@ -65,7 +71,7 @@ const askModule = {
       this.enabled = status.enabled;
       if (!status.enabled) {
         document.getElementById('ask-result').innerHTML =
-          `<div class="card"><p style="color:var(--text-muted)">Natural-language query is disabled on this server.</p></div>`;
+          `<div class="card"><div class="empty-state"><div class="empty-icon">⏻</div><p style="color:var(--text-muted)">Natural-language query is disabled on this server.</p></div></div>`;
         document.getElementById('ask-submit').disabled = true;
       }
     } catch (_) { /* status is best-effort; let the ask attempt surface errors */ }
@@ -76,13 +82,13 @@ const askModule = {
     const resultEl = document.getElementById('ask-result');
     const submitBtn = document.getElementById('ask-submit');
     submitBtn.disabled = true;
-    resultEl.innerHTML = `<div class="card"><p style="color:var(--text-muted)">🤔 Thinking… asking the local model.</p></div>`;
+    resultEl.innerHTML = `<div class="card"><div style="display:flex;align-items:center;gap:10px;color:var(--text-muted)"><span class="badge badge-blue">AI</span><span>Thinking… asking the local model.</span></div></div>`;
 
     let data;
     try {
       data = await api('/api/query', { method: 'POST', body: { question } });
     } catch (err) {
-      resultEl.innerHTML = `<div class="card"><p style="color:var(--danger)">${escHtml(err.message)}</p>${
+      resultEl.innerHTML = `<div class="card"><div style="display:flex;align-items:flex-start;gap:10px"><span class="badge badge-danger">Error</span><p style="color:var(--danger);margin:0">${escHtml(err.message)}</p></div>${
         // If the server returned a rejected SQL, show it for transparency.
         ''
       }</div>`;
@@ -100,15 +106,18 @@ const askModule = {
     const { sql, columns = [], rows = [], summary } = data;
 
     const summaryHtml = summary
-      ? `<div class="card" style="margin-bottom:16px">
-           <div style="font-size:15px;line-height:1.5">${escHtml(summary)}</div>
+      ? `<div class="card" style="margin-bottom:16px;border-left:3px solid var(--accent)">
+           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+             <span class="badge badge-blue">Answer</span>
+           </div>
+           <div style="font-size:15px;line-height:1.5;color:var(--text)">${escHtml(summary)}</div>
          </div>`
       : '';
 
     const sqlHtml = sql
       ? `<details class="card" style="margin-top:16px">
-           <summary style="cursor:pointer;color:var(--text-muted);font-size:13px">Show generated SQL</summary>
-           <pre style="overflow:auto;margin-top:12px;font-size:12px;color:var(--text);white-space:pre-wrap;word-break:break-word">${escHtml(sql)}</pre>
+           <summary style="cursor:pointer;color:var(--text-muted);font-size:13px;font-weight:500">Show generated SQL</summary>
+           <pre style="overflow:auto;margin-top:12px;padding:12px;font-size:12px;color:var(--text);background:var(--surface2);border-radius:var(--radius-sm);white-space:pre-wrap;word-break:break-word">${escHtml(sql)}</pre>
          </details>`
       : '';
 
@@ -128,6 +137,10 @@ const askModule = {
     };
     const tableHtml = `
       <div class="card">
+        <div class="dash-card-head">
+          <h2 style="margin:0">Results</h2>
+          <span class="badge badge-muted">${rows.length} row${rows.length === 1 ? '' : 's'}</span>
+        </div>
         <div class="table-wrap">
           <table class="payee-detail-table">
             <thead><tr>${columns.map(c => `<th>${escHtml(c)}</th>`).join('')}</tr></thead>
@@ -170,14 +183,25 @@ const askModule = {
     if (!wrap) return;
     wrap.innerHTML = `
       <div class="card" style="margin-top:16px">
-        <h2>Chart</h2>
+        <div class="dash-card-head"><h2 style="margin:0">Chart</h2></div>
         <div class="chart-container chart-container--tall"><canvas id="ask-chart"></canvas></div>
       </div>`;
 
     const canvas = document.getElementById('ask-chart');
     if (!canvas) return;
 
-    const palette = ['#6366f1','#a78bfa','#22d3ee','#fbbf24','#fb7185','#60a5fa','#f472b6','#34d399','#fb923c','#c084fc'];
+    // Resolve Maple CSS tokens to concrete colors (Chart.js can't parse var()).
+    const css = getComputedStyle(document.documentElement);
+    const tok = (name, fallback) => (css.getPropertyValue(name).trim() || fallback);
+    const accent  = tok('--accent', '#5e8bff');
+    const muted    = tok('--text-muted', '#9b938a');
+    const palette = [
+      accent,
+      tok('--success', '#57cf8e'),
+      tok('--warning', '#ffb15e'),
+      tok('--danger', '#ff8c6b'),
+      tok('--accent', '#5e8bff')
+    ];
     const isMoney = this.looksLikeMoney(valueCol);
     const fmtTick = v => (isMoney ? '$' + v.toLocaleString() : v.toLocaleString());
     const fmtVal  = v => (isMoney ? fmtCur(v) : v.toLocaleString('en-US'));
@@ -189,8 +213,8 @@ const askModule = {
         datasets: [{
           label: valueCol,
           data: values,
-          backgroundColor: isTimeSeries ? 'rgba(99,102,241,0.15)' : values.map((_, i) => palette[i % palette.length]),
-          borderColor: '#6366f1',
+          backgroundColor: isTimeSeries ? 'rgba(94,139,255,0.15)' : values.map((_, i) => palette[i % palette.length]),
+          borderColor: accent,
           borderWidth: 2,
           borderRadius: isTimeSeries ? 0 : 4,
           fill: isTimeSeries,
@@ -207,8 +231,8 @@ const askModule = {
           tooltip: { callbacks: { label: ctx => ` ${fmtVal(ctx.raw)}` } }
         },
         scales: {
-          x: { ticks: { color: '#8892a4', maxTicksLimit: 16 }, grid: { color: 'rgba(255,255,255,0.05)' } },
-          y: { beginAtZero: true, ticks: { color: '#8892a4', callback: fmtTick }, grid: { color: 'rgba(255,255,255,0.05)' } }
+          x: { ticks: { color: muted, maxTicksLimit: 16 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          y: { beginAtZero: true, ticks: { color: muted, callback: fmtTick }, grid: { color: 'rgba(255,255,255,0.05)' } }
         }
       }
     });

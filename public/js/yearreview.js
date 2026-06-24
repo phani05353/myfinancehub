@@ -63,25 +63,25 @@ const yearReviewModule = {
       ${hasData ? `
         <div class="yr-charts-grid">
           <div class="card">
-            <h2 style="margin-bottom:16px">Monthly Income vs Expenses</h2>
+            <div class="dash-card-head"><h3>Monthly Income vs Expenses</h3></div>
             <div class="chart-container chart-container--tall"><canvas id="yr-monthly-chart"></canvas></div>
           </div>
           <div class="card">
-            <h2 style="margin-bottom:16px">Spending by Category</h2>
+            <div class="dash-card-head"><h3>Spending by Category</h3></div>
             <div class="chart-container chart-container--tall"><canvas id="yr-cat-chart"></canvas></div>
           </div>
         </div>
         <div class="card" style="margin-top:20px">
-          <h2 style="margin-bottom:16px">Month-by-Month Breakdown</h2>
+          <div class="dash-card-head"><h3>Month-by-Month Breakdown</h3></div>
           ${this.monthTableHtml(months)}
         </div>
         <div class="yr-bottom-grid">
           <div class="card">
-            <h2 style="margin-bottom:14px">Top 5 Expenses</h2>
+            <div class="dash-card-head"><h3>Top 5 Expenses</h3></div>
             ${this.topExpensesHtml(data.top_expenses)}
           </div>
           <div class="card">
-            <h2 style="margin-bottom:14px">Insights</h2>
+            <div class="dash-card-head"><h3>Insights</h3></div>
             ${this.insightsHtml(months, data.summary)}
           </div>
         </div>
@@ -98,29 +98,31 @@ const yearReviewModule = {
     const savingsRate = s.total_income > 0
       ? ((s.net / s.total_income) * 100).toFixed(1)
       : '—';
-    const rateColor = s.net >= 0 ? 'income' : 'expense';
+    const positive = s.net >= 0;
+    const netColor = positive ? 'var(--success)' : 'var(--danger)';
+    const rateBadge = positive ? 'kpi-badge' : 'kpi-badge kpi-badge--danger';
 
     return `
-      <div class="stats-grid" style="margin-bottom:20px">
-        <div class="stat-card">
-          <div class="label">Total Income</div>
-          <div class="value income">${fmtCur(s.total_income)}</div>
-          <div class="sublabel">${s.tx_count} transactions</div>
+      <div class="kpi-grid" style="margin-bottom:20px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+        <div class="kpi-card">
+          <div class="kpi-label">Total Income</div>
+          <div class="kpi-value" style="color:var(--success)">${fmtCur(s.total_income)}</div>
+          <span class="kpi-badge kpi-badge--muted">${s.tx_count} transactions</span>
         </div>
-        <div class="stat-card">
-          <div class="label">Total Expenses</div>
-          <div class="value expense">${fmtCur(s.total_expenses)}</div>
-          <div class="sublabel">across the year</div>
+        <div class="kpi-card">
+          <div class="kpi-label">Total Expenses</div>
+          <div class="kpi-value" style="color:var(--danger)">${fmtCur(s.total_expenses)}</div>
+          <span class="kpi-badge kpi-badge--muted">across the year</span>
         </div>
-        <div class="stat-card">
-          <div class="label">${s.net >= 0 ? 'Net Savings' : 'Net Loss'}</div>
-          <div class="value ${rateColor}">${fmtCur(Math.abs(s.net))}</div>
-          <div class="sublabel">saved this year</div>
+        <div class="kpi-card kpi-card--feature">
+          <div class="kpi-label">${positive ? 'Net Savings' : 'Net Loss'}</div>
+          <div class="kpi-value" style="color:${netColor}">${fmtCur(Math.abs(s.net))}</div>
+          <span class="${rateBadge}">${positive ? 'saved this year' : 'over this year'}</span>
         </div>
-        <div class="stat-card">
-          <div class="label">Savings Rate</div>
-          <div class="value ${rateColor}">${savingsRate}${savingsRate !== '—' ? '%' : ''}</div>
-          <div class="sublabel">of income saved</div>
+        <div class="kpi-card">
+          <div class="kpi-label">Savings Rate</div>
+          <div class="kpi-value" style="color:${netColor}">${savingsRate}${savingsRate !== '—' ? '%' : ''}</div>
+          <span class="${rateBadge}">of income saved</span>
         </div>
       </div>
     `;
@@ -137,7 +139,7 @@ const yearReviewModule = {
           <td style="text-align:right" class="amount-positive">${m.income > 0 ? fmtCur(m.income) : '—'}</td>
           <td style="text-align:right" class="amount-negative">${m.expenses > 0 ? fmtCur(m.expenses) : '—'}</td>
           <td style="text-align:right;font-weight:600;color:${net >= 0 ? 'var(--success)' : 'var(--danger)'}">${isEmpty ? '—' : fmtCur(Math.abs(net))}</td>
-          <td style="text-align:right;color:var(--text-muted)">${net >= 0 ? '▲' : '▼'} ${isEmpty ? '' : (net >= 0 ? 'saved' : 'over')}</td>
+          <td style="text-align:right">${isEmpty ? '' : `<span class="badge ${net >= 0 ? 'badge-green' : 'badge-red'}">${net >= 0 ? '▲ saved' : '▼ over'}</span>`}</td>
         </tr>
       `;
     }).join('');
