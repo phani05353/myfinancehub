@@ -45,34 +45,36 @@ const budgetModule = {
     const barColor    = overallPct > 100 ? 'var(--danger)' : overallPct >= 100 ? 'var(--warning)' : overallPct >= 80 ? 'var(--warning)' : 'var(--success)';
 
     document.getElementById('budget-summary').innerHTML = `
-      <div class="stats-grid" style="margin-bottom:16px">
-        <div class="stat-card">
-          <div class="label">Total Budget</div>
-          <div class="value neutral">${fmtCur(totalBudget)}</div>
-          <div class="sublabel">${status.length} categories</div>
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">Total Budget</div>
+          <div class="kpi-value">${fmtCur(totalBudget)}</div>
+          <span class="kpi-badge kpi-badge--muted">${status.length} categories</span>
         </div>
-        <div class="stat-card">
-          <div class="label">Total Spent</div>
-          <div class="value ${totalSpent > totalBudget ? 'expense' : 'income'}">${fmtCur(totalSpent)}</div>
-          <div class="sublabel">${overallPct.toFixed(1)}% of budget</div>
+        <div class="kpi-card">
+          <div class="kpi-label">Total Spent</div>
+          <div class="kpi-value" style="color:${totalSpent > totalBudget ? 'var(--danger)' : 'var(--text)'}">${fmtCur(totalSpent)}</div>
+          <span class="kpi-badge ${totalSpent > totalBudget ? 'kpi-badge--danger' : 'kpi-badge--muted'}">${overallPct.toFixed(1)}% of budget</span>
         </div>
-        <div class="stat-card">
-          <div class="label">${remaining >= 0 ? 'Remaining' : 'Over Budget'}</div>
-          <div class="value ${remaining >= 0 ? 'income' : 'expense'}">${fmtCur(Math.abs(remaining))}</div>
-          <div class="sublabel">${overCount > 0 ? `${overCount} category${overCount > 1 ? 's' : ''} over limit` : 'All within budget'}</div>
+        <div class="kpi-card kpi-card--feature">
+          <div class="kpi-label">${remaining >= 0 ? 'Remaining' : 'Over Budget'}</div>
+          <div class="kpi-value" style="color:${remaining >= 0 ? 'var(--success)' : 'var(--danger)'}">${fmtCur(Math.abs(remaining))}</div>
+          <span class="kpi-badge ${overCount > 0 ? 'kpi-badge--danger' : 'kpi-badge--muted'}">${overCount > 0 ? `${overCount} category${overCount > 1 ? 's' : ''} over limit` : 'All within budget'}</span>
         </div>
       </div>
-      <div class="card" style="margin-bottom:20px;padding:14px 18px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <span style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Overall Budget Usage</span>
-          <span style="font-weight:700;font-size:14px;color:${barColor}">${overallPct.toFixed(1)}%</span>
-        </div>
-        <div class="budget-bar-track">
-          <div class="budget-bar-fill" style="width:${overallPct.toFixed(1)}%;background:${barColor}"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--text-muted)">
-          <span>Spent ${fmtCur(totalSpent)}</span>
-          <span>Budget ${fmtCur(totalBudget)}</span>
+      <div class="card" style="margin-bottom:20px;padding:16px 18px">
+        <div class="cat-bar-row">
+          <div class="cat-bar-head">
+            <span>Overall Budget Usage</span>
+            <span class="cat-bar-amt" style="color:${barColor};font-weight:700">${overallPct.toFixed(1)}%</span>
+          </div>
+          <div class="cat-bar-track">
+            <div class="cat-bar-fill" style="width:${overallPct.toFixed(1)}%;background:${barColor}"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--text-muted)">
+            <span>Spent ${fmtCur(totalSpent)}</span>
+            <span>Budget ${fmtCur(totalBudget)}</span>
+          </div>
         </div>
       </div>
     `;
@@ -99,7 +101,14 @@ const budgetModule = {
       return pctB - pctA;
     });
 
-    grid.innerHTML = `<div class="budget-cards">${sorted.map(b => this.cardHtml(b)).join('')}</div>`;
+    grid.innerHTML = `
+      <div class="card" style="padding:18px 20px">
+        <div class="dash-card-head">
+          <h3>Category Budgets</h3>
+          <span class="badge badge-gray">${sorted.length} ${sorted.length === 1 ? 'category' : 'categories'}</span>
+        </div>
+        ${sorted.map(b => this.cardHtml(b)).join('')}
+      </div>`;
   },
 
   cardHtml(b) {
@@ -112,33 +121,27 @@ const budgetModule = {
 
     const catJs = escHtml(b.category).replace(/'/g, "\\'");
     return `
-      <div class="budget-card ${over ? 'budget-card--over' : ''}">
-        <div class="budget-card-header">
-          <span class="budget-cat">${escHtml(b.category)}</span>
-          <div style="display:flex;gap:6px">
+      <div class="cat-bar-row">
+        <div class="cat-bar-head">
+          <span style="cursor:pointer" onclick="budgetModule.openTxModal('${catJs}','${this.currentMonth}')">${escHtml(b.category)} →</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="cat-bar-amt"><span style="color:${barColor};font-weight:700">${fmtCur(b.spent)}</span> of ${fmtCur(b.budget)}</span>
             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();budgetModule.openEditModal(${b.id},'${escHtml(b.category)}',${b.budget})">Edit</button>
             <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();budgetModule.deleteBudget(${b.id})">✕</button>
           </div>
         </div>
 
-        <div class="budget-card-body" onclick="budgetModule.openTxModal('${catJs}','${this.currentMonth}')">
-          <div class="budget-amounts">
-            <span style="font-size:22px;font-weight:700;color:${barColor}">${fmtCur(b.spent)}</span>
-            <span style="color:var(--text-muted);font-size:13px">of ${fmtCur(b.budget)}</span>
-          </div>
+        <div class="cat-bar-track" style="cursor:pointer" onclick="budgetModule.openTxModal('${catJs}','${this.currentMonth}')">
+          <div class="cat-bar-fill" style="width:${barPct.toFixed(1)}%;background:${barColor}"></div>
+        </div>
 
-          <div class="budget-bar-track" style="margin:10px 0 6px">
-            <div class="budget-bar-fill" style="width:${barPct.toFixed(1)}%;background:${barColor}"></div>
-          </div>
-
-          <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px">
-            <span style="color:${over ? 'var(--danger)' : 'var(--success)'};font-weight:600">
-              ${over
-                ? `⚠ ${fmtCur(Math.abs(remaining))} over budget`
-                : `${fmtCur(remaining)} remaining`}
-            </span>
-            <span class="budget-pct-badge" style="background:${barColor}20;color:${barColor}">${pctLabel} · View →</span>
-          </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-top:7px">
+          <span style="color:${over ? 'var(--danger)' : 'var(--text-muted)'};font-weight:600">
+            ${over
+              ? `⚠ ${fmtCur(Math.abs(remaining))} over budget`
+              : `${fmtCur(remaining)} remaining`}
+          </span>
+          <span class="badge ${pct > 100 ? 'badge-red' : pct >= 80 ? 'badge-yellow' : 'badge-green'}">${pctLabel}</span>
         </div>
       </div>
     `;

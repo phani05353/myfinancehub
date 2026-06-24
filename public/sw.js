@@ -1,5 +1,5 @@
 // Bumped on each release so stale clients pick up new assets.
-const CACHE = 'finance-hub-v16';
+const CACHE = 'finance-hub-v17';
 
 const SHELL = [
   '/',
