@@ -65,21 +65,11 @@ const transactionsModule = {
         </div>
       </div>
 
-      <div class="card" style="margin-top:12px">
-        <div class="table-wrap">
-          <table class="tx-table">
-            <thead>
-              <tr>
-                <th>Date</th><th>Payee</th><th>Category</th>
-                <th style="text-align:right">Amount</th><th>Notes</th><th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="tx-body">
-              <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted)">Loading…</td></tr>
-            </tbody>
-          </table>
+      <div class="card" style="margin-top:12px;padding:8px">
+        <div id="tx-body" style="display:flex;flex-direction:column;gap:6px">
+          <div style="text-align:center;padding:32px;color:var(--text-muted)">Loading…</div>
         </div>
-        <div class="pagination" id="tx-pagination"></div>
+        <div class="pagination" id="tx-pagination" style="padding:12px 8px 4px"></div>
       </div>
     `;
 
@@ -145,23 +135,39 @@ const transactionsModule = {
     const tbody = document.getElementById('tx-body');
     if (!tbody) return;
     if (rows.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state" style="padding:32px"><div class="empty-icon">📭</div><p>No transactions found</p></div></td></tr>`;
+      tbody.innerHTML = `<div class="empty-state" style="padding:32px"><div class="empty-icon">📭</div><p>No transactions found</p></div>`;
     } else {
-      tbody.innerHTML = rows.map(r => `
-        <tr>
-          <td data-label="Date" style="white-space:nowrap">${fmtDate(r.date)}</td>
-          <td data-label="Payee"><span class="payee-cell">${payeeLogoHtml(r.payee, r.amount)}${escHtml(r.payee)}${r.needs_review ? ' <span class="badge badge-yellow" title="AI-extracted from a receipt — confirm the details">Review</span>' : ''}</span></td>
-          <td data-label="Category">${r.category ? `<span class="badge badge-blue">${escHtml(r.category)}</span>` : '<span class="badge badge-gray">—</span>'}</td>
-          <td data-label="Amount" style="text-align:right">${fmt(r.amount)}</td>
-          <td data-label="Notes" style="color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(r.notes || '')}</td>
-          <td data-label="Actions" style="white-space:nowrap">
-            ${r.needs_review ? `<button class="btn btn-ghost btn-sm" onclick="transactionsModule.confirmReview(${r.id})" title="Confirm — looks right" style="color:var(--success)">✓</button>` : ''}
-            ${r.receipt_path ? `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${escHtml(r.receipt_path)}')" title="View receipt">📎</button>` : ''}
-            <button class="btn btn-ghost btn-sm" onclick="transactionsModule.openEditModal(${r.id})">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="transactionsModule.deleteRow(${r.id})">Del</button>
-          </td>
-        </tr>
-      `).join('');
+      tbody.innerHTML = rows.map(r => {
+        const isIncome  = r.amount > 0;
+        const amtClass  = isIncome ? 'amount-positive' : 'amount-negative';
+        const amtColor  = isIncome ? 'var(--success)' : 'var(--danger)';
+        const catBadge  = r.category
+          ? `<span class="badge badge-blue">${escHtml(r.category)}</span>`
+          : `<span class="badge badge-gray">—</span>`;
+        const reviewBadge = r.needs_review
+          ? ` <span class="badge badge-yellow" title="AI-extracted from a receipt — confirm the details">Review</span>`
+          : '';
+        const notes = r.notes
+          ? ` <span style="color:var(--text-muted)">· ${escHtml(r.notes)}</span>`
+          : '';
+        return `
+        <div class="list-row">
+          ${payeeLogoHtml(r.payee, r.amount)}
+          <div class="list-row-main">
+            <div class="list-row-title">${escHtml(r.payee)}${reviewBadge}</div>
+            <div class="list-row-sub">${catBadge} <span style="color:var(--text-muted)">${fmtDate(r.date)}</span>${notes}</div>
+          </div>
+          <div class="list-row-trail">
+            <div class="list-row-amount ${amtClass}" style="color:${amtColor}">${fmt(r.amount)}</div>
+            <div class="list-row-actions" style="white-space:nowrap">
+              ${r.needs_review ? `<button class="btn btn-ghost btn-sm" onclick="transactionsModule.confirmReview(${r.id})" title="Confirm — looks right" style="color:var(--success)">✓</button>` : ''}
+              ${r.receipt_path ? `<button class="btn btn-ghost btn-sm" onclick="viewReceipt('${escHtml(r.receipt_path)}')" title="View receipt">📎</button>` : ''}
+              <button class="btn btn-ghost btn-sm" onclick="transactionsModule.openEditModal(${r.id})">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="transactionsModule.deleteRow(${r.id})">Del</button>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
     }
 
     const pag = document.getElementById('tx-pagination');
@@ -525,7 +531,7 @@ function payeeLogoHtml(payee, amount) {
   // Income transactions get a fixed $ badge instead of a favicon lookup
   if (amount > 0) {
     return `<span class="payee-logo-wrap">
-      <span class="payee-initial" style="background:#57cf8e;display:flex">$</span>
+      <span class="payee-initial" style="background:var(--success);display:flex">$</span>
     </span>`;
   }
   const domain  = payeeDomain(payee);
