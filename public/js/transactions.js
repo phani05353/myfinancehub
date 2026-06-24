@@ -66,7 +66,7 @@ const transactionsModule = {
       </div>
 
       <div class="card" style="margin-top:12px;padding:8px">
-        <div id="tx-body" style="display:flex;flex-direction:column;gap:6px">
+        <div id="tx-body" class="list-grid">
           <div style="text-align:center;padding:32px;color:var(--text-muted)">Loading…</div>
         </div>
         <div class="pagination" id="tx-pagination" style="padding:12px 8px 4px"></div>

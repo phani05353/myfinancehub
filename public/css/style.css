@@ -2904,3 +2904,25 @@ tr.due-soon td:first-child { color: var(--warning); }
   .dash-overview-chart { height: 200px; }
   .cat-bar-row { margin-bottom: 14px; }
 }
+
+/* ── DENSE WEB LISTS: 2-column on desktop, single column on mobile (unchanged) ── */
+/* .list-grid = flex column by default (identical to prior mobile/desktop stacking) */
+.list-grid { display: flex; flex-direction: column; gap: 6px; }
+@media (min-width: 900px) {
+  .list-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    align-items: start;
+  }
+  .list-grid > .list-row { margin-bottom: 0; }
+  .list-grid > .empty-state { grid-column: 1 / -1; }
+  /* category/budget progress bars two-up on desktop */
+  .cat-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 28px;
+    align-items: start;
+  }
+  .cat-grid > .cat-bar-row { margin-bottom: 0; }
+}

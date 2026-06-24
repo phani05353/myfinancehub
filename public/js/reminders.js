@@ -97,7 +97,7 @@ const remindersModule = {
     if (reminders.length === 0) return '<p style="color:var(--text-muted);padding:12px 0">None</p>';
     const today = new Date().toISOString().slice(0, 10);
     const soonCutoff = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-    return reminders.map(r => {
+    return '<div class="list-grid">' + reminders.map(r => {
       const isOverdue = showPayBtn && r.due_date < today;
       const isDueSoon = showPayBtn && !isOverdue && r.due_date <= soonCutoff;
       const rowCls = isOverdue ? ' overdue' : isDueSoon ? ' due-soon' : '';
@@ -122,7 +122,7 @@ const remindersModule = {
             </div>
           </div>
         </div>`;
-    }).join('');
+    }).join('') + '</div>';
   },
 
   async openDetectModal() {

@@ -87,7 +87,7 @@ const subscriptionsModule = {
     }
     const today = new Date().toISOString().slice(0, 10);
     const cycleShort = { monthly: '/mo', yearly: '/yr', weekly: '/wk' };
-    return subs
+    return `<div class="list-grid">${subs
       .slice()
       .sort((a, b) => (a.next_due_date || '').localeCompare(b.next_due_date || ''))
       .map(s => {
@@ -113,7 +113,7 @@ const subscriptionsModule = {
             </div>
           </div>`;
       })
-      .join('');
+      .join('')}</div>`;
   },
 
   async openDetectModal() {
