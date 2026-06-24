@@ -107,7 +107,7 @@ const budgetModule = {
           <h3>Category Budgets</h3>
           <span class="badge badge-gray">${sorted.length} ${sorted.length === 1 ? 'category' : 'categories'}</span>
         </div>
-        ${sorted.map(b => this.cardHtml(b)).join('')}
+        <div class="cat-grid">${sorted.map(b => this.cardHtml(b)).join('')}</div>
       </div>`;
   },
 
