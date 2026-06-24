@@ -69,40 +69,51 @@ const subscriptionsModule = {
     `;
   },
 
+  // Friendly "renews" label, Maple-style (Renews tomorrow / in N days)
+  renewsLabel(dueDate, isOverdue) {
+    if (isOverdue) return 'Overdue';
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const due = new Date(dueDate + 'T00:00:00');
+    const days = Math.round((due - today) / 86400000);
+    if (days <= 0) return 'Renews today';
+    if (days === 1) return 'Renews tomorrow';
+    if (days <= 14) return `Renews in ${days} days`;
+    return `Renews ${fmtDate(dueDate)}`;
+  },
+
   renderTable(subs, isActive) {
     if (subs.length === 0) {
       return `<div class="empty-state" style="padding:32px"><div class="empty-icon">📋</div><p>No ${isActive ? 'active' : 'paused'} subscriptions</p></div>`;
     }
     const today = new Date().toISOString().slice(0, 10);
-    return `
-      <div class="table-wrap">
-        <table class="sub-table">
-          <thead>
-            <tr><th>Name</th><th>Payee</th><th>Amount</th><th>Billing</th><th>Next Due</th><th>Category</th><th>Actions</th></tr>
-          </thead>
-          <tbody>
-            ${subs.map(s => {
-              const isDueSoon = s.next_due_date <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-              const isOverdue = s.next_due_date < today;
-              return `<tr class="${isOverdue ? 'overdue' : isDueSoon ? 'due-soon' : ''}">
-                <td data-label="Name"><span class="payee-cell">${payeeLogoHtml(s.name, -1)}<strong>${escHtml(s.name)}</strong></span></td>
-                <td data-label="Payee">${escHtml(s.payee || '—')}</td>
-                <td data-label="Amount">${fmt(-Math.abs(s.amount))}</td>
-                <td data-label="Billing"><span class="badge badge-blue">${s.billing_cycle}</span></td>
-                <td data-label="Next Due">${fmtDate(s.next_due_date)} ${isOverdue ? '<span class="badge badge-red">Overdue</span>' : isDueSoon ? '<span class="badge badge-yellow">Soon</span>' : ''}</td>
-                <td data-label="Category">${s.category ? `<span class="badge badge-gray">${escHtml(s.category)}</span>` : '—'}</td>
-                <td data-label="Actions">
-                  ${isOverdue || isDueSoon ? `<button class="btn btn-success btn-sm" onclick="subscriptionsModule.markPaid(${s.id})">✓ Paid</button>` : ''}
-                  <button class="btn btn-ghost btn-sm" onclick="subscriptionsModule.openEditModal(${s.id})">Edit</button>
-                  <button class="btn btn-ghost btn-sm" onclick="subscriptionsModule.toggleActive(${s.id}, ${s.active ? 0 : 1})">${s.active ? 'Pause' : 'Resume'}</button>
-                  <button class="btn btn-danger btn-sm" onclick="subscriptionsModule.deleteRow(${s.id})">Del</button>
-                </td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
+    const cycleShort = { monthly: '/mo', yearly: '/yr', weekly: '/wk' };
+    return subs
+      .slice()
+      .sort((a, b) => (a.next_due_date || '').localeCompare(b.next_due_date || ''))
+      .map(s => {
+        const isDueSoon = s.next_due_date <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+        const isOverdue = s.next_due_date < today;
+        const rowCls = isOverdue ? ' overdue' : isDueSoon ? ' due-soon' : '';
+        const dueCls = isOverdue ? 'color:var(--danger)' : isDueSoon ? 'color:var(--warning)' : 'color:var(--text-muted)';
+        return `
+          <div class="list-row${rowCls}">
+            ${payeeLogoHtml(s.name, -1)}
+            <div class="list-row-main">
+              <div class="list-row-title">${escHtml(s.name)}${s.category ? ` <span class="badge badge-gray">${escHtml(s.category)}</span>` : ''}</div>
+              <div class="list-row-sub" style="${dueCls}">${this.renewsLabel(s.next_due_date, isOverdue)}</div>
+            </div>
+            <div class="list-row-trail">
+              <div class="list-row-amount">${fmt(-Math.abs(s.amount))}<span style="font-size:11px;color:var(--text-muted);font-weight:500">${cycleShort[s.billing_cycle] || ''}</span></div>
+              <div class="list-row-actions">
+                ${isOverdue || isDueSoon ? `<button class="btn btn-success btn-sm" onclick="subscriptionsModule.markPaid(${s.id})">✓ Paid</button>` : ''}
+                <button class="btn btn-ghost btn-sm" onclick="subscriptionsModule.openEditModal(${s.id})">Edit</button>
+                <button class="btn btn-ghost btn-sm" onclick="subscriptionsModule.toggleActive(${s.id}, ${s.active ? 0 : 1})">${s.active ? 'Pause' : 'Resume'}</button>
+                <button class="btn btn-danger btn-sm" onclick="subscriptionsModule.deleteRow(${s.id})">Del</button>
+              </div>
+            </div>
+          </div>`;
+      })
+      .join('');
   },
 
   async openDetectModal() {

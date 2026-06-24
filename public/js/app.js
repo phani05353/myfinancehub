@@ -485,10 +485,11 @@ window.addEventListener('load', async () => {
     const me = await api('/api/auth/me');
     const el = document.getElementById('sidebar-username');
     if (el && me.username) el.textContent = me.username;
-    const avatar = document.getElementById('top-nav-avatar');
-    if (avatar && me.username) {
-      avatar.textContent = me.username.slice(0, 2).toUpperCase();
-      avatar.title = `Signed in as ${me.username}`;
+    if (me.username) {
+      document.querySelectorAll('.user-avatar').forEach(avatar => {
+        avatar.textContent = me.username.slice(0, 2).toUpperCase();
+        avatar.title = `Signed in as ${me.username}`;
+      });
     }
   } catch (_) {}
 });
