@@ -1,0 +1,16 @@
+[Unit]
+Description=FinanceHub self-heal watchdog (checks /health, redeploys if down)
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+# Run as the docker-group user that owns ~/finance-hub (so docker + git work
+# without sudo). Adjust User and the paths below if your layout differs.
+User=phanikumar
+Environment=FINANCE_DEPLOY=/home/phanikumar/finance-hub/deploy.sh
+ExecStart=/home/phanikumar/finance-hub/myfinancehub/watchdog/finance-watchdog.sh
+# Tunables (uncomment to override the script defaults):
+# Environment=FINANCE_WATCHDOG_THRESHOLD=3
+# Environment=FINANCE_WATCHDOG_COOLDOWN=600
+# Environment=FINANCE_HEALTH_URL=http://localhost:3090/health
