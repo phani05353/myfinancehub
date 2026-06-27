@@ -44,6 +44,14 @@ function htmlToMrkdwn(html) {
   });
   // Headings -> bold on their own line.
   s = s.replace(/<h[1-6]\b[^>]*>([\s\S]*?)<\/h[1-6]>/gi, '\n*$1*\n');
+  // Styled headings: email layouts use bold <div>/<p> (font-weight:600+) instead
+  // of <h*>. Promote a *leaf* bold block (plain-text content, no nested tags) to a
+  // standalone bold line so buildBlocks can split the card into skimmable sections
+  // instead of one wall. (Nested/structural divs are left alone — they'd mismatch.)
+  s = s.replace(
+    /<(div|p)\b[^>]*style=["'][^"']*font-weight:\s*(?:bold|[6-9]00)[^"']*["'][^>]*>([^<]+?)<\/\1>/gi,
+    '\n*$2*\n'
+  );
   // Bold / italic.
   s = s.replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi, '*$2*');
   s = s.replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1>/gi, '_$2_');
@@ -99,8 +107,12 @@ function splitIntoSections(body) {
   const isHeading = (line) => /^\*[^*\n]+\*$/.test(line.trim());
   const groups = [];
   let current = [];
+  // Only break at a heading once the current group has real (non-heading) body,
+  // so a run of consecutive bold lines stays together instead of spawning a
+  // divider between every one.
+  const hasBody = () => current.some((l) => l.trim() !== '' && !isHeading(l));
   for (const line of body.split('\n')) {
-    if (isHeading(line) && current.some((l) => l.trim() !== '')) {
+    if (isHeading(line) && hasBody()) {
       groups.push(current.join('\n').trim());
       current = [];
     }
@@ -148,11 +160,14 @@ function buildBlocks(subject, html, source = '💰 MyFinanceHub') {
 // Post the alert to Slack via Incoming Webhook. Returns true on success.
 // Best-effort: returns false (never throws) when the webhook is unset or Slack
 // rejects the post, so the caller's email is never affected.
-async function postToSlack(webhookUrl, subject, html, source = '💰 MyFinanceHub') {
+async function postToSlack(webhookUrl, subject, html, source = '💰 MyFinanceHub', blocks = null) {
   if (!webhookUrl) return false;
   const payload = {
     text: subject, // plain fallback for notifications / screen readers
-    blocks: buildBlocks(subject, html, source)
+    // Callers with structured data can pass pre-built Block Kit (far more
+    // mobile-readable than scraping the layout-table HTML); otherwise fall back
+    // to the heuristic converter.
+    blocks: blocks || buildBlocks(subject, html, source)
   };
   try {
     const res = await fetch(webhookUrl, {
