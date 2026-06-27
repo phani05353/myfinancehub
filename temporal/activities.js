@@ -5,6 +5,7 @@ const fs       = require('fs');
 const path     = require('path');
 const Database = require('better-sqlite3');
 const { monthlyReportHtml, monthlyReportSubject } = require('./email-template');
+const { postToSlack } = require('./slack');
 
 const DATA_DIR     = path.join(__dirname, '..', 'data');
 const DB_PATH      = path.join(DATA_DIR, 'finance.db');
@@ -638,6 +639,10 @@ module.exports = ({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptTex
   // Render + send the monthly report via Resend. The API key is read from the
   // environment (never committed) — see .env / GitHub Actions secrets. Throws
   // on any non-2xx so Temporal retries and surfaces the failure in its UI.
+  //
+  // The report is also mirrored to Slack (./slack) when SLACK_WEBHOOK_URL is set:
+  // best-effort, AFTER Resend accepts the email, and any Slack failure is logged
+  // and swallowed so a broken webhook never fails the activity or blocks the email.
   async sendMonthlyReportEmail(report) {
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) throw new Error('RESEND_API_KEY is not set — add it to the environment');
@@ -660,6 +665,14 @@ module.exports = ({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptTex
     if (!res.ok) throw new Error(`Resend ${res.status}: ${text.slice(0, 300)}`);
     let id = null;
     try { id = JSON.parse(text).id || null; } catch (_) {}
+
+    // Mirror to Slack (best-effort — never let it affect the email result).
+    const webhook = process.env.SLACK_WEBHOOK_URL;
+    if (webhook) {
+      const ok = await postToSlack(webhook, subject, html);
+      if (!ok) console.warn(`slack mirror failed for '${subject}' (email still sent)`);
+    }
+
     return { id, to, subject };
   }
 });
