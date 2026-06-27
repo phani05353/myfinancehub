@@ -268,6 +268,84 @@ app.use(session({
 
 app.get('/health', (req, res) => res.json({ status: 'healthy' }));
 
+// ─── WEEKLY DIGEST (token-gated, read-only) ───────────────────────────────────
+// Read-only weekly finance AGGREGATES for the homelab's Sunday digest workflow,
+// which fetches this over the LAN, narrates it with the local LLM, and posts a
+// Slack card. Returns ONLY aggregates (totals, deltas, top categories) — never
+// raw transactions. Gated by a bearer token (DIGEST_TOKEN, host-managed in
+// finance.env); unset = endpoint disabled (503). Registered BEFORE requireAuth
+// so the worker reaches it without an OIDC session. Uses the strictly read-only
+// DB handle for defence in depth.
+function digestTokenState(req) {
+  const expected = process.env.DIGEST_TOKEN;
+  if (!expected) return 'disabled';
+  const hdr = req.get('authorization') || '';
+  const m = hdr.match(/^Bearer\s+(.+)$/i);
+  const provided = (m ? m[1] : req.get('x-digest-token') || '').trim();
+  if (!provided) return 'missing';
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  // timingSafeEqual requires equal lengths; unequal length is already a mismatch.
+  if (a.length !== b.length) return 'bad';
+  return crypto.timingSafeEqual(a, b) ? 'ok' : 'bad';
+}
+
+app.get('/api/digest', (req, res) => {
+  const state = digestTokenState(req);
+  if (state === 'disabled') return res.status(503).json({ error: 'digest endpoint disabled (DIGEST_TOKEN unset)' });
+  if (state !== 'ok') return res.status(401).json({ error: 'unauthorized' });
+
+  try {
+    const rdb = getReadonlyDb();
+    // Two 7-day windows for the week-over-week delta. Dates are 'YYYY-MM-DD', so
+    // date(...) normalises any time component before the string comparison.
+    const cur  = "date(date) > date('now','-7 days')  AND date(date) <= date('now')";
+    const prev = "date(date) > date('now','-14 days') AND date(date) <= date('now','-7 days')";
+
+    const totals = rdb.prepare(`
+      SELECT COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) END), 0) AS spent,
+             COALESCE(SUM(CASE WHEN amount > 0 THEN amount     END), 0) AS income,
+             COUNT(*) AS txCount
+      FROM transactions WHERE ${cur}
+    `).get();
+
+    const spentPrev = rdb.prepare(
+      `SELECT COALESCE(SUM(ABS(amount)), 0) AS total FROM transactions WHERE amount < 0 AND ${prev}`
+    ).get().total;
+
+    const topCategories = rdb.prepare(`
+      SELECT COALESCE(category, 'Uncategorized') AS cat, SUM(ABS(amount)) AS total
+      FROM transactions WHERE amount < 0 AND ${cur}
+      GROUP BY cat ORDER BY total DESC LIMIT 5
+    `).all().map(c => ({ cat: c.cat, total: c.total, pct: totals.spent > 0 ? (c.total / totals.spent) * 100 : 0 }));
+
+    const biggestExpense = rdb.prepare(`
+      SELECT payee, ABS(amount) AS amount, date, category
+      FROM transactions WHERE amount < 0 AND ${cur}
+      ORDER BY ABS(amount) DESC LIMIT 1
+    `).get() || null;
+
+    const range = rdb.prepare("SELECT date('now','-6 days') AS start, date('now') AS end").get();
+    const spent = totals.spent, income = totals.income, net = income - spent;
+
+    res.json({
+      generatedAt: new Date().toISOString(),
+      rangeStart: range.start,
+      rangeEnd: range.end,
+      spent, income, net,
+      txCount: totals.txCount,
+      savingsRate: income > 0 ? (net / income) * 100 : null,
+      spentPrev,
+      spentDeltaPct: spentPrev > 0 ? ((spent - spentPrev) / spentPrev) * 100 : null,
+      topCategories,
+      biggestExpense
+    });
+  } catch (err) {
+    console.error('digest endpoint failed:', err);
+    res.status(500).json({ error: 'digest query failed' });
+  }
+});
+
 // ─── AUTH (Authentik OIDC) ─────────────────────────────────────────────────────
 
 // Lazily discover the Authentik issuer and build the OIDC client on first use,
