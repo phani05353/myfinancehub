@@ -483,6 +483,9 @@ window.addEventListener('load', async () => {
   route();
   try {
     const me = await api('/api/auth/me');
+    // Expose the role on <body> so styles/controls can gate on it. The server is
+    // the security boundary (it 403s a disallowed write regardless); this is UX.
+    document.body.dataset.role = me.role || 'viewer';
     const el = document.getElementById('sidebar-username');
     if (el && me.username) el.textContent = me.username;
     if (me.username) {

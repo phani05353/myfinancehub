@@ -348,26 +348,63 @@ function freeUsername(desired, excludeId = null) {
   return candidate;
 }
 
+// ─── ROLES (Authentik group → app role) ───────────────────────────────────────
+// Three roles, highest privilege wins: admin > member > viewer.
+//   • admin  — everything (config + destructive ops).
+//   • member — everyday writes (log/edit transactions, mark bills & subs paid,
+//              contribute to goals, import CSV, OCR receipts). NOT config/destroy.
+//   • viewer — read-only (plus the read-only "Ask" NL query and own profile).
+// The role is driven by Authentik group membership delivered in the OIDC `groups`
+// claim, so changing a user's group in Authentik propagates on their next login.
+// The OIDC scope must therefore request `groups` (see OIDC_SCOPE) AND the Authentik
+// provider needs a scope mapping that emits the user's groups (see README).
+const { APP_ROLES, canAccess, roleFromGroups } = require('./db/rbac');
+const OIDC_GROUP_MAP = {
+  admin:  (process.env.OIDC_ADMIN_GROUP  || 'finance-admins'),
+  member: (process.env.OIDC_MEMBER_GROUP || 'finance-members'),
+  viewer: (process.env.OIDC_VIEWER_GROUP || 'finance-viewers'),
+  // Role for an authenticated user who matches none of the groups above. Defaults
+  // to least privilege (viewer) — a user must be explicitly granted member/admin.
+  fallback: APP_ROLES.has(String(process.env.OIDC_DEFAULT_ROLE || '').toLowerCase())
+    ? String(process.env.OIDC_DEFAULT_ROLE).toLowerCase()
+    : 'viewer',
+};
+
 // Map an Authentik identity to a local users row. Order: (1) match an existing
-// row by oidc_sub, else (2) create a new row — the FIRST user ever becomes admin,
-// everyone after a member. (oidc_sub is the stable Authentik identity; every row
-// is provisioned through this path, so there are no unlinked legacy rows to adopt.)
+// row by oidc_sub, else (2) create a new row. (oidc_sub is the stable Authentik
+// identity; every row is provisioned through this path, so there are no unlinked
+// legacy rows to adopt.)
+//
+// Role: when the `groups` claim is PRESENT, the role is derived from it on every
+// login (Authentik is the source of truth). When it is ABSENT — Authentik hasn't
+// been wired up with a groups mapping yet — we DON'T touch roles: existing users
+// keep their stored role and a brand-new install bootstraps the first user to
+// admin, everyone after to member. This keeps deploying the feature from ever
+// locking anyone out before the Authentik side is configured.
 function upsertOidcUser(claims) {
   const sub      = claims.sub;
   const email    = claims.email || null;
   const username = String(claims.preferred_username || claims.email || sub).trim();
   const display  = claims.name || null;
+  const hasGroups    = Array.isArray(claims.groups);
+  const derivedRole  = hasGroups ? roleFromGroups(claims.groups, OIDC_GROUP_MAP) : null;
 
   const bySub = db.prepare('SELECT * FROM users WHERE oidc_sub = ?').get(sub);
   if (bySub) {
     const name = freeUsername(username, bySub.id);
-    db.prepare('UPDATE users SET username = ?, email = COALESCE(?, email) WHERE id = ?')
-      .run(name, email, bySub.id);
-    return { id: bySub.id, username: name, role: bySub.role };
+    const role = derivedRole || bySub.role;   // reflect Authentik when groups present
+    db.prepare('UPDATE users SET username = ?, email = COALESCE(?, email), role = ? WHERE id = ?')
+      .run(name, email, role, bySub.id);
+    return { id: bySub.id, username: name, role };
   }
 
-  const userCount = db.prepare('SELECT COUNT(*) AS cnt FROM users').get().cnt;
-  const role = userCount === 0 ? 'admin' : 'member';
+  let role;
+  if (derivedRole) {
+    role = derivedRole;
+  } else {
+    const userCount = db.prepare('SELECT COUNT(*) AS cnt FROM users').get().cnt;
+    role = userCount === 0 ? 'admin' : 'member';   // legacy bootstrap (no groups claim)
+  }
   const name = freeUsername(username);
   const result = db.prepare(
     "INSERT INTO users (username, role, email, oidc_sub, display_name) VALUES (?, ?, ?, ?, ?)"
@@ -399,7 +436,11 @@ app.get('/auth/login', async (req, res, next) => {
     req.session.oidc = { code_verifier, state, nonce, redirect_uri };
     res.redirect(authorizeUrlFor(req, client.authorizationUrl({
       redirect_uri,
-      scope: 'openid profile email',
+      // `groups` carries Authentik group membership → app role (see roleFromGroups).
+      // Override via OIDC_SCOPE if your Authentik provider names the mapping
+      // differently or you want to drop groups. Unknown scopes are ignored by
+      // Authentik, and a missing groups claim degrades gracefully (see upsertOidcUser).
+      scope: process.env.OIDC_SCOPE || 'openid profile email groups',
       code_challenge,
       code_challenge_method: 'S256',
       state,
@@ -468,6 +509,16 @@ app.get('/auth/logout', (req, res) => {
 // OIDC routes above. This gate covers all data/API endpoints, static assets, and
 // receipts — there is no way into the app without completing the Authentik flow.
 app.use(requireAuth);
+
+// ─── AUTHORIZATION (role gate) ─────────────────────────────────────────────────
+// requireAuth proves WHO you are; this proves WHAT you may do. The whole policy
+// lives in db/rbac.js (default-deny on writes); here we just feed it the request.
+function authorize(req, res, next) {
+  const role = req.session?.user?.role || 'viewer';
+  if (canAccess(role, req.method, req.path)) return next();
+  return res.status(403).json({ error: `Forbidden: your role (${role}) cannot perform this action` });
+}
+app.use(authorize);
 
 app.get('/api/auth/me', (req, res) => {
   if (!req.session?.user) return res.json({ username: null, role: null, display_name: null });
