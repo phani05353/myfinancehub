@@ -436,11 +436,12 @@ app.get('/auth/login', async (req, res, next) => {
     req.session.oidc = { code_verifier, state, nonce, redirect_uri };
     res.redirect(authorizeUrlFor(req, client.authorizationUrl({
       redirect_uri,
-      // `groups` carries Authentik group membership → app role (see roleFromGroups).
-      // Override via OIDC_SCOPE if your Authentik provider names the mapping
-      // differently or you want to drop groups. Unknown scopes are ignored by
-      // Authentik, and a missing groups claim degrades gracefully (see upsertOidcUser).
-      scope: process.env.OIDC_SCOPE || 'openid profile email groups',
+      // The `groups` claim (→ app role, see roleFromGroups) is emitted by
+      // Authentik's DEFAULT `profile` scope mapping, so requesting `profile` is
+      // enough — no dedicated `groups` scope mapping needed. If your IdP only
+      // exposes groups under a separate scope, add it via OIDC_SCOPE. A missing
+      // groups claim degrades gracefully (see upsertOidcUser).
+      scope: process.env.OIDC_SCOPE || 'openid profile email',
       code_challenge,
       code_challenge_method: 'S256',
       state,

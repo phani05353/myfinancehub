@@ -132,17 +132,18 @@ All notifications skip silently when there's nothing to say — no notification 
     in Authentik takes effect next time they sign in. The server enforces this
     (default-deny on writes); the policy matrix lives in `db/rbac.js` and is unit-
     tested (`test/rbac.test.js`). All users share the same household data.
-  - **Authentik setup:** create three groups (default names `finance-admins`,
-    `finance-members`, `finance-viewers`), add a **scope mapping** on the provider
-    that emits the user's `groups`, ensure the `groups` scope is selected on the
-    provider, then assign each user to a group. Override the group names with
-    `OIDC_ADMIN_GROUP` / `OIDC_MEMBER_GROUP` / `OIDC_VIEWER_GROUP`, the requested
-    scope with `OIDC_SCOPE`, and the no-match fallback role with `OIDC_DEFAULT_ROLE`
-    (default `viewer`).
-  - **Graceful rollout:** until the `groups` claim is present, roles fall back to
-    the legacy bootstrap (first user = admin, everyone after = member) and existing
-    roles are left untouched — so deploying this never locks anyone out before the
-    Authentik side is wired up.
+  - **Authentik setup:** Authentik's **default `profile` scope mapping already
+    emits `groups`** (`[g.name for g in user.ak_groups]`), so no custom scope
+    mapping is needed — just create three groups (default names `finance-admins`,
+    `finance-members`, `finance-viewers`) and assign each user to one. Override the
+    group names with `OIDC_ADMIN_GROUP` / `OIDC_MEMBER_GROUP` / `OIDC_VIEWER_GROUP`,
+    the requested scope with `OIDC_SCOPE`, and the no-match fallback role with
+    `OIDC_DEFAULT_ROLE` (default `viewer`).
+  - **⚠️ Before enabling:** because the `groups` claim is already present, the role
+    is recomputed from groups on the next login — a user in none of the groups
+    becomes `viewer`. **Add your admin user to `finance-admins` first**, or you'll
+    lose admin access. (The absent-claim legacy bootstrap — first user = admin —
+    only applies to IdPs that don't emit `groups` at all.)
 - **Display name** per user (from the OIDC `name` claim) — shown in the dashboard greeting
 - Existing local accounts are linked on first OIDC login by email/username, so
   history and push subscriptions carry over
