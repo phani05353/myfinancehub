@@ -122,8 +122,28 @@ All notifications skip silently when there's nothing to say — no notification 
   No passwords are stored or managed in this app — user/role management lives in Authentik.
 - `openid-client` + `express-session` cookies (7-day, httpOnly, SameSite=Lax; no
   `Secure` flag since the homelab runs over plain HTTP)
-- **Admin / Member roles** — the **first** user to log in becomes admin, everyone
-  after is a member; all users share household data
+- **Three roles, driven by Authentik groups** — `admin` > `member` > `viewer`:
+  - **admin** — everything (config + destructive ops).
+  - **member** — everyday writes: log/edit transactions, mark bills & subscriptions
+    paid, contribute to goals, import CSV, OCR receipts. *Not* config or deletes.
+  - **viewer** — read-only (plus the read-only "Ask" query and editing own profile).
+  - The role comes from the user's **Authentik group**, delivered in the OIDC
+    `groups` claim, and is re-evaluated on every login — so changing a user's group
+    in Authentik takes effect next time they sign in. The server enforces this
+    (default-deny on writes); the policy matrix lives in `db/rbac.js` and is unit-
+    tested (`test/rbac.test.js`). All users share the same household data.
+  - **Authentik setup:** Authentik's **default `profile` scope mapping already
+    emits `groups`** (`[g.name for g in user.ak_groups]`), so no custom scope
+    mapping is needed — just create three groups (default names `finance-admins`,
+    `finance-members`, `finance-viewers`) and assign each user to one. Override the
+    group names with `OIDC_ADMIN_GROUP` / `OIDC_MEMBER_GROUP` / `OIDC_VIEWER_GROUP`,
+    the requested scope with `OIDC_SCOPE`, and the no-match fallback role with
+    `OIDC_DEFAULT_ROLE` (default `viewer`).
+  - **⚠️ Before enabling:** because the `groups` claim is already present, the role
+    is recomputed from groups on the next login — a user in none of the groups
+    becomes `viewer`. **Add your admin user to `finance-admins` first**, or you'll
+    lose admin access. (The absent-claim legacy bootstrap — first user = admin —
+    only applies to IdPs that don't emit `groups` at all.)
 - **Display name** per user (from the OIDC `name` claim) — shown in the dashboard greeting
 - Existing local accounts are linked on first OIDC login by email/username, so
   history and push subscriptions carry over
@@ -168,7 +188,7 @@ pnpm install
 pnpm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Any unauthenticated request redirects to Authentik to log in (set the `OIDC_*` env vars first — see [.env.example](.env.example) and the [home-lab-utils Authentik setup](https://github.com/phani05353/home-lab-utils#authentik-sso)). The **first** user to log in becomes the admin.
+Open [http://localhost:3000](http://localhost:3000). Any unauthenticated request redirects to Authentik to log in (set the `OIDC_*` env vars first — see [.env.example](.env.example) and the [home-lab-utils Authentik setup](https://github.com/phani05353/home-lab-utils#authentik-sso)). Roles come from Authentik groups (`admin` / `member` / `viewer`); until that's configured the **first** user to log in becomes admin (see [Auth](#auth--authentik-sso-oidc)).
 
 If a Temporal server isn't reachable on `localhost:7233`, the app logs a warning and runs **without notifications**. All other features work normally. Set `TEMPORAL_DISABLED=1` to silence the warning.
 
