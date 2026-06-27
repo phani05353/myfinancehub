@@ -518,6 +518,14 @@ async function editProfileModal() {
     ? 'Push requires HTTPS. Serve the app over TLS to enable (see README).'
     : 'Not supported in this browser. Install the PWA on your home screen.';
 
+  // Role is read-only here — it's assigned by Authentik group membership.
+  const ROLE_META = {
+    admin:  { label: 'Admin',  icon: '🛡️', desc: 'Full access — manage everything.' },
+    member: { label: 'Member', icon: '✏️', desc: 'Everyday access — add & edit, mark bills paid, contribute to goals.' },
+    viewer: { label: 'Viewer', icon: '👁️', desc: 'Read-only access.' },
+  };
+  const role = ROLE_META[me.role] || { label: me.role || 'Unknown', icon: '•', desc: '' };
+
   openModal(`
     <h2>Edit Profile</h2>
     <form id="profile-form" style="margin-top:16px">
@@ -550,6 +558,21 @@ async function editProfileModal() {
           <button type="button" class="btn btn-ghost btn-sm" id="push-test" style="margin-top:10px;font-size:11px">
             Send test notification
           </button>` : ''}
+      </div>
+
+      <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:18px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+          <div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:2px">${role.icon} Role</div>
+            <div style="font-size:11px;color:var(--text-muted)">
+              ${escHtml(role.desc)} Managed in Authentik.
+            </div>
+          </div>
+          <span style="white-space:nowrap;font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;
+            background:var(--surface);border:1px solid var(--border);color:var(--text)">
+            ${escHtml(role.label)}
+          </span>
+        </div>
       </div>
 
       <div style="display:flex;gap:10px;justify-content:flex-end">
