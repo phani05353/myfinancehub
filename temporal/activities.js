@@ -4,7 +4,7 @@
 const fs       = require('fs');
 const path     = require('path');
 const Database = require('better-sqlite3');
-const { monthlyReportHtml, monthlyReportSubject } = require('./email-template');
+const { monthlyReportHtml, monthlyReportSubject, monthlyReportSlackBlocks } = require('./email-template');
 const { postToSlack } = require('./slack');
 
 const DATA_DIR     = path.join(__dirname, '..', 'data');
@@ -669,7 +669,7 @@ module.exports = ({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptTex
     // Mirror to Slack (best-effort — never let it affect the email result).
     const webhook = process.env.SLACK_WEBHOOK_URL;
     if (webhook) {
-      const ok = await postToSlack(webhook, subject, html);
+      const ok = await postToSlack(webhook, subject, html, undefined, monthlyReportSlackBlocks(report));
       if (!ok) console.warn(`slack mirror failed for '${subject}' (email still sent)`);
     }
 
