@@ -49,16 +49,27 @@ function htmlToMrkdwn(html) {
   s = s.replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1>/gi, '_$2_');
   // List items -> bullets.
   s = s.replace(/<li\b[^>]*>([\s\S]*?)<\/li>/gi, '• $1\n');
+  // Table cells -> middot-separated so a row stays one readable line on a phone
+  // (a collapsed table is the worst mobile offender); rows -> newline.
+  s = s.replace(/<\/(td|th)>/gi, ' · ');
+  s = s.replace(/<\/tr>/gi, '\n');
   // Block-level breaks -> newline.
   s = s.replace(/<br\s*\/?>/gi, '\n');
   s = s.replace(/<\/(p|div|tr|table|ul|ol|h[1-6])>/gi, '\n');
   // Strip every remaining tag, then unescape entities.
   s = s.replace(/<[^>]+>/g, '');
   s = unescapeHtml(s);
-  // Tidy whitespace: trim each line, collapse 3+ blank lines to one blank.
+  // Tidy whitespace: trim each line (and drop stray middots left at a cell
+  // row's edges), collapse 3+ blank lines to one blank.
   s = s
     .split('\n')
-    .map((line) => line.trim())
+    .map((line) =>
+      line
+        .trim()
+        .replace(/^(?:·\s*)+/, '')
+        .replace(/(?:\s*·)+$/, '')
+        .trim()
+    )
     .join('\n');
   s = s.replace(/\n{3,}/g, '\n\n').trim();
   return s;
@@ -80,6 +91,25 @@ function chunk(text, size) {
   return chunks;
 }
 
+// Split a body into heading-delimited groups so each becomes its own Block Kit
+// section. A heading is a fully-bold line (what htmlToMrkdwn emits for <h*>),
+// e.g. '*Spending*'. Several small sections are far easier to skim on a phone
+// than one long block; standalone-bold lines are the natural seams.
+function splitIntoSections(body) {
+  const isHeading = (line) => /^\*[^*\n]+\*$/.test(line.trim());
+  const groups = [];
+  let current = [];
+  for (const line of body.split('\n')) {
+    if (isHeading(line) && current.some((l) => l.trim() !== '')) {
+      groups.push(current.join('\n').trim());
+      current = [];
+    }
+    current.push(line);
+  }
+  if (current.some((l) => l.trim() !== '')) groups.push(current.join('\n').trim());
+  return groups.length ? groups : [body];
+}
+
 // Lay out a subject + HTML body as a Block Kit "card".
 function buildBlocks(subject, html, source = '💰 MyFinanceHub') {
   const body = htmlToMrkdwn(html) || '_(no details)_';
@@ -88,14 +118,29 @@ function buildBlocks(subject, html, source = '💰 MyFinanceHub') {
     { type: 'context', elements: [{ type: 'mrkdwn', text: source }] },
     { type: 'divider' }
   ];
-  let pieces = chunk(body, SECTION_MAX);
-  if (pieces.length > MAX_SECTIONS) {
-    pieces = pieces.slice(0, MAX_SECTIONS);
-    pieces[pieces.length - 1] =
-      pieces[pieces.length - 1].trimEnd() + '\n\n_…truncated — see the email for the full report._';
+  // One section per heading group, divider between groups, so the card reads as
+  // skimmable chunks on mobile instead of a single wall of text.
+  const groups = splitIntoSections(body);
+  let sections = 0;
+  let truncated = false;
+  for (let g = 0; g < groups.length && !truncated; g++) {
+    let first = true;
+    for (const piece of chunk(groups[g], SECTION_MAX)) {
+      if (sections >= MAX_SECTIONS) {
+        truncated = true;
+        break;
+      }
+      if (g > 0 && first) blocks.push({ type: 'divider' });
+      blocks.push({ type: 'section', text: { type: 'mrkdwn', text: piece } });
+      first = false;
+      sections++;
+    }
   }
-  for (const piece of pieces) {
-    blocks.push({ type: 'section', text: { type: 'mrkdwn', text: piece } });
+  if (truncated) {
+    blocks.push({
+      type: 'context',
+      elements: [{ type: 'mrkdwn', text: '_…truncated — see the email for the full report._' }]
+    });
   }
   return blocks;
 }
