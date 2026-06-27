@@ -316,13 +316,14 @@ function redirectUriFor(req) {
 }
 
 // When a request arrives through the Tailscale proxy (x-forwarded-proto=https),
-// the browser is off-LAN and cannot reach the LAN issuer host that openid-client
-// discovered. Swap ONLY the origin of the authorization URL to the public
-// (Tailscale) Authentik origin in OIDC_PUBLIC_BASE so the user-agent can finish
-// login remotely. Back-channel calls (discovery, token, jwks) keep using the LAN
-// OIDC_ISSUER, which the container reaches directly — so the `iss` claim still
-// validates. LAN/direct (http) requests keep the discovered URL untouched.
-function authorizeUrlFor(req, url) {
+// the browser is off-LAN and cannot reach the LAN Authentik host that openid-client
+// discovered. Swap ONLY the origin of a BROWSER-FACING Authentik URL — the
+// authorization endpoint at login AND the end-session endpoint at logout — to the
+// public (Tailscale) origin in OIDC_PUBLIC_BASE so the user-agent can reach it.
+// Back-channel calls (discovery, token, jwks) keep using the LAN OIDC_ISSUER, which
+// the container reaches directly — so the `iss` claim still validates. LAN/direct
+// (http) requests keep the discovered URL untouched.
+function publicAuthOrigin(req, url) {
   const pub = process.env.OIDC_PUBLIC_BASE;
   if (!pub) return url;
   const fwdProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim();
@@ -330,7 +331,7 @@ function authorizeUrlFor(req, url) {
   const out = new URL(url);
   const base = new URL(pub);
   out.protocol = base.protocol;
-  out.host = base.host;   // swap origin; keep /application/o/.../authorize + query
+  out.host = base.host;   // swap origin; keep the path (/authorize, /end-session) + query
   return out.toString();
 }
 
@@ -434,7 +435,7 @@ app.get('/auth/login', async (req, res, next) => {
     // step (openid-client requires the same redirect_uri at both ends).
     const redirect_uri = redirectUriFor(req);
     req.session.oidc = { code_verifier, state, nonce, redirect_uri };
-    res.redirect(authorizeUrlFor(req, client.authorizationUrl({
+    res.redirect(publicAuthOrigin(req, client.authorizationUrl({
       redirect_uri,
       // The `groups` claim (→ app role, see roleFromGroups) is emitted by
       // Authentik's DEFAULT `profile` scope mapping, so requesting `profile` is
@@ -492,10 +493,13 @@ app.get('/auth/logout', (req, res) => {
       if (rpLogout && idToken) {
         const client = await getOidcClient();
         if (client.issuer.metadata.end_session_endpoint) {
-          return res.redirect(client.endSessionUrl({
+          // Swap the end-session origin to the public (Tailscale) Authentik host
+          // when off-LAN — otherwise the browser is redirected to the LAN-only
+          // end_session_endpoint it can't reach and logout fails over Tailscale.
+          return res.redirect(publicAuthOrigin(req, client.endSessionUrl({
             id_token_hint: idToken,
             post_logout_redirect_uri: postLogout
-          }));
+          })));
         }
       }
     } catch (err) {
