@@ -124,11 +124,19 @@ else
   echo "    Create it (chmod 600) with: RESEND_API_KEY=re_xxx"
 fi
 
+# Publish on loopback (tailscale serve proxies to http://localhost:3090) + the LAN
+# IP only — NOT 0.0.0.0. `tailscale serve --https=3090` already owns :3090 on the
+# tailnet interface, so a 0.0.0.0:3090 bind collides ("address already in use",
+# exit 125) and the container never starts → serve returns 502. Same fix as Immich :8050.
+LAN_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+PUBLISH="-p 127.0.0.1:${APP_PORT}:3000"
+[ -n "$LAN_IP" ] && PUBLISH="$PUBLISH -p ${LAN_IP}:${APP_PORT}:3000"
+
 docker run -d \
   --name "$APP_CONTAINER" \
   --network "$NETWORK_NAME" \
   --restart unless-stopped \
-  -p "${APP_PORT}:3000" \
+  $PUBLISH \
   -v "$BASE_DIR/container-data:/app/data" \
   -v "$BASE_DIR/container-receipts:/app/uploads/receipts" \
   $ENV_FILE_ARG \
