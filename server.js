@@ -346,6 +346,149 @@ app.get('/api/digest', (req, res) => {
   }
 });
 
+// ─── AGENT SUMMARY (token-gated, read-only) ───────────────────────────────────
+// Topic-scoped finance AGGREGATES for the homelab's central agent, which fetches
+// these over the LAN on demand. Returns ONLY aggregates and top-N summaries —
+// never raw transaction rows (the sole description fragment allowed is the
+// truncated merchant name on the `biggest` topic). Gated by its OWN bearer token
+// (AGENT_TOKEN, host-managed in finance.env — deliberately separate from
+// DIGEST_TOKEN); unset = endpoint disabled (503). Registered BEFORE requireAuth
+// so the agent reaches it without an OIDC session. Uses the strictly read-only
+// DB handle for defence in depth.
+function agentTokenState(req) {
+  const expected = process.env.AGENT_TOKEN;
+  if (!expected) return 'disabled';
+  const hdr = req.get('authorization') || '';
+  const m = hdr.match(/^Bearer\s+(.+)$/i);
+  const provided = (m ? m[1] : req.get('x-agent-token') || '').trim();
+  if (!provided) return 'missing';
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  // timingSafeEqual requires equal lengths; unequal length is already a mismatch.
+  if (a.length !== b.length) return 'bad';
+  return crypto.timingSafeEqual(a, b) ? 'ok' : 'bad';
+}
+
+// `window` query param → whole days, default 30, clamped to 1..365.
+function clampAgentWindowDays(raw) {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n)) return 30;
+  return Math.min(365, Math.max(1, n));
+}
+
+// Normalize a subscription's amount to its monthly cost. Mirrors the UI's math
+// in public/js/subscriptions.js exactly (monthly ×1, yearly ÷12, weekly ×4.33;
+// unknown cycles contribute 0).
+function subscriptionMonthlyAmount(amount, billingCycle) {
+  const amt = Math.abs(amount);
+  if (billingCycle === 'monthly') return amt;
+  if (billingCycle === 'yearly')  return amt / 12;
+  if (billingCycle === 'weekly')  return amt * 4.33;
+  return 0;
+}
+
+const AGENT_TOPICS = new Set(['overview', 'categories', 'monthly', 'subscriptions', 'biggest']);
+
+app.get('/api/agent/summary', (req, res) => {
+  const state = agentTokenState(req);
+  if (state === 'disabled') return res.status(503).json({ error: 'agent endpoint disabled (AGENT_TOKEN unset)' });
+  if (state !== 'ok') return res.status(401).json({ error: 'unauthorized' });
+
+  const topic = String(req.query.topic || '');
+  if (!AGENT_TOPICS.has(topic)) {
+    return res.status(400).json({ error: `unknown topic (expected one of: ${[...AGENT_TOPICS].join(', ')})` });
+  }
+  const days = clampAgentWindowDays(req.query.window);
+
+  try {
+    const rdb = getReadonlyDb();
+    // Same date convention as /api/digest: dates are 'YYYY-MM-DD' strings, so
+    // date(...) normalises any time component before the string comparison.
+    // `days` is a server-clamped integer (never user text), so inlining is safe.
+    const cur  = `date(date) > date('now','-${days} days') AND date(date) <= date('now')`;
+    const prev = `date(date) > date('now','-${2 * days} days') AND date(date) <= date('now','-${days} days')`;
+    const body = { topic, window: days, generatedAt: new Date().toISOString() };
+
+    if (topic === 'overview') {
+      const totals = rdb.prepare(`
+        SELECT COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) END), 0) AS spent,
+               COALESCE(SUM(CASE WHEN amount > 0 THEN amount     END), 0) AS income,
+               COUNT(*) AS txCount
+        FROM transactions WHERE ${cur}
+      `).get();
+      const spentPrev = rdb.prepare(
+        `SELECT COALESCE(SUM(ABS(amount)), 0) AS total FROM transactions WHERE amount < 0 AND ${prev}`
+      ).get().total;
+      const spent = totals.spent, income = totals.income, net = income - spent;
+      Object.assign(body, {
+        spent, income, net,
+        txCount: totals.txCount,
+        savingsRate: income > 0 ? (net / income) * 100 : null,
+        spentPrev,
+        spentDeltaPct: spentPrev > 0 ? ((spent - spentPrev) / spentPrev) * 100 : null
+      });
+    } else if (topic === 'categories') {
+      const totalSpent = rdb.prepare(
+        `SELECT COALESCE(SUM(ABS(amount)), 0) AS total FROM transactions WHERE amount < 0 AND ${cur}`
+      ).get().total;
+      body.categories = rdb.prepare(`
+        SELECT COALESCE(category, 'Uncategorized') AS category,
+               SUM(ABS(amount)) AS spent,
+               COUNT(*) AS txCount
+        FROM transactions WHERE amount < 0 AND ${cur}
+        GROUP BY category ORDER BY spent DESC LIMIT 12
+      `).all().map(c => ({
+        category: c.category,
+        spent: c.spent,
+        pct: totalSpent > 0 ? (c.spent / totalSpent) * 100 : 0,
+        txCount: c.txCount
+      }));
+    } else if (topic === 'monthly') {
+      // Window (days) → whole calendar months, min 3 max 12, current month included.
+      const months = Math.min(12, Math.max(3, Math.round(days / 30)));
+      body.months = rdb.prepare(`
+        SELECT strftime('%Y-%m', date) AS month,
+               COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) END), 0) AS spent,
+               COALESCE(SUM(CASE WHEN amount > 0 THEN amount     END), 0) AS income
+        FROM transactions
+        WHERE date(date) >= date('now', 'start of month', '-${months - 1} months')
+          AND date(date) <= date('now')
+        GROUP BY month ORDER BY month
+      `).all().map(m => ({ month: m.month, spent: m.spent, income: m.income, net: m.income - m.spent }));
+    } else if (topic === 'subscriptions') {
+      const subs = rdb.prepare(`
+        SELECT name, amount, billing_cycle, next_due_date
+        FROM subscriptions WHERE active = 1
+        ORDER BY name COLLATE NOCASE
+      `).all();
+      body.subscriptions = subs.map(s => ({
+        name: s.name,
+        amount: Math.abs(s.amount),
+        frequency: s.billing_cycle,
+        nextDue: s.next_due_date || null
+      }));
+      body.monthlyTotal = subs.reduce((a, s) => a + subscriptionMonthlyAmount(s.amount, s.billing_cycle), 0);
+    } else if (topic === 'biggest') {
+      body.expenses = rdb.prepare(`
+        SELECT ABS(amount) AS amount, COALESCE(category, 'Uncategorized') AS category, date, payee
+        FROM transactions WHERE amount < 0 AND ${cur}
+        ORDER BY ABS(amount) DESC LIMIT 8
+      `).all().map(e => ({
+        amount: e.amount,
+        category: e.category,
+        date: e.date,
+        // The one allowed description fragment: the merchant name, truncated.
+        merchant: String(e.payee || '').slice(0, 40)
+      }));
+    }
+
+    res.json(body);
+  } catch (err) {
+    console.error('agent summary endpoint failed:', err);
+    res.status(500).json({ error: 'agent summary query failed' });
+  }
+});
+
 // ─── AUTH (Authentik OIDC) ─────────────────────────────────────────────────────
 
 // Lazily discover the Authentik issuer and build the OIDC client on first use,
