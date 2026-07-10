@@ -26,14 +26,20 @@ jobs:
       # Temporal receipt-extraction LLM — only the model name is GitHub-managed
       # here; LLM_URL stays host-managed in finance.env.
       LLM_MODEL: ${{ vars.LLM_MODEL }}
+      # Bearer token for /api/agent/summary (the homelab central agent's finance
+      # tool). A repo SECRET, synced into finance.env at deploy so it never needs
+      # hand-editing on the host. MUST equal home-lab-utils' FINANCE_AGENT_TOKEN
+      # secret. Unset → skipped below → the endpoint stays disabled (503).
+      AGENT_TOKEN: ${{ secrets.AGENT_TOKEN }}
     steps:
       - name: Sync GitHub-managed vars into finance.env
         run: |
           ENV_FILE="/home/phanikumar/finance-hub/finance.env"
           touch "$ENV_FILE"
-          # Append/update only keys that are set as repo Variables. An unset var is
-          # skipped so it never blanks a host-managed value or a code default.
-          for key in OIDC_PUBLIC_BASE OLLAMA_BASE_URL OLLAMA_MODEL OLLAMA_TIMEOUT_MS NLQUERY_ENABLED LLM_MODEL; do
+          # Append/update only keys that are set as repo Variables (or, for
+          # AGENT_TOKEN, a repo Secret). An unset key is skipped so it never
+          # blanks a host-managed value or a code default.
+          for key in OIDC_PUBLIC_BASE OLLAMA_BASE_URL OLLAMA_MODEL OLLAMA_TIMEOUT_MS NLQUERY_ENABLED LLM_MODEL AGENT_TOKEN; do
             val="${!key}"
             [ -z "$val" ] && continue
             sed -i "/^${key}=/d" "$ENV_FILE"   # drop any stale line for this key
