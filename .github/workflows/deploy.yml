@@ -8,6 +8,11 @@ on:
     # redeploy. A push that also touches any non-.md file still deploys as normal.
     paths-ignore:
       - '**.md'
+  # Manual trigger so a GitHub Variable change (e.g. a new Ollama endpoint) can
+  # be synced into finance.env and rolled out WITHOUT waiting for a code push —
+  # the container env is baked at `docker run`, so vars only take effect on a
+  # deploy that recreates the container.
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -23,8 +28,11 @@ jobs:
       OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL }}
       OLLAMA_TIMEOUT_MS: ${{ vars.OLLAMA_TIMEOUT_MS }}
       NLQUERY_ENABLED: ${{ vars.NLQUERY_ENABLED }}
-      # Temporal receipt-extraction LLM — only the model name is GitHub-managed
-      # here; LLM_URL stays host-managed in finance.env.
+      # Temporal receipt-extraction LLM — both the endpoint and the model name
+      # are GitHub-managed so an Ollama move only needs a variable update + a
+      # deploy (no host edits). LLM_URL is the full generate URL, e.g.
+      # http://192.168.50.49:11434/api/generate
+      LLM_URL: ${{ vars.LLM_URL }}
       LLM_MODEL: ${{ vars.LLM_MODEL }}
       # Bearer token for /api/agent/summary (the homelab central agent's finance
       # tool). A repo SECRET, synced into finance.env at deploy so it never needs
@@ -39,7 +47,7 @@ jobs:
           # Append/update only keys that are set as repo Variables (or, for
           # AGENT_TOKEN, a repo Secret). An unset key is skipped so it never
           # blanks a host-managed value or a code default.
-          for key in OIDC_PUBLIC_BASE OLLAMA_BASE_URL OLLAMA_MODEL OLLAMA_TIMEOUT_MS NLQUERY_ENABLED LLM_MODEL AGENT_TOKEN; do
+          for key in OIDC_PUBLIC_BASE OLLAMA_BASE_URL OLLAMA_MODEL OLLAMA_TIMEOUT_MS NLQUERY_ENABLED LLM_URL LLM_MODEL AGENT_TOKEN; do
             val="${!key}"
             [ -z "$val" ] && continue
             sed -i "/^${key}=/d" "$ENV_FILE"   # drop any stale line for this key
