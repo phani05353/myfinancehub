@@ -239,6 +239,17 @@ const receiptUpload = multer({
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Baseline security response headers. Deliberately minimal so it cannot break the
+// existing UI (which relies on inline handlers): no script/style CSP — only
+// clickjacking (frame) protection plus MIME-sniff and referrer hardening.
+app.use((req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'DENY');
+  res.set('Referrer-Policy', 'same-origin');
+  res.set('Content-Security-Policy', "frame-ancestors 'none'");
+  next();
+});
+
 // Persist sessions in the SQLite DB (the finance.db volume survives restarts/
 // redeploys). The default in-memory MemoryStore drops every session on restart
 // — so each deploy logged everyone out — and leaks memory over time. The store
@@ -625,7 +636,11 @@ function upsertOidcUser(claims) {
     role = derivedRole;
   } else {
     const userCount = db.prepare('SELECT COUNT(*) AS cnt FROM users').get().cnt;
-    role = userCount === 0 ? 'admin' : 'member';   // legacy bootstrap (no groups claim)
+    // No groups claim: the first user still bootstraps as admin, but everyone
+    // after falls to the least-privilege default (OIDC_GROUP_MAP.fallback — viewer
+    // unless OIDC_DEFAULT_ROLE overrides) rather than the write-capable 'member'.
+    // A user must be explicitly granted member/admin via an Authentik group.
+    role = userCount === 0 ? 'admin' : OIDC_GROUP_MAP.fallback;
   }
   const name = freeUsername(username);
   const result = db.prepare(
