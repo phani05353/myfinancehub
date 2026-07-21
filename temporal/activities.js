@@ -14,7 +14,7 @@ const RECEIPTS_DIR = path.join(__dirname, '..', 'uploads', 'receipts');
 
 // Local LLM (Ollama native /api/generate). Configurable via env so the homelab
 // box address / model can change without code edits. Never a cloud call.
-const LLM_URL   = process.env.LLM_URL   || 'http://192.168.50.49:11434/api/generate';
+const LLM_URL   = process.env.LLM_URL   || 'http://192.168.50.176:11434/api/generate';
 const LLM_MODEL = process.env.LLM_MODEL || 'gemma3:4b';   // multimodal; override via env
 
 // Call the local model and coerce its reply to a JSON object. `images` is an

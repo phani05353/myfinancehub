@@ -1986,7 +1986,7 @@ app.post('/api/rules/apply', (req, res) => {
 // Local LLM (Ollama). Same address/style as temporal/activities.js, but its OWN
 // vars so the query model can differ from the receipt-vision model. /api/generate
 // is the native completion endpoint. NLQUERY_ENABLED gates the whole feature off.
-const OLLAMA_BASE_URL  = (process.env.OLLAMA_BASE_URL || 'http://192.168.50.49:11434').replace(/\/+$/, '');
+const OLLAMA_BASE_URL  = (process.env.OLLAMA_BASE_URL || 'http://192.168.50.176:11434').replace(/\/+$/, '');
 const OLLAMA_MODEL     = process.env.OLLAMA_MODEL || 'gemma3:4b';
 const OLLAMA_TIMEOUT_MS = parseInt(process.env.OLLAMA_TIMEOUT_MS || '30000', 10);
 // Default ON; set NLQUERY_ENABLED=0 (or false) to disable the endpoint entirely.
