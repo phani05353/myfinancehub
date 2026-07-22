@@ -1738,15 +1738,20 @@ app.get('/api/charts/monthly-by-payee', (req, res) => {
 });
 
 app.get('/api/charts/spending-trend', (req, res) => {
+  const ytd = req.query.range === 'ytd';
   const months = parseInt(req.query.months) || 6;
+  // Anchor to the start of a full calendar month (or the year, for ytd) so the
+  // oldest bar is never a partial month — date('now', '-N months') would clip
+  // the first bar to today's day-of-month and drop early-month transactions.
+  const boundary = ytd ? "date('now', 'start of year')" : "date('now', 'start of month', ?)";
   const rows = db.prepare(`
     SELECT strftime('%Y-%m', date) as month,
            SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses,
            SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income
     FROM transactions
-    WHERE date >= date('now', 'start of month', ?)
+    WHERE date >= ${boundary}
     GROUP BY month ORDER BY month ASC
-  `).all(`-${months - 1} months`);
+  `).all(...(ytd ? [] : [`-${months - 1} months`]));
   res.json(rows);
 });
 
@@ -1766,16 +1771,19 @@ app.get('/api/charts/category-breakdown', (req, res) => {
 });
 
 app.get('/api/charts/category-monthly', (req, res) => {
+  const ytd = req.query.range === 'ytd';
   const months = parseInt(req.query.months) || 6;
+  // Same full-month/year anchoring as spending-trend — never clip the first bar.
+  const boundary = ytd ? "date('now', 'start of year')" : "date('now', 'start of month', ?)";
   const rows = db.prepare(`
     SELECT strftime('%Y-%m', date) as month,
            COALESCE(category, 'Uncategorized') as category,
            SUM(ABS(amount)) as total
     FROM transactions
-    WHERE amount < 0 AND date >= date('now', 'start of month', ?)
+    WHERE amount < 0 AND date >= ${boundary}
     GROUP BY month, category
     ORDER BY month ASC
-  `).all(`-${months - 1} months`);
+  `).all(...(ytd ? [] : [`-${months - 1} months`]));
   res.json(rows);
 });
 
