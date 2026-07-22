@@ -1744,9 +1744,9 @@ app.get('/api/charts/spending-trend', (req, res) => {
            SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses,
            SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income
     FROM transactions
-    WHERE date >= date('now', ? || ' months')
+    WHERE date >= date('now', 'start of month', ?)
     GROUP BY month ORDER BY month ASC
-  `).all(`-${months}`);
+  `).all(`-${months - 1} months`);
   res.json(rows);
 });
 
@@ -1772,10 +1772,10 @@ app.get('/api/charts/category-monthly', (req, res) => {
            COALESCE(category, 'Uncategorized') as category,
            SUM(ABS(amount)) as total
     FROM transactions
-    WHERE amount < 0 AND date >= date('now', ? || ' months')
+    WHERE amount < 0 AND date >= date('now', 'start of month', ?)
     GROUP BY month, category
     ORDER BY month ASC
-  `).all(`-${months}`);
+  `).all(`-${months - 1} months`);
   res.json(rows);
 });
 
