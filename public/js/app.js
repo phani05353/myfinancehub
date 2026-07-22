@@ -640,8 +640,8 @@ const dashboardModule = {
       api(`/api/charts/category-breakdown?month=${currentMonth}`),
       api(`/api/transactions?limit=500&month=${currentMonth}`),
       api(`/api/budgets/status?month=${currentMonth}`).catch(() => []),
-      api('/api/charts/spending-trend?months=6').catch(() => []),
-      api('/api/charts/category-monthly?months=6').catch(() => []),
+      api('/api/charts/spending-trend?range=ytd').catch(() => []),
+      api('/api/charts/category-monthly?range=ytd').catch(() => []),
       api('/api/subscriptions/price-alerts').catch(() => []),
       api('/api/savings-goals?active=1').catch(() => []),
       api('/api/auth/me').catch(() => ({ username: null, display_name: null }))
