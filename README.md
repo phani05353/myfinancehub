@@ -505,21 +505,53 @@ All `/api/*` routes require an active session cookie. Admin-only routes are note
 | `TEMPORAL_DISABLED` | — | Set to `1` to skip starting the worker entirely |
 | `VAPID_SUBJECT` | `mailto:admin@home-finance.local` | Subject used in VAPID JWTs sent to push services |
 | `NODE_ENV` | — | Set to `production` in the Docker image |
-| `OLLAMA_BASE_URL` | `http://192.168.50.176:11434` | Base URL of the local Ollama server used by the **Ask** (natural-language query) feature. Use the homelab host IP so the container can reach it. |
-| `OLLAMA_MODEL` | `gemma3:4b` | Ollama model used to translate questions → read-only SQL and summarise results (must be pulled on the box). |
-| `OLLAMA_TIMEOUT_MS` | `30000` | Abort the Ollama call after this many milliseconds. |
+| `LLM_BASE_URL` | `http://192.168.50.176:8000/v1` | Base URL of the local [oMLX](https://github.com/jundot/omlx) server, shared by receipt extraction and **Ask**. OpenAI-compatible, so it must end in `/v1`. Use the homelab host IP so the container can reach it. |
+| `LLM_API_KEY` | — | **Required secret.** oMLX authenticates every request (Ollama did not); sent as `Authorization: Bearer <key>`. Keep it in `finance.env` / a repo Secret — never commit it. |
+| `LLM_MODEL` | `gemma3:4b` | Vision-capable model used for Temporal receipt extraction. See the alias note below. |
+| `LLM_TIMEOUT_MS` | `120000` | Abort a receipt-extraction call after this many milliseconds (vision decoding is slow). |
+| `NLQUERY_LLM_BASE_URL` | falls back to `LLM_BASE_URL` | Optional per-feature override so **Ask** can point at a different oMLX box. |
+| `NLQUERY_LLM_MODEL` | `gemma3:4b` | Model used to translate questions → read-only SQL and summarise results. |
+| `NLQUERY_LLM_TIMEOUT_MS` | `30000` | Abort the **Ask** model call after this many milliseconds (a user is waiting, so much lower than the receipt timeout). |
 | `NLQUERY_ENABLED` | `1` | Set to `0`/`false`/`off` to disable the Ask endpoint entirely. |
+| `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_TIMEOUT_MS`, `LLM_URL` | — | **Deprecated.** Ollama-era names, still honored as fallbacks only so a mid-migration deploy keeps working. Delete them once the vars above are set. |
+
+### Local AI — oMLX
+
+Both AI features (receipt extraction and **Ask**) call a local
+[oMLX](https://github.com/jundot/omlx) server on the homelab Mac mini. oMLX
+replaced Ollama on 2026-07-29: it is **OpenAI-compatible, not Ollama-compatible**
+— it serves `POST /v1/chat/completions` on port **8000** and does **not** serve
+`/api/generate`, and unlike Ollama it **requires an API key**.
+
+Setup on the Mac mini:
+
+1. **Bind it to the LAN.** Set `server.host` to `"0.0.0.0"` in
+   `~/.omlx/settings.json`. oMLX binds `127.0.0.1` by default, so a fresh install
+   is unreachable from the app container. (This replaces the old
+   `OLLAMA_HOST=0.0.0.0` step.)
+2. **Download the model** from the oMLX admin panel — there is no `ollama pull`.
+   Models land in `~/.omlx/models`. The installed model is
+   `mlx-community/gemma-3-4b-it-qat-4bit`, served as `gemma-3-4b-it-qat-4bit`.
+3. **Create an alias** named `gemma3:4b` for it in the admin panel. Every
+   `*_MODEL` value in this repo is that alias, so if the alias is missing the
+   calls fail with an unknown-model error — recreate it, or set the `*_MODEL`
+   variables to the real id above.
+4. **Issue an API key** and set it as `LLM_API_KEY`.
+
+Vision/receipt extraction works the same as it did under Ollama.
 
 ### Ask — natural-language queries
 
 The **Ask** view lets you ask plain-English questions about your finances ("how
-much did I spend on coffee since March?"). A local [Ollama](https://ollama.com)
+much did I spend on coffee since March?"). A local
+[oMLX](https://github.com/jundot/omlx)
 model translates the question into a **single read-only `SELECT`**, which the
 server validates and runs against a **read-only** SQLite connection — writes and
 multi-statement injection are rejected and SQLite itself refuses any write. The
 answer is shown as a one-line summary, a results table, and (when the shape is
-numeric) a chart. Your data never leaves the homelab. If Ollama is unreachable or
-`NLQUERY_ENABLED=0`, the view degrades gracefully with a clear message.
+numeric) a chart. Your data never leaves the homelab. If oMLX is unreachable the
+view degrades gracefully with a clear message (`Is oMLX running?` — check
+`server.host` and the API key first); same when `NLQUERY_ENABLED=0`.
 
 VAPID public/private keys are generated on first boot and persisted in the SQLite DB. You don't need to set them as env vars.
 

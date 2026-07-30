@@ -8,7 +8,7 @@ on:
     # redeploy. A push that also touches any non-.md file still deploys as normal.
     paths-ignore:
       - '**.md'
-  # Manual trigger so a GitHub Variable change (e.g. a new Ollama endpoint) can
+  # Manual trigger so a GitHub Variable change (e.g. a new oMLX endpoint) can
   # be synced into finance.env and rolled out WITHOUT waiting for a code push —
   # the container env is baked at `docker run`, so vars only take effect on a
   # deploy that recreates the container.
@@ -22,18 +22,31 @@ jobs:
       # (OIDC_CLIENT_ID/SECRET, RESEND_API_KEY, …) stay host-managed in finance.env
       # and are intentionally NOT listed here.
       OIDC_PUBLIC_BASE: ${{ vars.OIDC_PUBLIC_BASE }}
-      # Natural-language query (Ask) — non-secret Ollama config. Sensitive values
-      # never go here; these just point at the homelab LLM box / pick the model.
+      # Local LLM (oMLX) — shared by receipt extraction and the Ask feature. The
+      # endpoint, model and timeouts are GitHub-managed so an oMLX move only needs
+      # a variable update + a deploy (no host edits). LLM_BASE_URL is a BASE url
+      # ending in /v1, e.g. http://192.168.50.176:8000/v1 — oMLX is
+      # OpenAI-compatible and serves /v1/chat/completions, not /api/generate.
+      LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+      LLM_MODEL: ${{ vars.LLM_MODEL }}
+      LLM_TIMEOUT_MS: ${{ vars.LLM_TIMEOUT_MS }}
+      # oMLX REQUIRES an API key (Ollama had no auth), so unlike the rest of the
+      # LLM config this is a repo SECRET — same treatment as AGENT_TOKEN below.
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      # Natural-language query (Ask) — optional per-feature overrides. Unset means
+      # "inherit LLM_BASE_URL / the code defaults"; the key is shared.
+      NLQUERY_LLM_BASE_URL: ${{ vars.NLQUERY_LLM_BASE_URL }}
+      NLQUERY_LLM_MODEL: ${{ vars.NLQUERY_LLM_MODEL }}
+      NLQUERY_LLM_TIMEOUT_MS: ${{ vars.NLQUERY_LLM_TIMEOUT_MS }}
+      NLQUERY_ENABLED: ${{ vars.NLQUERY_ENABLED }}
+      # DEPRECATED Ollama-era vars. Kept only because the app still honors them as
+      # fallbacks, so a host whose finance.env predates the oMLX migration keeps
+      # working. Delete these lines (and the repo Variables) once the vars above
+      # are set everywhere.
       OLLAMA_BASE_URL: ${{ vars.OLLAMA_BASE_URL }}
       OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL }}
       OLLAMA_TIMEOUT_MS: ${{ vars.OLLAMA_TIMEOUT_MS }}
-      NLQUERY_ENABLED: ${{ vars.NLQUERY_ENABLED }}
-      # Temporal receipt-extraction LLM — both the endpoint and the model name
-      # are GitHub-managed so an Ollama move only needs a variable update + a
-      # deploy (no host edits). LLM_URL is the full generate URL, e.g.
-      # http://192.168.50.176:11434/api/generate
       LLM_URL: ${{ vars.LLM_URL }}
-      LLM_MODEL: ${{ vars.LLM_MODEL }}
       # Bearer token for /api/agent/summary (the homelab central agent's finance
       # tool). A repo SECRET, synced into finance.env at deploy so it never needs
       # hand-editing on the host. MUST equal home-lab-utils' FINANCE_AGENT_TOKEN
@@ -45,9 +58,16 @@ jobs:
           ENV_FILE="/home/phanikumar/finance-hub/finance.env"
           touch "$ENV_FILE"
           # Append/update only keys that are set as repo Variables (or, for
-          # AGENT_TOKEN, a repo Secret). An unset key is skipped so it never
-          # blanks a host-managed value or a code default.
-          for key in OIDC_PUBLIC_BASE OLLAMA_BASE_URL OLLAMA_MODEL OLLAMA_TIMEOUT_MS NLQUERY_ENABLED LLM_URL LLM_MODEL AGENT_TOKEN; do
+          # AGENT_TOKEN / LLM_API_KEY, a repo Secret). An unset key is skipped so
+          # it never blanks a host-managed value or a code default.
+          # NOTE: this list is an ALLOW-LIST — a var added to the job `env:` above
+          # but NOT named here silently never reaches the app. Keep both in sync.
+          for key in OIDC_PUBLIC_BASE \
+                     LLM_BASE_URL LLM_MODEL LLM_TIMEOUT_MS LLM_API_KEY \
+                     NLQUERY_LLM_BASE_URL NLQUERY_LLM_MODEL NLQUERY_LLM_TIMEOUT_MS \
+                     NLQUERY_ENABLED \
+                     OLLAMA_BASE_URL OLLAMA_MODEL OLLAMA_TIMEOUT_MS LLM_URL \
+                     AGENT_TOKEN; do
             val="${!key}"
             [ -z "$val" ] && continue
             sed -i "/^${key}=/d" "$ENV_FILE"   # drop any stale line for this key

@@ -12,33 +12,29 @@ const DB_PATH      = path.join(DATA_DIR, 'finance.db');
 const BACKUP_DIR   = path.join(DATA_DIR, 'backups');
 const RECEIPTS_DIR = path.join(__dirname, '..', 'uploads', 'receipts');
 
-// Local LLM (Ollama native /api/generate). Configurable via env so the homelab
-// box address / model can change without code edits. Never a cloud call.
-const LLM_URL   = process.env.LLM_URL   || 'http://192.168.50.176:11434/api/generate';
-const LLM_MODEL = process.env.LLM_MODEL || 'gemma3:4b';   // multimodal; override via env
+// Local LLM (oMLX, OpenAI-compatible /v1/chat/completions). Configurable via env
+// so the box address / model can change without code edits. Never a cloud call.
+// LLM_BASE_URL is a base URL now, not a full endpoint — the legacy LLM_URL value
+// (…/api/generate) is still accepted and normalized by lib/llm.js.
+const { chatJson, pickBaseUrl } = require('../lib/llm');
+
+const LLM_BASE_URL = pickBaseUrl(process.env.LLM_BASE_URL, process.env.LLM_URL);
+const LLM_API_KEY  = process.env.LLM_API_KEY || '';
+const LLM_MODEL    = process.env.LLM_MODEL || 'gemma3:4b';   // vision-capable; override via env
 
 // Call the local model and coerce its reply to a JSON object. `images` is an
-// array of base64 strings (Ollama uses these for vision-capable models; non-
-// vision models simply ignore them, which is why the caller has an OCR fallback).
-async function callOllamaJson({ model, prompt, images }) {
-  const body = { model, prompt, stream: false, format: 'json', options: { temperature: 0 } };
-  if (images && images.length) body.images = images;
-
-  const res = await fetch(LLM_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+// array of base64 strings, sent as data URIs for vision-capable models (a
+// text-only model ignores them, which is why the caller has an OCR fallback).
+async function callLlmJson({ model, prompt, images }) {
+  return chatJson({
+    baseUrl: LLM_BASE_URL,
+    apiKey: LLM_API_KEY,
+    model,
+    prompt,
+    images,
+    temperature: 0,
+    timeoutMs: parseInt(process.env.LLM_TIMEOUT_MS || '120000', 10),
   });
-  if (!res.ok) throw new Error(`Ollama ${res.status}: ${(await res.text()).slice(0, 200)}`);
-
-  const data = await res.json();
-  const raw = (data && data.response) || '';     // /api/generate → { response: "<text>" }
-  try { return JSON.parse(raw); }
-  catch (_) {
-    const m = raw.match(/\{[\s\S]*\}/);           // salvage a JSON object if wrapped in prose
-    if (m) { try { return JSON.parse(m[0]); } catch (_) {} }
-    throw new Error('LLM response was not valid JSON');
-  }
 }
 
 module.exports = ({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptText }) => ({
@@ -310,7 +306,7 @@ module.exports = ({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptTex
 
     // 1) Vision attempt — send the image bytes directly.
     try {
-      parsed = await callOllamaJson({
+      parsed = await callLlmJson({
         model: LLM_MODEL,
         prompt: `You are a receipt parser. Read this receipt image and extract the merchant, purchase date, grand total, and line items. ${schemaHint}`,
         images: [buffer.toString('base64')]
@@ -329,7 +325,7 @@ module.exports = ({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptTex
 
       if (text.trim()) {
         try {
-          const fromText = await callOllamaJson({
+          const fromText = await callLlmJson({
             model: LLM_MODEL,
             prompt: `You are a receipt parser. Below is the raw OCR text of a receipt:\n"""\n${text.slice(0, 4000)}\n"""\nExtract the fields. ${schemaHint}`
           });
@@ -345,7 +341,7 @@ module.exports = ({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptTex
     }
 
     if (!parsed) {
-      throw new Error(`Receipt extraction failed [model=${LLM_MODEL} url=${LLM_URL}]: ${lastError || 'no data returned'}`);
+      throw new Error(`Receipt extraction failed [model=${LLM_MODEL} url=${LLM_BASE_URL}]: ${lastError || 'no data returned'}`);
     }
     return parsed;
   },
