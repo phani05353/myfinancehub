@@ -1985,18 +1985,29 @@ app.post('/api/rules/apply', (req, res) => {
   res.json({ updated });
 });
 
-// ─── NATURAL-LANGUAGE QUERY (local Ollama → read-only SQL) ─────────────────────
+// ─── NATURAL-LANGUAGE QUERY (local oMLX → read-only SQL) ──────────────────────
 // Ask a plain-English question ("how much on coffee since March?"); the local
-// Ollama model translates it to a single SELECT over a read-only view of the DB;
+// oMLX model translates it to a single SELECT over a read-only view of the DB;
 // we validate + execute it on the readonly handle and return rows + a one-line
 // summary. The LLM output is treated as UNTRUSTED — see validateReadonlySql.
 
-// Local LLM (Ollama). Same address/style as temporal/activities.js, but its OWN
-// vars so the query model can differ from the receipt-vision model. /api/generate
-// is the native completion endpoint. NLQUERY_ENABLED gates the whole feature off.
-const OLLAMA_BASE_URL  = (process.env.OLLAMA_BASE_URL || 'http://192.168.50.176:11434').replace(/\/+$/, '');
-const OLLAMA_MODEL     = process.env.OLLAMA_MODEL || 'gemma3:4b';
-const OLLAMA_TIMEOUT_MS = parseInt(process.env.OLLAMA_TIMEOUT_MS || '30000', 10);
+// Local LLM (oMLX). Same address/style as temporal/activities.js, but its OWN
+// model var so the query model can differ from the receipt-vision model.
+// /v1/chat/completions is oMLX's OpenAI-compatible endpoint (it does NOT serve
+// Ollama's /api/generate). NLQUERY_ENABLED gates the whole feature off.
+// Legacy OLLAMA_* vars are still honored so a deploy mid-migration keeps working.
+const { chat: llmChat, pickBaseUrl } = require('./lib/llm');
+
+const LLM_BASE_URL = pickBaseUrl(
+  process.env.NLQUERY_LLM_BASE_URL,   // optional per-feature override
+  process.env.LLM_BASE_URL,           // app-wide oMLX base URL
+  process.env.OLLAMA_BASE_URL         // legacy
+);
+const LLM_API_KEY  = process.env.LLM_API_KEY || '';
+const NLQUERY_MODEL = process.env.NLQUERY_LLM_MODEL || process.env.OLLAMA_MODEL || 'gemma3:4b';
+const NLQUERY_TIMEOUT_MS = parseInt(
+  process.env.NLQUERY_LLM_TIMEOUT_MS || process.env.OLLAMA_TIMEOUT_MS || '30000', 10
+);
 // Default ON; set NLQUERY_ENABLED=0 (or false) to disable the endpoint entirely.
 const NLQUERY_ENABLED  = !['0', 'false', 'no', 'off'].includes(
   String(process.env.NLQUERY_ENABLED ?? '1').toLowerCase()
@@ -2050,7 +2061,7 @@ The SQL query returned these columns: ${columns.join(', ')}
 and these rows (JSON): ${JSON.stringify(sample)}
 
 Answer the user's question in ONE short, friendly sentence. Use $ for money amounts. Do not mention SQL.`;
-    const data = await callOllamaGenerate({ model: OLLAMA_MODEL, prompt });
+    const data = await callLlmGenerate({ model: NLQUERY_MODEL, prompt });
     const text = String(data || '').trim();
     return text ? text.slice(0, 400) : null;
   } catch (_) {
@@ -2058,28 +2069,21 @@ Answer the user's question in ONE short, friendly sentence. Use $ for money amou
   }
 }
 
-// Call Ollama's native /api/generate and return the raw text response. Times out
+// Call oMLX's /v1/chat/completions and return the raw text response. Times out
 // (AbortController) so an unreachable/slow homelab box fails fast and cleanly.
-async function callOllamaGenerate({ model, prompt }) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, prompt, stream: false, options: { temperature: 0 } }),
-      signal: controller.signal
-    });
-    if (!res.ok) throw new Error(`Ollama ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const data = await res.json();
-    return (data && data.response) || '';
-  } finally {
-    clearTimeout(timer);
-  }
+async function callLlmGenerate({ model, prompt }) {
+  return llmChat({
+    baseUrl: LLM_BASE_URL,
+    apiKey: LLM_API_KEY,
+    model,
+    prompt,
+    temperature: 0,
+    timeoutMs: NLQUERY_TIMEOUT_MS,
+  });
 }
 
 app.get('/api/query/status', (req, res) => {
-  res.json({ enabled: NLQUERY_ENABLED, model: OLLAMA_MODEL });
+  res.json({ enabled: NLQUERY_ENABLED, model: NLQUERY_MODEL });
 });
 
 app.post('/api/query', async (req, res) => {
@@ -2093,13 +2097,13 @@ app.post('/api/query', async (req, res) => {
   // 1) Ask the model to translate the question to SQL.
   let rawSql;
   try {
-    rawSql = await callOllamaGenerate({ model: OLLAMA_MODEL, prompt: buildNlQueryPrompt(question) });
+    rawSql = await callLlmGenerate({ model: NLQUERY_MODEL, prompt: buildNlQueryPrompt(question) });
   } catch (err) {
-    console.error('[nlquery] Ollama call failed:', err.message);
+    console.error('[nlquery] oMLX call failed:', err.message);
     const unreachable = /abort|fetch failed|ECONNREFUSED|ENOTFOUND|timeout/i.test(err.message);
     return res.status(503).json({
       error: unreachable
-        ? `Could not reach the local AI model at ${OLLAMA_BASE_URL}. Is Ollama running?`
+        ? `Could not reach the local AI model at ${LLM_BASE_URL}. Is oMLX running?`
         : `AI model error: ${err.message}`
     });
   }
