@@ -17,6 +17,7 @@ const RECEIPTS_DIR = path.join(__dirname, '..', 'uploads', 'receipts');
 // LLM_BASE_URL is a base URL now, not a full endpoint — the legacy LLM_URL value
 // (…/api/generate) is still accepted and normalized by lib/llm.js.
 const { chatJson, pickBaseUrl } = require('../lib/llm');
+const { resolvePayee } = require('../lib/payee');
 
 const LLM_BASE_URL = pickBaseUrl(process.env.LLM_BASE_URL, process.env.LLM_URL);
 const LLM_API_KEY  = process.env.LLM_API_KEY || '';
@@ -351,7 +352,10 @@ module.exports = ({ db, sendPushToAll, sendPushExcept, applyRules, ocrReceiptTex
   // silently trusted. Amount is stored negative (expense), per app convention.
   async createTransactionFromReceipt({ extracted, receiptFile }) {
     const today = new Date().toISOString().slice(0, 10);
-    const payee = String(extracted.merchant || 'Unknown merchant').trim().slice(0, 80) || 'Unknown merchant';
+    // Vision output casing is whatever the receipt printed ("WALMART"), so snap
+    // it to the spelling this merchant already uses in the ledger.
+    const rawPayee = String(extracted.merchant || 'Unknown merchant').trim().slice(0, 80) || 'Unknown merchant';
+    const payee = resolvePayee(db, rawPayee) || rawPayee;
     const total = Math.abs(parseFloat(extracted.total) || 0);
     const amount = -total;
     const date = /^\d{4}-\d{2}-\d{2}$/.test(extracted.date || '') ? extracted.date : today;

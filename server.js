@@ -9,6 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const webpush = require('web-push');
 const { createWorker } = require('tesseract.js');
+const { normalizePayee, resolvePayee, mergeLikePayees } = require('./lib/payee');
 
 const app = express();
 // The app is reachable on two origins: the LAN host (plain HTTP) and a Tailscale
@@ -159,6 +160,15 @@ db.prepare(`
   WHERE amount > 0
     AND (payee = 'Unknown' OR payee = '' OR payee IS NULL)
 `).run();
+
+// Collapse payees that differ only by case/whitespace ("AMAZON" / "Amazon " /
+// "amazon") onto a single spelling. Idempotent — a no-op once the data is clean.
+{
+  const merged = mergeLikePayees(db);
+  if (merged.groups > 0) {
+    console.log(`[payees] merged ${merged.rows} transaction(s) across ${merged.groups} payee group(s)`);
+  }
+}
 
 // ─── RULES ENGINE ─────────────────────────────────────────────────────────────
 
@@ -943,10 +953,12 @@ app.post('/api/transactions', (req, res) => {
     return res.status(400).json({ error: 'date, payee, and amount are required' });
   }
   const amt = parseFloat(amount);
-  const resolved = applyRules({ payee, amount: amt, notes, category });
+  // Snap to the spelling already on file so "amazon" joins "Amazon".
+  const cleanPayee = resolvePayee(db, payee);
+  const resolved = applyRules({ payee: cleanPayee, amount: amt, notes, category });
   const result = db.prepare(
     'INSERT INTO transactions (date, payee, category, amount, notes) VALUES (?, ?, ?, ?, ?)'
-  ).run(date, payee, resolved.category, amt, notes || null);
+  ).run(date, cleanPayee, resolved.category, amt, notes || null);
   const row = db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid);
 
   // Notify other devices in the household (excluding the originator).
@@ -996,12 +1008,16 @@ app.put('/api/transactions/:id', (req, res) => {
     WHERE id = ?
   `).run(
     date ?? existing.date,
-    payee ?? existing.payee,
+    payee !== undefined ? normalizePayee(payee) : existing.payee,
     category !== undefined ? category : existing.category,
     amount !== undefined ? parseFloat(amount) : existing.amount,
     notes !== undefined ? notes : existing.notes,
     req.params.id
   );
+  // An edit is the one place a human deliberately re-spells a payee, so let the
+  // merge decide: a better spelling propagates to the whole merchant, a worse
+  // one gets snapped back to the spelling already in use.
+  if (payee !== undefined) mergeLikePayees(db);
   res.json(db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id));
 });
 
@@ -1362,9 +1378,13 @@ app.delete('/api/categories/:name', (req, res) => {
 });
 
 app.get('/api/payees', (req, res) => {
-  const rows = db.prepare(
-    'SELECT DISTINCT payee FROM transactions ORDER BY payee'
-  ).all();
+  // Group case-insensitively so a stray casing that slipped in between merges
+  // can't show the same merchant twice in the datalist.
+  const rows = db.prepare(`
+    SELECT payee FROM transactions
+    GROUP BY lower(payee)
+    ORDER BY lower(payee)
+  `).all();
   res.json(rows.map(r => r.payee));
 });
 
@@ -1498,7 +1518,8 @@ app.post('/api/subscriptions', (req, res) => {
   const result = db.prepare(`
     INSERT INTO subscriptions (name, amount, billing_cycle, next_due_date, category, payee, notes)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(name, parseFloat(amount), billing_cycle, next_due_date, category || null, payee || null, notes || null);
+  `).run(name, parseFloat(amount), billing_cycle, next_due_date, category || null,
+        payee ? resolvePayee(db, payee) : null, notes || null);
   res.json(db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(result.lastInsertRowid));
 });
 
@@ -1510,6 +1531,7 @@ app.put('/api/subscriptions/:id', (req, res) => {
   fields.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
   if (updates.amount) updates.amount = parseFloat(updates.amount);
   if (updates.active !== undefined) updates.active = parseInt(updates.active);
+  if (updates.payee) updates.payee = resolvePayee(db, updates.payee);
 
   if (Object.keys(updates).length === 0) return res.json(existing);
   const setClauses = Object.keys(updates).map(k => `${k} = ?`).join(', ');
@@ -1566,7 +1588,7 @@ app.post('/api/subscriptions/:id/pay', (req, res) => {
 
   const txResult = db.prepare(
     'INSERT INTO transactions (date, payee, category, amount, notes, source) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(today, sub.name, sub.category || 'Subscriptions', -Math.abs(sub.amount), `Subscription: ${sub.name}`, 'subscription');
+  ).run(today, resolvePayee(db, sub.name), sub.category || 'Subscriptions', -Math.abs(sub.amount), `Subscription: ${sub.name}`, 'subscription');
   res.json({ next_due_date: nextDate, transaction_id: txResult.lastInsertRowid, skipped: false });
 });
 
@@ -1698,7 +1720,7 @@ app.post('/api/reminders/:id/pay', (req, res) => {
     } else {
       const txResult = db.prepare(
         'INSERT INTO transactions (date, payee, category, amount, notes, source) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(today, reminder.title, reminder.category || 'Bills', -Math.abs(reminder.amount), `Bill: ${reminder.title}`, 'bill');
+      ).run(today, resolvePayee(db, reminder.title), reminder.category || 'Bills', -Math.abs(reminder.amount), `Bill: ${reminder.title}`, 'bill');
       transaction_id = txResult.lastInsertRowid;
     }
   }
@@ -1730,9 +1752,9 @@ app.get('/api/charts/monthly-by-payee', (req, res) => {
   const where = month ? 'WHERE strftime(\'%Y-%m\', date) = ? AND amount < 0' : 'WHERE amount < 0';
   const params = month ? [month] : [];
   const rows = db.prepare(`
-    SELECT payee, SUM(amount) as total, COUNT(*) as count
+    SELECT MIN(payee) AS payee, SUM(amount) as total, COUNT(*) as count
     FROM transactions ${where}
-    GROUP BY payee ORDER BY total ASC LIMIT 20
+    GROUP BY lower(payee) ORDER BY total ASC LIMIT 20
   `).all(...params);
   res.json(rows);
 });
@@ -2227,7 +2249,7 @@ app.post('/api/import/csv', upload.single('csvfile'), (req, res) => {
     'INSERT INTO transactions (date, payee, category, amount, notes, source) VALUES (?, ?, ?, ?, ?, ?)'
   );
   const checkStmt = db.prepare(
-    'SELECT 1 FROM transactions WHERE date = ? AND payee = ? AND amount = ? AND source = ?'
+    'SELECT 1 FROM transactions WHERE date = ? AND lower(payee) = lower(?) AND amount = ? AND source = ?'
   );
 
   const doImport = db.transaction(() => {
@@ -2257,7 +2279,9 @@ app.post('/api/import/csv', upload.single('csvfile'), (req, res) => {
         // For income (positive) with no payee, use category name or 'Income'
         // For expenses with no payee, fall back to 'Unknown'
         const rawPayee = colMap.payee ? row[colMap.payee] : '';
-        const payee = rawPayee ||
+        // Bank exports are ALL CAPS and inconsistently padded — reuse the
+        // spelling already on file instead of starting a new payee group.
+        const payee = resolvePayee(db, rawPayee) ||
           (amount > 0 ? (category || 'Income') : 'Unknown');
         const notes = colMap.notes ? (row[colMap.notes] || null) : null;
 
@@ -2275,6 +2299,9 @@ app.post('/api/import/csv', upload.single('csvfile'), (req, res) => {
 
   try {
     doImport();
+    // Rows imported before their merchant's best spelling appeared keep the
+    // first-seen casing — one pass afterwards settles the whole file.
+    mergeLikePayees(db);
     res.json({ imported, skipped, errors });
   } catch (e) {
     res.status(500).json({ error: 'Import failed: ' + e.message });
