@@ -15,11 +15,18 @@ const askModule = {
   async init() {
     this.destroyAll();
 
+    // Keep these in step with NLQUERY_SCHEMA_DOC in server.js — every chip must be
+    // answerable from the tables the model is actually shown (transactions,
+    // budgets, subscriptions, reminders, categories).
     const examples = [
-      'How much did I spend on coffee since March?',
-      'Top 5 categories this year',
+      'How much did I spend on groceries in the last 3 months?',
+      'Top 5 spending categories this year',
       'Total spending per month over the last 6 months',
-      'Which payees did I spend the most at last month?'
+      'Which payees did I spend the most at last month?',
+      'Which categories went over budget last month?',
+      'What are my active subscriptions costing me each month?',
+      'Which reminders are still unpaid this month?',
+      'Income vs spending by month this year'
     ];
 
     document.getElementById('view').innerHTML = `
@@ -39,7 +46,7 @@ const askModule = {
         </div>
         <form id="ask-form" style="display:flex;gap:8px;flex-wrap:wrap">
           <input id="ask-input" type="text" class="tx-filter-select-panel" autocomplete="off"
-            placeholder="e.g. how much on coffee since March?"
+            placeholder="e.g. how much did I spend on groceries last month?"
             style="flex:1;min-width:220px" maxlength="500">
           <button type="submit" id="ask-submit" class="btn btn-primary">Ask</button>
         </form>
