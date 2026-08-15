@@ -291,8 +291,8 @@ app.get('/health', (req, res) => res.json({ status: 'healthy' }));
 
 // ─── WEEKLY DIGEST (token-gated, read-only) ───────────────────────────────────
 // Read-only weekly finance AGGREGATES for the homelab's Sunday digest workflow,
-// which fetches this over the LAN, narrates it with the local LLM, and posts a
-// Slack card. Returns ONLY aggregates (totals, deltas, top categories) — never
+// which fetches this over the LAN, narrates it with the local LLM, and pushes a
+// notification card. Returns ONLY aggregates (totals, deltas, top categories) — never
 // raw transactions. Gated by a bearer token (DIGEST_TOKEN, host-managed in
 // finance.env); unset = endpoint disabled (503). Registered BEFORE requireAuth
 // so the worker reaches it without an OIDC session. Uses the strictly read-only
