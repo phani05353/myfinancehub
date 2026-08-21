@@ -505,7 +505,7 @@ All `/api/*` routes require an active session cookie. Admin-only routes are note
 | `TEMPORAL_DISABLED` | — | Set to `1` to skip starting the worker entirely |
 | `VAPID_SUBJECT` | `mailto:admin@home-finance.local` | Subject used in VAPID JWTs sent to push services |
 | `NODE_ENV` | — | Set to `production` in the Docker image |
-| `LLM_BASE_URL` | `http://192.168.50.141:8000/v1` | Base URL of the local [oMLX](https://github.com/jundot/omlx) server, shared by receipt extraction and **Ask**. OpenAI-compatible, so it must end in `/v1`. Use the homelab host IP so the container can reach it. |
+| `LLM_BASE_URL` | `http://192.168.50.2:8000/v1` | Base URL of the local [oMLX](https://github.com/jundot/omlx) server, shared by receipt extraction and **Ask**. OpenAI-compatible, so it must end in `/v1`. Use the homelab host IP so the container can reach it. |
 | `LLM_API_KEY` | — | **Required secret.** oMLX authenticates every request (Ollama did not); sent as `Authorization: Bearer <key>`. Keep it in `finance.env` / a repo Secret — never commit it. |
 | `LLM_MODEL` | `gemma3:4b` | Vision-capable model used for Temporal receipt extraction. See the alias note below. |
 | `LLM_TIMEOUT_MS` | `120000` | Abort a receipt-extraction call after this many milliseconds (vision decoding is slow). |
