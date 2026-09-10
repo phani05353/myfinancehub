@@ -128,7 +128,21 @@ fi
 # IP only — NOT 0.0.0.0. `tailscale serve --https=3090` already owns :3090 on the
 # tailnet interface, so a 0.0.0.0:3090 bind collides ("address already in use",
 # exit 125) and the container never starts → serve returns 502. Same fix as Immich :8050.
-LAN_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+# Don't trust `hostname -I`'s first address: its order isn't stable, and after the
+# 2026-09 subnet move it put the tailnet IP (100.x, owned by serve) first. Use the
+# default route's source address, skipping tailnet (100.64/10) and docker (172.16/12).
+lan_ip() {
+  local ip
+  ip=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit }}')
+  case "$ip" in
+    100.6[4-9].*|100.[7-9][0-9].*|100.1[01][0-9].*|100.12[0-7].*|172.1[6-9].*|172.2[0-9].*|172.3[01].*|"")
+      ip=$(hostname -I 2>/dev/null | tr ' ' '\n' \
+        | grep -Ev '^(100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])|172\.(1[6-9]|2[0-9]|3[01]))\.' \
+        | grep -E '^[0-9]+(\.[0-9]+){3}$' | head -n1) ;;
+  esac
+  echo "$ip"
+}
+LAN_IP=$(lan_ip)
 PUBLISH="-p 127.0.0.1:${APP_PORT}:3000"
 [ -n "$LAN_IP" ] && PUBLISH="$PUBLISH -p ${LAN_IP}:${APP_PORT}:3000"
 
@@ -152,8 +166,7 @@ sleep 2
 docker ps --filter "name=$APP_CONTAINER" --filter "name=$TEMPORAL_CONTAINER" \
   --format "  {{.Names}}\t{{.Status}}"
 
-HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
-[ -z "$HOST_IP" ] && HOST_IP="localhost"
+HOST_IP="${LAN_IP:-localhost}"
 
 echo ""
 echo "══════════════════════════════════════════════════════════"
