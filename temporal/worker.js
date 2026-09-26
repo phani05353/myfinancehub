@@ -102,6 +102,10 @@ async function startWorker({ db, sendPushToAll, sendPushExcept, applyRules, ocrR
   });
   worker.run().catch(err => console.error('Worker exited with error:', err));
 
+  // Watch every homelab worker queue (finance-tq included) and report to the
+  // homelab dashboard, so any live worker can raise the alarm for a dead one.
+  require('./peer-watch').startPeerWatch({ address: ADDRESS, namespace: NAMESPACE });
+
   // 2. Client — for both schedule registration and on-demand workflow starts
   __client = new Client({
     connection: await Connection.connect({ address: ADDRESS }),

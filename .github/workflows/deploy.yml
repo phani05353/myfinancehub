@@ -52,6 +52,16 @@ jobs:
       # hand-editing on the host. MUST equal home-lab-utils' FINANCE_AGENT_TOKEN
       # secret. Unset → skipped below → the endpoint stays disabled (503).
       AGENT_TOKEN: ${{ secrets.AGENT_TOKEN }}
+      # Worker peer watch (temporal/peer-watch.js): the finance worker reports
+      # what it sees of EVERY homelab Temporal worker to the homelab dashboard,
+      # which pushes one PWA alert per outage. NOTIFY_HUB_URL is a repo var
+      # (http://homelab-dashboard:8095 — same homelab-net); NOTIFY_INGEST_TOKEN a
+      # repo SECRET that MUST equal home-lab-utils' NOTIFY_INGEST_TOKEN. Either
+      # unset → skipped below → peer watch stays off.
+      NOTIFY_HUB_URL: ${{ vars.NOTIFY_HUB_URL }}
+      NOTIFY_INGEST_TOKEN: ${{ secrets.NOTIFY_INGEST_TOKEN }}
+      PEER_WATCH_ENABLED: ${{ vars.PEER_WATCH_ENABLED }}
+      PEER_WATCH_INTERVAL_SECONDS: ${{ vars.PEER_WATCH_INTERVAL_SECONDS }}
     steps:
       - name: Sync GitHub-managed vars into finance.env
         run: |
@@ -67,7 +77,8 @@ jobs:
                      NLQUERY_LLM_BASE_URL NLQUERY_LLM_MODEL NLQUERY_LLM_TIMEOUT_MS \
                      NLQUERY_ENABLED \
                      OLLAMA_BASE_URL OLLAMA_MODEL OLLAMA_TIMEOUT_MS LLM_URL \
-                     AGENT_TOKEN; do
+                     AGENT_TOKEN \
+                     NOTIFY_HUB_URL NOTIFY_INGEST_TOKEN PEER_WATCH_ENABLED PEER_WATCH_INTERVAL_SECONDS; do
             val="${!key}"
             [ -z "$val" ] && continue
             sed -i "/^${key}=/d" "$ENV_FILE"   # drop any stale line for this key
