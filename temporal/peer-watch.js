@@ -14,8 +14,9 @@
 // Hub-down fallback: the push channel IS the dashboard, so the one outage it
 // can't announce is its own. After HUB_DOWN_ALERT_AFTER (default 5) failed
 // reports in a row we EMAIL via Resend (RESEND_API_KEY / REPORT_EMAIL_FROM /
-// REPORT_EMAIL_TO — the monthly report's vars; no REPORT_EMAIL_TO → no email,
-// logged once), once per outage plus once on recovery. HUB_DOWN_EMAIL_ENABLED=
+// REPORT_EMAIL_TO — the monthly report's vars and recipient fallback; only a
+// missing RESEND_API_KEY disables it, logged once), once per outage plus once
+// on recovery (retried until it goes out). HUB_DOWN_EMAIL_ENABLED=
 // false turns it off. The home-lab python + ts workers do the same
 // (homelab/hub_fallback.py, src/hub-fallback.ts — keep the three in step), so
 // the email carries a Resend Idempotency-Key from the outage kind + its start
@@ -50,6 +51,15 @@ function idempotencyKey(phase, kind, sinceMs) {
   return `hub-${phase}-${kind}-${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}${p(d.getUTCHours())}${p(d.getUTCMinutes())}`;
 }
 
+// - failure(): counts; returns the "down" alert once the threshold is hit. A
+//   different kind after an emailed outage (unreachable → 401) is a NEW outage:
+//   the count restarts so it gets its own email (new key), and no "back" is
+//   sent for the old one (the hub isn't healthy).
+// - success(): ends the streak; after an emailed outage it returns the "back"
+//   alert and parks it in pendingBack until backDone() (retried on later ticks
+//   if the send fails). A new outage getting emailed drops it.
+// - neutral(): a response that is neither (404/400…) breaks an un-emailed
+//   streak; once an outage was emailed it changes nothing.
 class HubOutageTracker {
   constructor(threshold) {
     this.threshold = Math.max(1, threshold);
@@ -57,13 +67,22 @@ class HubOutageTracker {
     this.since = null;
     this.error = '';
     this.alerted = null; // kind we emailed about, this outage
+    this.pendingBack = null; // "back" email not sent yet
+  }
+  _reset() {
+    this.failures = 0;
+    this.since = null;
+    this.error = '';
+    this.alerted = null;
   }
   failure(kind, error, now) {
+    if (this.alerted != null && kind !== this.alerted) this._reset(); // a different problem: its own outage + email
     this.failures += 1;
     if (this.since == null) this.since = now;
     this.error = error;
     if (this.alerted == null && this.failures >= this.threshold) {
       this.alerted = kind;
+      this.pendingBack = null; // superseded by the new outage
       return { phase: 'down', kind, since: this.since, error, failures: this.failures, key: idempotencyKey('down', kind, this.since), durationMs: 0 };
     }
     return null;
@@ -75,15 +94,24 @@ class HubOutageTracker {
         phase: 'back', kind: this.alerted, since: this.since, error: this.error, failures: this.failures,
         key: idempotencyKey('back', this.alerted, this.since), durationMs: now - this.since,
       };
+      this.pendingBack = alert;
     }
-    this.failures = 0;
-    this.since = null;
-    this.error = '';
-    this.alerted = null;
+    this._reset();
     return alert;
   }
+  neutral() { if (this.alerted == null) this._reset(); }
   unsent() { this.alerted = null; } // the down email didn't go out — retry on the next failure
+  backDone() { this.pendingBack = null; }
 }
+
+// HUB_DOWN_ALERT_AFTER: empty / non-integer → 5, then clamp to ≥ 1 (same as python + ts).
+function parseAlertAfter(raw) {
+  const s = String(raw == null ? '' : raw).trim();
+  const n = /^[+-]?\d+$/.test(s) ? Number(s) : 5;
+  return Math.max(1, n);
+}
+
+const DEFAULT_REPORT_EMAIL_TO = 'maruthi.phanikumar@yahoo.com'; // = activities.js monthly report
 
 function fmtDuration(ms) {
   const m = Math.max(0, Math.round(ms / 60000));
@@ -135,7 +163,7 @@ async function resendEmail(subject, html, key) {
     },
     body: JSON.stringify({
       from: process.env.REPORT_EMAIL_FROM || 'onboarding@resend.dev',
-      to: process.env.REPORT_EMAIL_TO,
+      to: process.env.REPORT_EMAIL_TO || DEFAULT_REPORT_EMAIL_TO,
       subject,
       html,
     }),
@@ -158,12 +186,23 @@ class HubWatch {
     this.skipLogged = false;
   }
   async ok() {
-    const alert = this.tracker.success(this.now());
-    if (alert) await this._send(alert);
+    this.tracker.success(this.now());
+    await this._retryBack();
+  }
+  async neutral() {
+    this.tracker.neutral();
+    await this._retryBack();
   }
   async failed(kind, error) {
     const alert = this.tracker.failure(kind, error, this.now());
-    if (alert && !(await this._send(alert))) this.tracker.unsent();
+    if (alert) {
+      if (!(await this._send(alert))) this.tracker.unsent();
+    } else await this._retryBack();
+  }
+  // Send (or re-send, same key) a pending "back" email.
+  async _retryBack() {
+    const back = this.tracker.pendingBack;
+    if (back && (await this._send(back))) this.tracker.backDone();
   }
   // true = sent, deduped by a peer, or deliberately skipped (no retry).
   async _send(alert) {
@@ -235,10 +274,9 @@ function startPeerWatch({ address, namespace }) {
   }
   const intervalMs = Math.max(15, Number(process.env.PEER_WATCH_INTERVAL_SECONDS) || 60) * 1000;
   const fallback = new HubWatch({
-    threshold: Number(process.env.HUB_DOWN_ALERT_AFTER) || 5,
+    threshold: parseAlertAfter(process.env.HUB_DOWN_ALERT_AFTER),
     enabled: !/^(0|false|no|off)$/i.test(process.env.HUB_DOWN_EMAIL_ENABLED || ''),
-    missing: [!process.env.RESEND_API_KEY && 'RESEND_API_KEY', !process.env.REPORT_EMAIL_TO && 'REPORT_EMAIL_TO']
-      .filter(Boolean).join(' + '),
+    missing: process.env.RESEND_API_KEY ? '' : 'RESEND_API_KEY', // recipient falls back like the monthly report
     hubUrl: hub,
     watcher: WATCHER,
     send: resendEmail,
@@ -262,6 +300,7 @@ function startPeerWatch({ address, namespace }) {
     else {
       const kind = classify(res.status);
       if (kind) await fallback.failed(kind, `HTTP ${res.status}`);
+      else await fallback.neutral(); // 404/400…: the hub answered — breaks an un-emailed streak
     }
     if (!res.ok) throw new Error(`hub ${res.status}`);
     return (await res.json()).queues || [];
@@ -310,5 +349,5 @@ function startPeerWatch({ address, namespace }) {
 module.exports = {
   startPeerWatch,
   // exported for test/peer-watch.test.js
-  classify, idempotencyKey, HubOutageTracker, hubEmail, HubWatch, UNREACHABLE, TOKEN,
+  classify, idempotencyKey, HubOutageTracker, hubEmail, HubWatch, parseAlertAfter, UNREACHABLE, TOKEN,
 };
