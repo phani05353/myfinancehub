@@ -62,6 +62,11 @@ jobs:
       NOTIFY_INGEST_TOKEN: ${{ secrets.NOTIFY_INGEST_TOKEN }}
       PEER_WATCH_ENABLED: ${{ vars.PEER_WATCH_ENABLED }}
       PEER_WATCH_INTERVAL_SECONDS: ${{ vars.PEER_WATCH_INTERVAL_SECONDS }}
+      # Hub-down fallback: when the homelab dashboard itself stops taking
+      # reports, peer watch emails instead (Resend, REPORT_EMAIL_TO — host-managed
+      # in finance.env). Optional repo vars (defaults 5 / on).
+      HUB_DOWN_ALERT_AFTER: ${{ vars.HUB_DOWN_ALERT_AFTER }}
+      HUB_DOWN_EMAIL_ENABLED: ${{ vars.HUB_DOWN_EMAIL_ENABLED }}
     steps:
       - name: Sync GitHub-managed vars into finance.env
         run: |
@@ -78,7 +83,8 @@ jobs:
                      NLQUERY_ENABLED \
                      OLLAMA_BASE_URL OLLAMA_MODEL OLLAMA_TIMEOUT_MS LLM_URL \
                      AGENT_TOKEN \
-                     NOTIFY_HUB_URL NOTIFY_INGEST_TOKEN PEER_WATCH_ENABLED PEER_WATCH_INTERVAL_SECONDS; do
+                     NOTIFY_HUB_URL NOTIFY_INGEST_TOKEN PEER_WATCH_ENABLED PEER_WATCH_INTERVAL_SECONDS \
+                     HUB_DOWN_ALERT_AFTER HUB_DOWN_EMAIL_ENABLED; do
             val="${!key}"
             [ -z "$val" ] && continue
             sed -i "/^${key}=/d" "$ENV_FILE"   # drop any stale line for this key
