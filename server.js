@@ -491,7 +491,8 @@ app.get('/api/agent/summary', (req, res) => {
       body.monthlyTotal = subs.reduce((a, s) => a + subscriptionMonthlyAmount(s.amount, s.billing_cycle), 0);
     } else if (topic === 'biggest') {
       body.expenses = rdb.prepare(`
-        SELECT ABS(amount) AS amount, COALESCE(category, 'Uncategorized') AS category, date, payee
+        SELECT ABS(amount) AS amount, COALESCE(category, 'Uncategorized') AS category, date, payee,
+               needs_review
         FROM transactions WHERE amount < 0 AND ${cur}
         ORDER BY ABS(amount) DESC LIMIT 8
       `).all().map(e => ({
@@ -499,7 +500,9 @@ app.get('/api/agent/summary', (req, res) => {
         category: e.category,
         date: e.date,
         // The one allowed description fragment: the merchant name, truncated.
-        merchant: String(e.payee || '').slice(0, 40)
+        // An unconfirmed receipt-AI row is still text a stranger printed on a
+        // receipt — it reaches Foxy's planner only after the user confirms it.
+        merchant: e.needs_review ? '(unreviewed receipt)' : String(e.payee || '').slice(0, 40)
       }));
     }
 
