@@ -28,7 +28,11 @@ const ALLOWED_TABLES = new Set([
 // Identifiers that must NEVER be referenced, matched anywhere as a backstop in
 // case the FROM/JOIN extraction misses an exotic construct. Covers the secret/PII
 // tables plus SQLite's internal schema tables (sqlite_master/_schema/etc.).
-const SQL_DENY_IDENTIFIERS = /\b(?:app_settings|sessions|users|push_subscriptions|sqlite_[a-z_]*)\b/i;
+// pragma_* are SQLite's table-valued PRAGMA functions (pragma_table_info,
+// pragma_database_list…): "pragma_" has no word boundary, so the PRAGMA keyword
+// ban misses them, and a comma join (FROM transactions, pragma_database_list)
+// slips past the FROM/JOIN scan.
+const SQL_DENY_IDENTIFIERS = /\b(?:app_settings|sessions|users|push_subscriptions|sqlite_[a-z_]*|pragma_[a-z_]*)\b/i;
 
 // Validate that a string is a SINGLE read-only SELECT statement. Returns the
 // cleaned SQL (with a LIMIT enforced) or throws with a clear reason.

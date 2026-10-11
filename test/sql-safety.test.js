@@ -169,3 +169,15 @@ test('rejects empty / non-string input', () => {
   assert.throws(() => validateReadonlySql(null));
   assert.throws(() => validateReadonlySql(undefined));
 });
+
+// ── Table-valued PRAGMA functions (prompt-injection red team, 2026-10) ────────
+
+test('rejects pragma_* table-valued functions smuggled in via a comma join', () => {
+  for (const q of [
+    'SELECT * FROM transactions, pragma_database_list',
+    "SELECT name FROM transactions, pragma_table_info('users')",
+    'SELECT * FROM pragma_table_list',
+  ]) {
+    assert.throws(() => validateReadonlySql(q), /not allowed|may only read/, q);
+  }
+});
