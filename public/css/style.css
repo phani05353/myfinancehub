@@ -733,6 +733,10 @@ select {
 select option { background: var(--surface-solid); font-size: 14px; color: var(--text); }
 textarea { resize: vertical; min-height: 80px; font-size: 14px; }
 input[type="checkbox"] {
+  /* Undo the text-input `appearance: none` above — without it no tick ever shows. */
+  -webkit-appearance: auto;
+  appearance: auto;
+  padding: 0;
   width: 18px; height: 18px;
   min-height: unset;
   border-radius: 4px;

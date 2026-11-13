@@ -24,10 +24,16 @@ const transactionsModule = {
     document.getElementById('view').innerHTML = `
       <div class="tx-page-head" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px">
         <h1 style="margin:0">Transactions</h1>
-        <button class="btn btn-ghost btn-sm" onclick="transactionsModule.scanReceiptAI()"
-          title="Photograph a receipt — the AI extracts it and adds a transaction for you to review">
-          📸 Scan &amp; auto-add
-        </button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+          <button class="btn btn-ghost btn-sm" id="income-btn" onclick="transactionsModule.openIncomeModal()"
+            title="Log your regular paycheck — pre-filled from your saved default">
+            💰 Add income
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="transactionsModule.scanReceiptAI()"
+            title="Photograph a receipt — the AI extracts it and adds a transaction for you to review">
+            📸 Scan &amp; auto-add
+          </button>
+        </div>
       </div>
       <input type="file" id="ingest-file" accept="image/*" capture="environment" style="display:none">
 
@@ -82,7 +88,21 @@ const transactionsModule = {
       searchTimer = setTimeout(() => this.applyFilters(), 300);
     });
 
+    this.markPayday();
     await this.applyFilters();
+  },
+
+  // Light up the income button once the next payday (from the saved default) arrives.
+  markPayday() {
+    api('/api/income/default').then(info => {
+      const btn = document.getElementById('income-btn');
+      if (!btn) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const due = info?.saved && info.next_date && info.next_date <= today;
+      btn.classList.toggle('btn-success', !!due);
+      btn.classList.toggle('btn-ghost', !due);
+      btn.textContent = due ? `💰 Payday — log ${fmtCur(info.default.amount)}` : '💰 Add income';
+    }).catch(() => {});
   },
 
   toggleFilterPanel() {
@@ -242,6 +262,21 @@ const transactionsModule = {
     `);
     document.getElementById('tx-form').onsubmit = e => { e.preventDefault(); this.submitAdd(); };
 
+    // Picking "+ Income" fills the default paycheck into any field still empty.
+    document.getElementById('type-income')?.addEventListener('click', async () => {
+      const def = (await api('/api/income/default').catch(() => null))?.default;
+      if (!def) return;
+      const payeeEl  = document.getElementById('tx-payee');
+      const amountEl = document.getElementById('tx-amount');
+      const sel      = document.getElementById('tx-category');
+      if (payeeEl && !payeeEl.value) payeeEl.value = def.payee;
+      if (amountEl && !amountEl.value) amountEl.value = Number(def.amount).toFixed(2);
+      if (sel && !sel.value && def.category) {
+        const match = Array.from(sel.options).find(o => o.value.toLowerCase() === def.category.toLowerCase());
+        if (match) sel.value = match.value;
+      }
+    });
+
     // Receipt OCR: when an image is attached, try to pre-fill payee + amount
     document.getElementById('tx-receipt')?.addEventListener('change', async e => {
       const file = e.target.files[0];
@@ -315,6 +350,127 @@ const transactionsModule = {
       closeModal();
       toast('Transaction added');
       if (document.getElementById('tx-body')) await this.loadRows();
+      else refreshCurrentView();
+    } catch (e) { toast(e.message, 'error'); }
+  },
+
+  // 💰 Add income: a short form pre-filled from the saved default paycheck (or,
+  // before one is saved, the most recent income). "Remember as default" saves
+  // the amount/payee/frequency — it ticks itself when you change them, so a raise
+  // is just: edit the amount, add. Saving the default is admin-only (server 403s).
+  async openIncomeModal() {
+    const today = new Date().toISOString().slice(0, 10);
+    const [info, categories, payees] = await Promise.all([
+      api('/api/income/default').catch(() => ({ saved: false, default: null })),
+      api('/api/categories').catch(() => []),
+      api('/api/payees').catch(() => [])
+    ]);
+    const def      = info.default || {};
+    const isAdmin  = document.body.dataset.role === 'admin';
+    const freqs    = { weekly: 'Weekly', biweekly: 'Every 2 weeks', monthly: 'Monthly' };
+    const freq     = def.frequency || 'weekly';
+    // A due (or missed) payday pre-fills its own date; otherwise today.
+    const date     = info.next_date && info.next_date <= today ? info.next_date : today;
+    const category = def.category || categories.find(c => /^(income|salary|paycheck)$/i.test(c)) || '';
+    const amount   = def.amount ? Number(def.amount).toFixed(2) : '';
+    const summary  = info.saved
+      ? `Default: ${fmtCur(def.amount)} · ${freqs[freq].toLowerCase()} from ${escHtml(def.payee)}`
+      : (def.payee ? 'Pre-filled from your last income — tick "Remember" to make it the default.'
+                   : 'Fill it in once and tick "Remember" — next time it\'s one tap.');
+
+    openModal(`
+      <h2>Add Income</h2>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:4px">
+        ${summary}${info.last_date ? ` · last logged ${fmtDate(info.last_date)}` : ''}
+      </p>
+      <form id="income-form" style="margin-top:16px">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Date *</label>
+            <input type="date" id="inc-date" value="${date}" required>
+          </div>
+          <div class="form-group">
+            <label>Payee *</label>
+            <input type="text" id="inc-payee" value="${escHtml(def.payee || '')}" placeholder="e.g. Employer"
+              list="payee-list" autocomplete="off" required>
+            ${buildPayeeDatalist(payees)}
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Amount *</label>
+            <input type="number" id="inc-amount" value="${amount}" step="0.01" min="0.01" placeholder="2000.00" required>
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            ${buildCategorySelect(categories, category)}
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:16px">
+          <label>Notes</label>
+          <textarea id="inc-notes" placeholder="Optional notes…">${escHtml(def.notes || '')}</textarea>
+        </div>
+        ${isAdmin ? `
+        <div class="form-row" style="margin-bottom:20px">
+          <div class="form-group" style="flex-direction:row;align-items:center;gap:10px">
+            <input type="checkbox" id="inc-remember" style="width:auto;margin:0" ${info.saved ? '' : 'checked'}>
+            <label for="inc-remember" style="margin:0;cursor:pointer">Remember as default paycheck</label>
+          </div>
+          <div class="form-group">
+            <label>Paid</label>
+            <select id="inc-frequency">
+              ${Object.entries(freqs).map(([v, l]) => `<option value="${v}" ${v === freq ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+          </div>
+        </div>` : ''}
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-success">Add Income</button>
+        </div>
+      </form>
+    `);
+    document.getElementById('income-form').onsubmit = e => { e.preventDefault(); this.submitIncome(); };
+
+    // Changing what the default holds ticks "Remember" so a raise sticks.
+    const remember = document.getElementById('inc-remember');
+    if (remember && info.saved) {
+      const differs = () =>
+        Number(document.getElementById('inc-amount').value) !== Number(def.amount) ||
+        document.getElementById('inc-payee').value.trim().toLowerCase() !== String(def.payee).toLowerCase() ||
+        (getTxCategory() || '') !== (def.category || '') ||
+        document.getElementById('inc-frequency').value !== freq;
+      ['inc-amount', 'inc-payee', 'tx-category', 'inc-frequency'].forEach(id =>
+        document.getElementById(id)?.addEventListener('input', () => { if (differs()) remember.checked = true; }));
+    }
+  },
+
+  async submitIncome() {
+    const body = {
+      date: document.getElementById('inc-date').value,
+      payee: document.getElementById('inc-payee').value,
+      amount: Math.abs(parseFloat(document.getElementById('inc-amount').value)),
+      category: getTxCategory(),
+      notes: document.getElementById('inc-notes').value || null
+    };
+    try {
+      const myEndpoint = await getCurrentPushEndpoint();
+      const headers = myEndpoint ? { 'X-Push-Endpoint': myEndpoint } : {};
+      await api('/api/transactions', { method: 'POST', body, headers });
+
+      let msg = 'Income added';
+      if (document.getElementById('inc-remember')?.checked) {
+        const frequency = document.getElementById('inc-frequency').value;
+        try {
+          await api('/api/income/default', { method: 'PUT', body: { ...body, frequency } });
+          msg = 'Income added · default updated';
+        } catch (e) {
+          msg = null;
+          toast(`Income added, but the default wasn't saved: ${e.message}`, 'error');
+        }
+      }
+      closeModal();
+      if (msg) toast(msg);
+      if (document.getElementById('tx-body')) { this.markPayday(); await this.loadRows(); }
       else refreshCurrentView();
     } catch (e) { toast(e.message, 'error'); }
   },

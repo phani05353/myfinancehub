@@ -1411,6 +1411,79 @@ app.get('/api/payees/suggest-category', (req, res) => {
   res.json({ category: row?.category || null, count: row?.cnt || 0 });
 });
 
+// ─── DEFAULT INCOME (paycheck) ────────────────────────────────────────────────
+// One household-wide "default paycheck" so logging regular pay is one tap
+// instead of retyping a full transaction. Stored as JSON in app_settings and
+// updated from the Add Income form whenever the pay changes. The next payday is
+// derived from the last logged paycheck + frequency, so there's no stored
+// "next date" to drift. Logging still goes through POST /api/transactions.
+
+const INCOME_FREQUENCIES = { weekly: '+7 days', biweekly: '+14 days', monthly: '+1 month' };
+
+function loadDefaultIncome() {
+  const raw = db.prepare("SELECT value FROM app_settings WHERE key = 'default_income'").get()?.value;
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch (_) { return null; }
+}
+
+// Guess a frequency from the median gap between recent paychecks from one payee.
+function inferIncomeFrequency(payee) {
+  const days = db.prepare(`
+    SELECT DISTINCT date FROM transactions
+    WHERE amount > 0 AND lower(payee) = lower(?)
+    ORDER BY date DESC LIMIT 6
+  `).all(payee).map(r => Date.parse(r.date) / 86400000);
+  if (days.length < 2) return 'weekly';
+  const gaps = days.slice(1).map((d, i) => days[i] - d).sort((a, b) => a - b);
+  const median = gaps[Math.floor(gaps.length / 2)];
+  return median <= 10 ? 'weekly' : median <= 20 ? 'biweekly' : 'monthly';
+}
+
+app.get('/api/income/default', (req, res) => {
+  let saved = true;
+  let def = loadDefaultIncome();
+  if (!def) {
+    // Nothing saved yet — suggest the most recent income so the first paycheck
+    // logged through the form can be remembered with one tick.
+    saved = false;
+    const last = db.prepare(`
+      SELECT payee, amount, category FROM transactions
+      WHERE amount > 0 ORDER BY date DESC, id DESC LIMIT 1
+    `).get();
+    if (!last) return res.json({ saved, default: null, last_date: null, next_date: null });
+    def = { payee: last.payee, amount: last.amount, category: last.category || null,
+            notes: null, frequency: inferIncomeFrequency(last.payee) };
+  }
+  const lastDate = db.prepare(
+    'SELECT MAX(date) AS d FROM transactions WHERE amount > 0 AND lower(payee) = lower(?)'
+  ).get(def.payee)?.d || null;
+  const step = INCOME_FREQUENCIES[def.frequency] || INCOME_FREQUENCIES.weekly;
+  const nextDate = lastDate ? db.prepare('SELECT date(?, ?) AS d').get(lastDate, step).d : null;
+  res.json({ saved, default: def, last_date: lastDate, next_date: nextDate });
+});
+
+app.put('/api/income/default', (req, res) => {
+  const { payee, amount, category, notes, frequency = 'weekly' } = req.body || {};
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt <= 0) {
+    return res.status(400).json({ error: 'amount must be a positive number' });
+  }
+  if (!String(payee ?? '').trim()) return res.status(400).json({ error: 'payee is required' });
+  if (!INCOME_FREQUENCIES[frequency]) {
+    return res.status(400).json({ error: `frequency must be one of: ${Object.keys(INCOME_FREQUENCIES).join(', ')}` });
+  }
+  const def = {
+    payee: resolvePayee(db, payee),
+    amount: Math.round(amt * 100) / 100,
+    category: String(category ?? '').trim().slice(0, 100) || null,
+    notes: String(notes ?? '').trim().slice(0, 500) || null,
+    frequency,
+  };
+  db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('default_income', ?)")
+    .run(JSON.stringify(def));
+  res.json(def);
+});
+
 // ─── SUBSCRIPTIONS ────────────────────────────────────────────────────────────
 
 app.get('/api/subscriptions', (req, res) => {

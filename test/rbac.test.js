@@ -63,6 +63,7 @@ test('member is denied config/destructive writes; admin allowed', () => {
     ['DELETE', '/api/savings-goals/1'],
     ['POST',   '/api/categories'],
     ['DELETE', '/api/categories/Groceries'],
+    ['PUT',    '/api/income/default'],         // paycheck default (logging income stays member)
     ['POST',   '/api/subscriptions'],          // create sub (vs /pay)
     ['PUT',    '/api/subscriptions/1'],
     ['DELETE', '/api/subscriptions/1'],

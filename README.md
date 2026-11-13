@@ -24,6 +24,7 @@ Analytics-first home page with a Monarch Money-style layout — pill navigation 
 
 ### Transactions
 - Add / edit / delete with an **Expense vs Income toggle**
+- **Default paycheck** — **💰 Add income** opens a pre-filled form (payee, amount, category, weekly / every-2-weeks / monthly). The next payday is worked out from the last logged paycheck; when it's due the button turns green and the form opens on that date. Got a raise? Edit the amount — "Remember as default" ticks itself — and add. Picking **+ Income** in the regular form fills the same default into empty fields. Changing the default is admin-only.
 - **Smart category suggester** — tab out of the payee field and the category auto-fills based on your history with that merchant
 - **Receipt OCR auto-fill** — attach an image receipt and Tesseract.js reads it locally (no cloud, no LLM, no network calls during inference). Payee and amount fields pre-fill from common patterns like `TOTAL $X.XX` headers. Editable before save.
 - Filter by month / category / payee / keyword
@@ -424,6 +425,8 @@ All `/api/*` routes require an active session cookie. Admin-only routes are note
 | DELETE | `/api/categories/:name` | Remove a category |
 | GET | `/api/payees` | Distinct payee names |
 | GET | `/api/payees/suggest-category` | Smart category suggestion for a given payee |
+| GET | `/api/income/default` | Saved default paycheck (or a suggestion from the latest income) + `last_date` / `next_date` |
+| PUT | `/api/income/default` | Save the default paycheck `{ payee, amount, category, notes, frequency }` (admin) |
 
 ### Savings Goals
 
